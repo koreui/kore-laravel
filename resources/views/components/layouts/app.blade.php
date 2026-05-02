@@ -1,14 +1,14 @@
 @props(['title' => null])
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="h-full">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="h-full" x-data>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title ? $title.' · '.config('app.name') : config('app.name') }}</title>
+    @koreThemeScript
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
-    @koreThemeScript
 </head>
 <body class="min-h-full antialiased bg-[--kore-bg] text-[--kore-text]">
     <header class="border-b border-[--kore-border]">
@@ -48,7 +48,7 @@
     <livewire:kore-feedback-manager />
     <livewire:kore-overlay-manager />
 
-    @livewireScripts
     @koreScripts
+    @livewireScripts
 </body>
 </html>
