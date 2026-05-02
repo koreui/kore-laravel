@@ -1,0 +1,49 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\Tenancy\Providers;
+
+use App\Modules\Tenancy\Console\Commands\EnableTenancyCommand;
+use Illuminate\Support\ServiceProvider;
+use Override;
+use Stancl\Tenancy\TenancyServiceProvider as StanclTenancyServiceProvider;
+
+final class TenancyModuleServiceProvider extends ServiceProvider
+{
+    #[Override]
+    public function register(): void
+    {
+        // El comando vive siempre disponible para que el usuario pueda activar
+        // tenancy con `php artisan kore:tenancy:enable`.
+        $this->commands([
+            EnableTenancyCommand::class,
+        ]);
+
+        if (! $this->isTenancyEnabled()) {
+            return;
+        }
+
+        $this->app->register(StanclTenancyServiceProvider::class);
+    }
+
+    public function boot(): void
+    {
+        if (! $this->isTenancyEnabled()) {
+            return;
+        }
+
+        $base = __DIR__.'/..';
+
+        $this->loadMigrationsFrom("{$base}/Database/Migrations");
+
+        if (file_exists($routes = "{$base}/Routes/tenant.php")) {
+            $this->loadRoutesFrom($routes);
+        }
+    }
+
+    private function isTenancyEnabled(): bool
+    {
+        return (bool) config('kore-app.tenancy.enabled', false);
+    }
+}

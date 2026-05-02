@@ -37,6 +37,16 @@ php artisan migrate
 composer dev               # servidor + queue + logs + vite
 ```
 
+### Activar multi-tenancy (opcional)
+
+```bash
+php artisan kore:tenancy:enable    # publica configs+migraciones, escribe TENANCY_ENABLED=true
+php artisan migrate                # crea la tabla tenants
+php artisan tenants:create         # crea tu primer tenant
+```
+
+Para desactivarlo, `TENANCY_ENABLED=false` en `.env` y todo el módulo deja de bootear (provider hace early return).
+
 > **Nota**: este boilerplate consume `koreUi` desde `../koreUi/kore-ui` vía repositorio path con symlink. Asegúrate de tener el repo `koreUi` clonado al lado, o ajusta `composer.json` → `repositories` para apuntar al path/VCS correcto.
 
 ## Toggles (`.env`)
