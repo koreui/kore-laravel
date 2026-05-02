@@ -5,18 +5,9 @@
     "description": "Production-ready Laravel 12 boilerplate with Livewire 4, Tailwind v4, koreUi and AI-friendly tooling.",
     "keywords": ["laravel", "livewire", "tailwind", "kore-ui", "boilerplate"],
     "license": "MIT",
-    "repositories": [
-        {
-            "type": "path",
-            "url": "../koreUi/kore-ui",
-            "options": {
-                "symlink": true
-            }
-        }
-    ],
     "require": {
         "php": "^8.3",
-        "kore-ui/kore-ui": "@dev",
+        "kore-ui/kore-ui": "^1.1",
         "laravel/fortify": "^1.36",
         "laravel/framework": "^12.0",
         "laravel/pennant": "^1.23",

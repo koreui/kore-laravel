@@ -1,0 +1,145 @@
+name: kore-laravel
+
+# ── Docker Secrets (contenido de archivos en ./secrets/) ──────────────────────
+secrets:
+  db_root_password:
+    file: ./secrets/db_root_password.txt
+  db_password:
+    file: ./secrets/db_password.txt
+
+# ── Volumes persistentes ──────────────────────────────────────────────────────
+volumes:
+  db_data:
+  redis_data:
+  storage_data:
+  assets_data:
+
+# ── Red interna privada ───────────────────────────────────────────────────────
+networks:
+  kore_net:
+    driver: bridge
+
+services:
+
+  # ── PHP-FPM: aplicación principal ───────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Exporta GIT_SHA antes de build para que Sentry marque cada deploy con
+        # el commit correspondiente: GIT_SHA=$(git rev-parse --short HEAD)
+        GIT_SHA: ${GIT_SHA:-unknown}
+    image: kore-laravel-app:latest
+    user: root  # Necesario para inicializar el volumen assets_data; entrypoint baja a www-data con su-exec
+    restart: unless-stopped
+    networks:
+      - kore_net
+    volumes:
+      - storage_data:/var/www/html/storage/app
+      - assets_data:/var/www/html/public/build
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php -r \"echo 'OK';\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # ── Queue worker ────────────────────────────────────────────────────────────
+  queue:
+    image: kore-laravel-app:latest
+    command: ["queue"]
+    restart: unless-stopped
+    networks:
+      - kore_net
+    volumes:
+      - storage_data:/var/www/html/storage/app
+    env_file: .env
+    depends_on:
+      app:
+        condition: service_healthy
+
+  # ── Scheduler (artisan schedule:work) ───────────────────────────────────────
+  scheduler:
+    image: kore-laravel-app:latest
+    command: ["scheduler"]
+    restart: unless-stopped
+    networks:
+      - kore_net
+    volumes:
+      - storage_data:/var/www/html/storage/app
+    env_file: .env
+    depends_on:
+      app:
+        condition: service_healthy
+
+  # ── Nginx interno: el del host hace TLS + proxy_pass a 127.0.0.1:8081 ──────
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:80"
+    networks:
+      - kore_net
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./public:/var/www/html/public:ro
+      # Assets Vite en ruta separada — no puede anidarse dentro del bind mount de public/
+      - assets_data:/var/www/html/vite_assets:ro
+    depends_on:
+      app:
+        condition: service_healthy
+
+  # ── MySQL 8.4: sin puertos expuestos al host ────────────────────────────────
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    command: --mysql-native-password=ON
+    networks:
+      - kore_net
+    # Sólo localhost — requiere SSH tunnel para acceso externo
+    ports:
+      - "127.0.0.1:33061:3306"
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+      MYSQL_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_root_password
+      - db_password
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$(cat /run/secrets/db_root_password) --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── Redis: sin puerto expuesto, con contraseña ──────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - kore_net
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

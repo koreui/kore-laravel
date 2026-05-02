@@ -47,7 +47,7 @@ php artisan tenants:create         # crea tu primer tenant
 
 Para desactivarlo, `TENANCY_ENABLED=false` en `.env` y todo el módulo deja de bootear (provider hace early return).
 
-> **Nota**: este boilerplate consume `koreUi` desde `../koreUi/kore-ui` vía repositorio path con symlink. Asegúrate de tener el repo `koreUi` clonado al lado, o ajusta `composer.json` → `repositories` para apuntar al path/VCS correcto.
+> `koreUi` se consume desde Packagist (`kore-ui/kore-ui ^1.1`). No hay path repository; un `composer install` lo instala como cualquier otra dependencia.
 
 ## Toggles (`.env`)
 
@@ -90,6 +90,26 @@ php artisan boost:mcp
 | **Laravel Pulse**          | instalado   | `/pulse`     | `PULSE_ENABLED=true`                |
 | **spatie/laravel-health**  | instalado   | `/health`    | siempre (config en `HealthServiceProvider`) |
 | **spatie/laravel-activitylog** | instalado | —          | añade `LogsActivity` trait al modelo |
+
+## Despliegue en producción (Docker)
+
+Stack incluido (`docker-compose.prod.yml`): PHP-FPM 8.4 + Nginx + MySQL 8.4 + Redis 7, con queue worker y scheduler como servicios separados. El Nginx interno escucha en `127.0.0.1:8081` para que el Nginx del host maneje TLS y haga `proxy_pass`.
+
+```bash
+# En el VPS:
+git clone <repo> /opt/kore-laravel && cd /opt/kore-laravel
+cp .env.example .env && nano .env
+
+mkdir -p secrets
+openssl rand -base64 32 > secrets/db_root_password.txt
+openssl rand -base64 32 > secrets/db_password.txt
+
+export GIT_SHA=$(git rev-parse --short HEAD)
+docker compose -f docker-compose.prod.yml build app
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Detalles completos (firewall, SSH, fail2ban, server block del Nginx del host, despliegue de nuevas versiones, troubleshooting): [`docs/ops/deployment.md`](docs/ops/deployment.md).
 
 ## Trabajar con la AI
 

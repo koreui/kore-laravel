@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "82a00882ce127304e4e248e2722d4835",
+    "content-hash": "19b3d5da642ae16da4be1f44b098aba9",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -1521,11 +1521,17 @@
         },
         {
             "name": "kore-ui/kore-ui",
-            "version": "dev-main",
+            "version": "v1.1.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/koreui/kore-ui.git",
+                "reference": "2c34ce1107af28715ee16b6ca9c688050d3d8650"
+            },
             "dist": {
-                "type": "path",
-                "url": "../koreUi/kore-ui",
-                "reference": "203d4f2e5e7c934ca840940434cd0ca2daddd71c"
+                "type": "zip",
+                "url": "https://api.github.com/repos/koreui/kore-ui/zipball/2c34ce1107af28715ee16b6ca9c688050d3d8650",
+                "reference": "2c34ce1107af28715ee16b6ca9c688050d3d8650",
+                "shasum": ""
             },
             "require": {
                 "blade-ui-kit/blade-icons": "^1.9",
@@ -1547,18 +1553,14 @@
                 }
             },
             "autoload": {
-                "psr-4": {
-                    "KoreUi\\": "src/"
-                },
                 "files": [
                     "src/helpers.php"
-                ]
-            },
-            "autoload-dev": {
+                ],
                 "psr-4": {
-                    "KoreUi\\Tests\\": "tests/"
+                    "KoreUi\\": "src/"
                 }
             },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "MIT"
             ],
@@ -1572,10 +1574,11 @@
                 "tailwind",
                 "ui"
             ],
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "support": {
+                "issues": "https://github.com/koreui/kore-ui/issues",
+                "source": "https://github.com/koreui/kore-ui/tree/v1.1.0"
+            },
+            "time": "2026-04-04T20:51:26+00:00"
         },
         {
             "name": "laravel/fortify",
@@ -12698,9 +12701,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "kore-ui/kore-ui": 20
-    },
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
