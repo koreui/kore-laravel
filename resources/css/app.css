@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap');
 @import 'tailwindcss';
 @import '../../vendor/kore-ui/kore-ui/resources/css/kore-theme.css';
 
@@ -10,6 +11,35 @@
 @source '../../app/**/*.php';
 
 @theme {
-    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer utilities {
+    /* Mesh gradient sutil para fondos de auth/hero */
+    .bg-mesh {
+        background-image:
+            radial-gradient(at 12% 18%, oklch(0.62 0.18 270 / 0.18) 0px, transparent 45%),
+            radial-gradient(at 90% 8%, oklch(0.72 0.16 200 / 0.16) 0px, transparent 50%),
+            radial-gradient(at 80% 92%, oklch(0.68 0.16 320 / 0.14) 0px, transparent 50%);
+    }
+
+    .bg-grid {
+        background-image:
+            linear-gradient(to right, oklch(from var(--kore-border) l c h / 0.6) 1px, transparent 1px),
+            linear-gradient(to bottom, oklch(from var(--kore-border) l c h / 0.6) 1px, transparent 1px);
+        background-size: 64px 64px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+        }
+    }
 }
