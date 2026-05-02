@@ -29,7 +29,10 @@
         "spatie/laravel-permission": "^7.4"
     },
     "require-dev": {
+        "driftingly/rector-laravel": "^2.3",
         "fakerphp/faker": "^1.23",
+        "igorsgm/laravel-git-hooks": "^2.1",
+        "larastan/larastan": "^3.9",
         "laravel/boost": "^2.4",
         "laravel/pail": "^1.2.2",
         "laravel/pint": "^1.24",
@@ -38,7 +41,8 @@
         "nunomaduro/collision": "^8.6",
         "pestphp/pest": "^3.8",
         "pestphp/pest-plugin-laravel": "^3.2",
-        "phpunit/phpunit": "^11.5.50"
+        "phpunit/phpunit": "^11.5.50",
+        "rector/rector": "^2.4"
     },
     "autoload": {
         "psr-4": {
@@ -67,11 +71,41 @@
         ],
         "test": [
             "@php artisan config:clear --ansi",
-            "@php artisan test"
+            "@php vendor/bin/pest"
+        ],
+        "test:parallel": [
+            "@php artisan config:clear --ansi",
+            "@php vendor/bin/pest --parallel"
+        ],
+        "test:coverage": [
+            "@php artisan config:clear --ansi",
+            "@php vendor/bin/pest --coverage --min=80"
+        ],
+        "lint": [
+            "@php vendor/bin/pint"
+        ],
+        "lint:test": [
+            "@php vendor/bin/pint --test"
+        ],
+        "analyse": [
+            "@php vendor/bin/phpstan analyse --memory-limit=2G"
+        ],
+        "refactor": [
+            "@php vendor/bin/rector process"
+        ],
+        "refactor:test": [
+            "@php vendor/bin/rector process --dry-run"
+        ],
+        "ci": [
+            "@lint:test",
+            "@analyse",
+            "@refactor:test",
+            "@test"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
-            "@php artisan package:discover --ansi"
+            "@php artisan package:discover --ansi",
+            "@php artisan git-hooks:register --ansi || true"
         ],
         "post-update-cmd": [
             "@php artisan vendor:publish --tag=laravel-assets --ansi --force"

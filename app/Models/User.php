@@ -11,14 +11,18 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
+use Override;
+use Spatie\OneTimePasswords\Models\Concerns\HasOneTimePasswords;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable implements MustVerifyEmail
 {
-    /** @use HasFactory<UserFactory> */
     use HasApiTokens;
 
+    /** @use HasFactory<UserFactory> */
     use HasFactory;
+
+    use HasOneTimePasswords;
     use HasRoles;
     use Notifiable;
     use TwoFactorAuthenticatable;
@@ -45,6 +49,7 @@ class User extends Authenticatable implements MustVerifyEmail
     /**
      * @return array<string, string>
      */
+    #[Override]
     protected function casts(): array
     {
         return [

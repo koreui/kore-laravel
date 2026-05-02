@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use Livewire\Livewire;
+use Override;
 
 final class AuthModuleServiceProvider extends ServiceProvider
 {
@@ -20,10 +21,11 @@ final class AuthModuleServiceProvider extends ServiceProvider
      *
      * @var array<string, class-string>
      */
-    private const LIVEWIRE_COMPONENTS = [
+    private const array LIVEWIRE_COMPONENTS = [
         'auth.magic-link' => MagicLink::class,
     ];
 
+    #[Override]
     public function register(): void
     {
         $this->app->register(FortifyServiceProvider::class);

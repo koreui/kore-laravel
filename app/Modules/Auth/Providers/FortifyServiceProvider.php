@@ -9,6 +9,8 @@ use App\Modules\Auth\Actions\Fortify\ResetUserPassword;
 use App\Modules\Auth\Actions\Fortify\UpdateUserPassword;
 use App\Modules\Auth\Actions\Fortify\UpdateUserProfileInformation;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Contracts\View\Factory;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -32,13 +34,13 @@ final class FortifyServiceProvider extends ServiceProvider
 
     private function configureViews(): void
     {
-        Fortify::loginView(fn () => view('auth::pages.login'));
-        Fortify::registerView(fn () => view('auth::pages.register'));
-        Fortify::requestPasswordResetLinkView(fn () => view('auth::pages.forgot-password'));
-        Fortify::resetPasswordView(fn ($request) => view('auth::pages.reset-password', ['request' => $request]));
-        Fortify::verifyEmailView(fn () => view('auth::pages.verify-email'));
-        Fortify::twoFactorChallengeView(fn () => view('auth::pages.two-factor-challenge'));
-        Fortify::confirmPasswordView(fn () => view('auth::pages.confirm-password'));
+        Fortify::loginView(fn (): Factory|View => view('auth::pages.login'));
+        Fortify::registerView(fn (): Factory|View => view('auth::pages.register'));
+        Fortify::requestPasswordResetLinkView(fn (): Factory|View => view('auth::pages.forgot-password'));
+        Fortify::resetPasswordView(fn ($request): Factory|View => view('auth::pages.reset-password', ['request' => $request]));
+        Fortify::verifyEmailView(fn (): Factory|View => view('auth::pages.verify-email'));
+        Fortify::twoFactorChallengeView(fn (): Factory|View => view('auth::pages.two-factor-challenge'));
+        Fortify::confirmPasswordView(fn (): Factory|View => view('auth::pages.confirm-password'));
     }
 
     private function configureRateLimiting(): void

@@ -17,19 +17,11 @@ final class MagicLink extends Component
 
     public bool $codeSent = false;
 
-    /**
-     * @return array<string, list<string>>
-     */
-    protected function rules(): array
-    {
-        return $this->codeSent
-            ? ['code' => ['required', 'string', 'size:6']]
-            : ['email' => ['required', 'email', 'exists:users,email']];
-    }
-
     public function sendCode(): void
     {
-        $this->validate();
+        $this->validate([
+            'email' => ['required', 'email', 'exists:users,email'],
+        ]);
 
         $user = User::where('email', $this->email)->firstOrFail();
         $user->sendOneTimePassword();
@@ -40,7 +32,9 @@ final class MagicLink extends Component
 
     public function authenticate(): mixed
     {
-        $this->validate();
+        $this->validate([
+            'code' => ['required', 'string', 'size:6'],
+        ]);
 
         $user = User::where('email', $this->email)->firstOrFail();
         $result = $user->attemptLoginUsingOneTimePassword($this->code);

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Spatie\OneTimePasswords\Actions\ConsumeOneTimePasswordAction;
 use Spatie\OneTimePasswords\Actions\CreateOneTimePasswordAction;
 use Spatie\OneTimePasswords\Models\OneTimePassword;
