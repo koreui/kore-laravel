@@ -47,6 +47,16 @@ php artisan tenants:create         # crea tu primer tenant
 
 Para desactivarlo, `TENANCY_ENABLED=false` en `.env` y todo el módulo deja de bootear (provider hace early return).
 
+## Documentación
+
+Reglas vivas y resúmenes en `CLAUDE.md` / `AGENTS.md`. Detalles en [`docs/`](docs/README.md):
+
+- [`docs/architecture/`](docs/architecture/) — overview, module-pattern, toggles
+- [`docs/modules/`](docs/modules/) — auth, tenancy
+- [`docs/ops/`](docs/ops/) — deployment, observability
+- [`docs/quality/`](docs/quality/) — pipeline (Pint, Larastan, Rector, Pest, hooks, CI)
+- [`docs/ai/`](docs/ai/) — trabajar con la AI (Boost, skills)
+
 > `koreUi` se consume desde Packagist (`kore-ui/kore-ui ^1.1`). No hay path repository; un `composer install` lo instala como cualquier otra dependencia.
 
 ## Toggles (`.env`)

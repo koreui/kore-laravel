@@ -6,6 +6,23 @@ Boilerplate Laravel 12 production-ready con Livewire 4, Tailwind v4, koreUi y he
 
 El desarrollador trabaja en español. Comunícate en español.
 
+## Documentación detallada
+
+Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta `docs/`:
+
+- [`docs/architecture/overview.md`](docs/architecture/overview.md) — stack y patrón modular monolith
+- [`docs/architecture/module-pattern.md`](docs/architecture/module-pattern.md) — cómo se construye un módulo
+- [`docs/architecture/toggles.md`](docs/architecture/toggles.md) — `config/kore-app.php`
+- [`docs/modules/auth.md`](docs/modules/auth.md) — Fortify + Sanctum + permission + 2FA + OTP + Socialite
+- [`docs/modules/tenancy.md`](docs/modules/tenancy.md) — stancl/tenancy con toggle
+- [`docs/ops/deployment.md`](docs/ops/deployment.md) — Docker en VPS
+- [`docs/ops/observability.md`](docs/ops/observability.md) — Sentry · Pulse · Health · ActivityLog
+- [`docs/quality/pipeline.md`](docs/quality/pipeline.md) — Pint · Larastan · Rector · Pest · hooks · CI
+- [`docs/ai/working-with-ai.md`](docs/ai/working-with-ai.md) — Boost · CLAUDE/AGENTS · skills
+- [`docs/README.md`](docs/README.md) — índice maestro
+
+**Antes de codificar en un área específica**, lee el doc correspondiente.
+
 ## Stack
 
 - PHP 8.3+ (soporta 8.4) · Laravel 12 · Livewire 4 · Alpine.js · Tailwind CSS v4
