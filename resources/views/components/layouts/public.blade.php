@@ -6,31 +6,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title ? $title.' · '.config('app.name') : config('app.name') }}</title>
+
+    <link rel="preconnect" href="https://fonts.bunny.net">
+    <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800|jetbrains-mono:400,500" rel="stylesheet" />
+
     @koreThemeScript
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
 </head>
-<body class="min-h-full antialiased bg-[--kore-bg] text-[--kore-text]">
+<body class="min-h-full antialiased bg-kore-bg text-kore-fg">
 
-    {{-- Top nav minimal para páginas públicas --}}
-    <header class="sticky top-0 z-30 border-b border-[--kore-border] bg-[--kore-bg]/80 backdrop-blur">
-        <div class="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
-            <a href="/" class="font-semibold tracking-tight">{{ config('app.name') }}</a>
+    <header class="sticky top-0 z-50 border-b border-kore-border/50 bg-kore-bg/80 backdrop-blur-lg">
+        <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+            <a href="/" class="flex items-center gap-2.5">
+                <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-kore-primary text-sm font-bold text-white">K</div>
+                <span class="text-lg font-bold tracking-tight">{{ config('app.name') }}</span>
+            </a>
 
-            <nav class="hidden items-center gap-6 text-sm text-[--kore-text-muted] md:flex">
-                <a href="/docs" class="hover:text-[--kore-text]">{{ __('Docs') }}</a>
-                <a href="/#features" class="hover:text-[--kore-text]">{{ __('Características') }}</a>
-                <a href="https://github.com" class="hover:text-[--kore-text]">GitHub</a>
+            <nav class="hidden items-center gap-6 text-sm md:flex">
+                <a href="/docs" class="text-kore-muted-fg transition-colors hover:text-kore-fg">{{ __('Documentación') }}</a>
+                <a href="/#features" class="text-kore-muted-fg transition-colors hover:text-kore-fg">{{ __('Características') }}</a>
+                <a href="https://github.com" class="text-kore-muted-fg transition-colors hover:text-kore-fg">GitHub</a>
             </nav>
 
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-3">
                 <x-kore::theme-switch size="sm" />
-                <a href="{{ route('login') }}" class="hidden text-sm text-[--kore-text-muted] hover:text-[--kore-text] md:inline">
+                <a href="{{ route('login') }}" class="hidden text-sm text-kore-muted-fg transition-colors hover:text-kore-fg sm:inline">
                     {{ __('Iniciar sesión') }}
                 </a>
-                <x-kore::button :href="route('register')" size="sm" icon="arrow-right" iconPosition="trailing">
+                <a href="{{ route('register') }}"
+                   class="inline-flex items-center rounded-lg bg-kore-primary px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90">
                     {{ __('Empezar') }}
-                </x-kore::button>
+                </a>
             </div>
         </div>
     </header>

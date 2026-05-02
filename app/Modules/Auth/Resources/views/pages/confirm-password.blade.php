@@ -2,7 +2,7 @@
     <div class="space-y-6">
         <header class="space-y-1 text-center">
             <h1 class="text-xl font-semibold">{{ __('Confirma tu contraseña') }}</h1>
-            <p class="text-sm text-[--kore-text-muted]">
+            <p class="text-sm text-kore-muted-fg">
                 {{ __('Confirma tu contraseña para continuar.') }}
             </p>
         </header>

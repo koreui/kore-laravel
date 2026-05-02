@@ -2,7 +2,7 @@
     <div class="space-y-6">
         <header class="space-y-1 text-center">
             <h1 class="text-xl font-semibold">{{ __('Verifica tu correo') }}</h1>
-            <p class="text-sm text-[--kore-text-muted]">
+            <p class="text-sm text-kore-muted-fg">
                 {{ __('Te enviamos un email con un enlace de verificación. Revisa tu bandeja para continuar.') }}
             </p>
         </header>
@@ -23,7 +23,7 @@
 
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
-                <button type="submit" class="text-sm text-[--kore-text-muted] hover:underline">
+                <button type="submit" class="text-sm text-kore-muted-fg hover:underline">
                     {{ __('Cerrar sesión') }}
                 </button>
             </form>

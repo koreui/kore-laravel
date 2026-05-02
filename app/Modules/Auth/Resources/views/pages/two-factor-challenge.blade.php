@@ -3,10 +3,10 @@
          x-data="{ recovery: false }">
         <header class="space-y-1 text-center">
             <h1 class="text-xl font-semibold">{{ __('Verificación en dos pasos') }}</h1>
-            <p class="text-sm text-[--kore-text-muted]" x-show="!recovery">
+            <p class="text-sm text-kore-muted-fg" x-show="!recovery">
                 {{ __('Ingresa el código de tu app de autenticación.') }}
             </p>
-            <p class="text-sm text-[--kore-text-muted]" x-show="recovery" x-cloak>
+            <p class="text-sm text-kore-muted-fg" x-show="recovery" x-cloak>
                 {{ __('Ingresa uno de tus códigos de recuperación.') }}
             </p>
         </header>
@@ -33,7 +33,7 @@
 
         <button type="button"
                 @click="recovery = !recovery"
-                class="block w-full text-center text-sm font-medium text-[--kore-primary] hover:underline">
+                class="block w-full text-center text-sm font-medium text-kore-primary hover:underline">
             <span x-show="!recovery">{{ __('Usar código de recuperación') }}</span>
             <span x-show="recovery" x-cloak>{{ __('Usar app de autenticación') }}</span>
         </button>

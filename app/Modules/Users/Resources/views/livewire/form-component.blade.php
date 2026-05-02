@@ -52,7 +52,7 @@
 
             <div class="space-y-2">
                 <label class="text-sm font-medium">{{ __('Permisos') }}</label>
-                <div class="rounded-md border border-[--kore-border] divide-y divide-[--kore-border]">
+                <div class="rounded-md border border-kore-border divide-y divide-kore-border">
                     <template x-for="(module, idx) in modules" :key="module.module">
                         <div class="p-4">
                             <button type="button"
@@ -66,7 +66,7 @@
                                         <input type="checkbox"
                                                :value="perm.value"
                                                x-model="permissions"
-                                               class="rounded border-[--kore-border]">
+                                               class="rounded border-kore-border">
                                         <span x-text="perm.label"></span>
                                     </label>
                                 </template>
@@ -74,7 +74,7 @@
                         </div>
                     </template>
                 </div>
-                @error('permissions') <p class="text-sm text-[--kore-destructive]">{{ $message }}</p> @enderror
+                @error('permissions') <p class="text-sm text-kore-destructive">{{ $message }}</p> @enderror
             </div>
         </div>
 

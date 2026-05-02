@@ -1,7 +1,7 @@
 <div class="space-y-6">
     <header class="space-y-1 text-center">
         <h1 class="text-xl font-semibold">{{ __('Iniciar sesión con código') }}</h1>
-        <p class="text-sm text-[--kore-text-muted]">
+        <p class="text-sm text-kore-muted-fg">
             @if ($codeSent)
                 {{ __('Te enviamos un código de 6 dígitos a :email', ['email' => $email]) }}
             @else
@@ -35,14 +35,14 @@
 
             <button type="button"
                     wire:click="$set('codeSent', false)"
-                    class="block w-full text-center text-sm text-[--kore-text-muted] hover:underline">
+                    class="block w-full text-center text-sm text-kore-muted-fg hover:underline">
                 {{ __('Cambiar correo') }}
             </button>
         </form>
     @endif
 
     <p class="text-center text-sm">
-        <a href="{{ route('login') }}" class="font-medium text-[--kore-primary] hover:underline">
+        <a href="{{ route('login') }}" class="font-medium text-kore-primary hover:underline">
             {{ __('Volver al login normal') }}
         </a>
     </p>

@@ -6,78 +6,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title ? $title.' · '.config('app.name') : config('app.name') }}</title>
+
+    <link rel="preconnect" href="https://fonts.bunny.net">
+    <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800|jetbrains-mono:400,500" rel="stylesheet" />
+
     @koreThemeScript
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
 </head>
-<body class="min-h-full antialiased bg-[--kore-bg] text-[--kore-text]">
+<body class="min-h-full antialiased bg-kore-bg text-kore-fg">
 
-    <div class="grid min-h-screen lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+    {{-- Background gradient sutil (mismo patrón que kore-docs landing) --}}
+    <div class="pointer-events-none fixed inset-0 -z-10">
+        <div class="absolute inset-0 bg-gradient-to-b from-kore-primary/5 via-transparent to-transparent"></div>
+        <div class="absolute left-1/2 top-0 h-[600px] w-[800px] -translate-x-1/2 rounded-full bg-kore-primary/10 opacity-30 blur-3xl"></div>
+    </div>
 
-        {{-- ── Brand panel (visible solo en lg+) ─────────────────── --}}
-        <aside class="relative hidden overflow-hidden border-r border-[--kore-border] bg-mesh lg:flex lg:flex-col lg:justify-between lg:p-10">
-            <div class="absolute inset-0 bg-grid opacity-30 [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)]"></div>
+    <div class="relative flex min-h-screen flex-col">
 
-            <div class="relative">
-                <a href="{{ url('/') }}" class="inline-flex items-center gap-2 text-lg font-semibold tracking-tight">
-                    <span class="flex size-8 items-center justify-center rounded-lg bg-[--kore-primary] text-white">
-                        <x-kore::icon name="hexagon" class="size-4" />
-                    </span>
-                    {{ config('app.name') }}
-                </a>
-            </div>
+        {{-- Top bar minimal con logo + theme switch --}}
+        <header class="flex items-center justify-between px-6 py-5 sm:px-8">
+            <a href="{{ url('/') }}" class="flex items-center gap-2.5">
+                <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-kore-primary text-sm font-bold text-white">K</div>
+                <span class="text-lg font-bold tracking-tight">{{ config('app.name') }}</span>
+            </a>
+            <x-kore::theme-switch size="sm" />
+        </header>
 
-            <div class="relative max-w-md space-y-6">
-                <h2 class="text-3xl font-semibold leading-tight tracking-tight">
-                    {{ __('Boilerplate Laravel listo para construir tu próximo SaaS.') }}
-                </h2>
-                <p class="text-[--kore-text-muted]">
-                    {{ __('Auth completo, multi-tenancy opcional, observabilidad, AI tooling y un módulo Users de referencia. Clonar y construir.') }}
-                </p>
-
-                <div class="grid grid-cols-3 gap-4 pt-2">
-                    <div class="rounded-lg border border-[--kore-border] bg-[--kore-bg-elevated]/60 p-3 backdrop-blur">
-                        <div class="font-mono text-xl font-semibold">32</div>
-                        <div class="text-xs text-[--kore-text-muted]">{{ __('Tests') }}</div>
-                    </div>
-                    <div class="rounded-lg border border-[--kore-border] bg-[--kore-bg-elevated]/60 p-3 backdrop-blur">
-                        <div class="font-mono text-xl font-semibold">8.3+</div>
-                        <div class="text-xs text-[--kore-text-muted]">PHP</div>
-                    </div>
-                    <div class="rounded-lg border border-[--kore-border] bg-[--kore-bg-elevated]/60 p-3 backdrop-blur">
-                        <div class="font-mono text-xl font-semibold">v1</div>
-                        <div class="text-xs text-[--kore-text-muted]">{{ __('Estable') }}</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="relative text-xs text-[--kore-text-muted]">
-                © {{ now()->year }} {{ config('app.name') }}
-            </div>
-        </aside>
-
-        {{-- ── Form panel ───────────────────────────────────────── --}}
-        <section class="relative flex flex-col">
-
-            {{-- Top bar con theme switch + link al login (móvil) --}}
-            <div class="flex items-center justify-between p-6 lg:px-10">
-                <a href="{{ url('/') }}" class="inline-flex items-center gap-2 text-base font-semibold lg:hidden">
-                    <span class="flex size-7 items-center justify-center rounded-lg bg-[--kore-primary] text-white">
-                        <x-kore::icon name="hexagon" class="size-4" />
-                    </span>
-                    {{ config('app.name') }}
-                </a>
-                <div class="ml-auto flex items-center gap-2">
-                    <x-kore::theme-switch size="sm" />
-                </div>
-            </div>
-
-            <div class="flex flex-1 items-center justify-center px-6 pb-12 lg:px-10">
-                <div class="w-full max-w-sm space-y-6">
+        {{-- Form card centrado --}}
+        <main class="flex flex-1 items-center justify-center px-4 py-8 sm:px-6">
+            <div class="w-full max-w-sm">
+                <div class="space-y-6">
                     {{ $slot }}
                 </div>
             </div>
-        </section>
+        </main>
+
+        <footer class="px-6 py-4 text-center text-xs text-kore-muted-fg">
+            © {{ now()->year }} {{ config('app.name') }}
+        </footer>
     </div>
 
     <livewire:kore-feedback-manager />
