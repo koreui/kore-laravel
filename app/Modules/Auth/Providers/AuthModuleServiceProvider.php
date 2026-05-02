@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace App\Modules\Auth\Providers;
 
+use App\Models\User;
+use App\Modules\Auth\Console\Commands\RegeneratePermissionsCommand;
 use App\Modules\Auth\Http\Livewire\MagicLink;
+use App\Modules\Auth\Models\Role;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use Livewire\Livewire;
@@ -36,6 +40,28 @@ final class AuthModuleServiceProvider extends ServiceProvider
         $this->loadModule();
         $this->registerLivewireComponents();
         $this->configureSanctumStateful();
+        $this->registerSuperadminGate();
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                RegeneratePermissionsCommand::class,
+            ]);
+        }
+    }
+
+    /**
+     * Bypass total para el rol superadmin. Cualquier @can / authorize() retorna
+     * true automáticamente. Se asigna sólo por consola para evitar abuso UI.
+     */
+    private function registerSuperadminGate(): void
+    {
+        Gate::before(function (mixed $user, string $ability): ?bool {
+            if ($user instanceof User && $user->hasRole(Role::SUPERADMIN)) {
+                return true;
+            }
+
+            return null;
+        });
     }
 
     private function loadModule(): void

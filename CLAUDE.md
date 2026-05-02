@@ -13,8 +13,11 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) — stack y patrón modular monolith
 - [`docs/architecture/module-pattern.md`](docs/architecture/module-pattern.md) — cómo se construye un módulo
 - [`docs/architecture/toggles.md`](docs/architecture/toggles.md) — `config/kore-app.php`
+- [`docs/architecture/authorization.md`](docs/architecture/authorization.md) — roles, permisos y modules
 - [`docs/modules/auth.md`](docs/modules/auth.md) — Fortify + Sanctum + permission + 2FA + OTP + Socialite
 - [`docs/modules/tenancy.md`](docs/modules/tenancy.md) — stancl/tenancy con toggle
+- [`docs/modules/users.md`](docs/modules/users.md) — Users (primer CRUD del boilerplate)
+- [`docs/guides/crud.md`](docs/guides/crud.md) — patrón CRUD del boilerplate
 - [`docs/ops/deployment.md`](docs/ops/deployment.md) — Docker en VPS
 - [`docs/ops/observability.md`](docs/ops/observability.md) — Sentry · Pulse · Health · ActivityLog
 - [`docs/quality/pipeline.md`](docs/quality/pipeline.md) — Pint · Larastan · Rector · Pest · hooks · CI

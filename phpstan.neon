@@ -10,7 +10,10 @@ parameters:
             - app/Modules/*/Database/Migrations/*
             - app/Modules/*/Tests/**/*
     checkOctaneCompatibility: true
-    checkModelProperties: true
+    # checkModelProperties: true genera muchos falsos positivos en relaciones
+    # whereHas/whereDoesntHave por la magia de HasRoles/HasFactory. Activar en
+    # módulos específicos via @phpstan-type cuando aporte valor real.
+    checkModelProperties: false
     treatPhpDocTypesAsCertain: false
     parallel:
         maximumNumberOfProcesses: 8

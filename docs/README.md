@@ -9,10 +9,14 @@ docs/
 ├── architecture/      # cómo está pensada la app
 │   ├── overview.md            stack, capas, decisiones
 │   ├── module-pattern.md      cómo se construye un módulo
-│   └── toggles.md             config/kore-app.php
+│   ├── toggles.md             config/kore-app.php
+│   └── authorization.md       roles, permisos y modules
 ├── modules/           # documentación por módulo
 │   ├── auth.md                Fortify + Sanctum + permission + 2FA + OTP + Socialite
-│   └── tenancy.md             stancl/tenancy + activación opt-in
+│   ├── tenancy.md             stancl/tenancy + activación opt-in
+│   └── users.md               módulo Users (primer CRUD del boilerplate)
+├── guides/            # guías reutilizables
+│   └── crud.md                patrón CRUD: Form Object + FormComponent + KoreDataTable
 ├── ops/               # operación y producción
 │   ├── deployment.md          Docker en VPS (PHP-FPM + Nginx + MySQL + Redis)
 │   └── observability.md       Sentry + Pulse + Health + ActivityLog
