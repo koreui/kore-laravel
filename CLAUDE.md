@@ -15,7 +15,8 @@ El desarrollador trabaja en español. Comunícate en español.
 - Feature flags: Laravel Pennant
 - Tests: Pest 3 (con arch tests)
 - Calidad: Pint + Larastan nivel 8 + Rector
-- AI: Laravel Boost MCP (este archivo + AGENTS.md + .mcp.json)
+- Observabilidad: Sentry · Laravel Pulse · spatie/laravel-health · spatie/laravel-activitylog
+- AI: Laravel Boost MCP + skills propios en `.claude/skills/` (module-scaffold, kore-action-create, kore-livewire-create)
 
 ## Arquitectura — Modular Monolith + Action Pattern
 

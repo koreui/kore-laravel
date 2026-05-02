@@ -12,7 +12,7 @@ Boilerplate Laravel 12 production-ready con Livewire 4, Tailwind CSS v4, koreUi 
 - **Tests** Pest 3 + arch tests
 - **Calidad** Pint + Larastan nivel 8 + Rector (Fase 3)
 - **Multi-tenancy** stancl/tenancy v3 (toggle, Fase 4)
-- **Observabilidad** Sentry + Pulse + spatie/laravel-health (Fase 5)
+- **Observabilidad** Sentry + Laravel Pulse + spatie/laravel-health + spatie/laravel-activitylog
 - **AI** Laravel Boost (MCP) + CLAUDE.md + AGENTS.md + skills locales
 
 ## Arquitectura
@@ -82,9 +82,25 @@ composer ci             # todo lo anterior
 php artisan boost:mcp
 ```
 
+## Observabilidad
+
+| Tool                       | Status      | Endpoint     | Activación                          |
+| -------------------------- | ----------- | ------------ | ----------------------------------- |
+| **Sentry**                 | instalado   | —            | `SENTRY_LARAVEL_DSN` en `.env`      |
+| **Laravel Pulse**          | instalado   | `/pulse`     | `PULSE_ENABLED=true`                |
+| **spatie/laravel-health**  | instalado   | `/health`    | siempre (config en `HealthServiceProvider`) |
+| **spatie/laravel-activitylog** | instalado | —          | añade `LogsActivity` trait al modelo |
+
 ## Trabajar con la AI
 
-Este repo incluye `CLAUDE.md`, `AGENTS.md`, `.mcp.json` y skills locales bajo `.claude/skills/` y `.agents/skills/`. Cualquier asistente compatible (Claude Code, Codex, etc.) los detecta automáticamente.
+Este repo incluye `CLAUDE.md`, `AGENTS.md`, `.mcp.json` y skills locales en `.claude/skills/` y `.agents/skills/`. Cualquier asistente compatible (Claude Code, Codex, etc.) los detecta automáticamente.
+
+**Skills propios:**
+- `module-scaffold` — crear un módulo nuevo en `app/Modules/{Domain}/` con todo el patrón
+- `kore-action-create` — crear una Action (caso de uso) siguiendo `{Domain}{Object}{Verb}Action`
+- `kore-livewire-create` — crear un componente Livewire 4 con vistas koreUi y registro en provider
+
+Skills oficiales (de Laravel Boost): `laravel-best-practices`, `livewire-development`, `pennant-development`, `pest-testing`.
 
 Lee `CLAUDE.md` para entender las reglas de oro: arquitectura, naming, toggles y qué NO hacer.
 
