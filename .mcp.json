@@ -6,6 +6,10 @@
                 "artisan",
                 "boost:mcp"
             ]
+        },
+        "kore-ui": {
+            "type": "http",
+            "url": "https://kore-ui-mcp.ovilla.dev/mcp"
         }
     }
 }
