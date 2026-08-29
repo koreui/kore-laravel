@@ -8,7 +8,7 @@
         </header>
 
         @if (session('status') === 'verification-link-sent')
-            <x-kore::alert type="success">
+            <x-kore::alert type="success" live="polite">
                 {{ __('Te enviamos un nuevo enlace de verificación.') }}
             </x-kore::alert>
         @endif

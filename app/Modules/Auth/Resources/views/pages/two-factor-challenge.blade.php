@@ -12,7 +12,7 @@
         </header>
 
         @if ($errors->any())
-            <x-kore::alert type="error">{{ $errors->first() }}</x-kore::alert>
+            <x-kore::alert type="destructive" live="assertive">{{ $errors->first() }}</x-kore::alert>
         @endif
 
         <form method="POST" action="{{ route('two-factor.login') }}" class="space-y-4">

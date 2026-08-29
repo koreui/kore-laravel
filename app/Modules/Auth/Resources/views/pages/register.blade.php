@@ -7,7 +7,7 @@
     <div class="rounded-xl border border-kore-border bg-kore-surface p-6 shadow-sm">
         @if ($errors->any())
             <div class="mb-4">
-                <x-kore::alert color="destructive" :description="$errors->first()" />
+                <x-kore::alert type="destructive" live="assertive" :description="$errors->first()" />
             </div>
         @endif
 

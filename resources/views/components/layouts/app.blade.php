@@ -22,12 +22,20 @@
 
     {{-- App shell de koreUi: sidebar + navbar + contenido. El estado colapsado/expandido
          se resuelve en el servidor (cookie kore_sidebar), así que no hay salto en el
-         primer paint. Ver docs/shell en koreui.ovilla.dev. --}}
+         primer paint.
+
+         Desde koreUi 2.0 el shell pinta por su cuenta un enlace «Saltar al contenido»
+         como primer elemento del documento y le da al <main> `id="kore-contenido"` y
+         `tabindex="-1"`. Se quita con :skip-link="false".
+
+         Ver docs/shell en koreui.ovilla.dev. --}}
     <x-kore::shell>
 
         {{-- ── SIDEBAR ───────────────────────────────────────────────── --}}
         <x-slot:sidebar>
-            <x-kore::sidebar>
+            {{-- navigate: wire:navigate en todos los enlaces del menú. Lo heredan
+                 los sidebar.item vía @aware. --}}
+            <x-kore::sidebar :navigate="true">
                 <x-slot:header>
                     <a href="{{ route('dashboard') }}"
                        class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-kore-primary text-sm font-bold text-white"
@@ -93,7 +101,7 @@
                             class="flex w-48 items-center gap-2 rounded-lg border border-kore-border bg-kore-surface px-3 py-1.5 text-sm text-kore-muted-fg transition-colors hover:border-kore-primary/40 sm:w-64 lg:w-72">
                         <x-kore::icon name="search" class="size-4 shrink-0" />
                         <span class="flex-1 text-left">{{ __('Buscar...') }}</span>
-                        <span class="hidden font-mono text-xs sm:inline">⌘K</span>
+                        <x-kore::kbd size="sm" class="hidden sm:inline-flex">⌘K</x-kore::kbd>
                     </button>
                 </x-slot:start>
 

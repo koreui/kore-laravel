@@ -38,6 +38,10 @@ final class TableUsers extends KoreDataTable
     public function configure(): void
     {
         $this->setDefaultSort('created_at', 'desc');
+
+        // Sin `table-layout: fixed` el navegador reparte los anchos por contenido
+        // y el `width(80)` de la columna «#» se ignora.
+        $this->setTableLayout('fixed');
     }
 
     #[On('users-updated')]
@@ -51,9 +55,18 @@ final class TableUsers extends KoreDataTable
         return [
             Column::make('#', 'id')->sortable()->width(80),
 
-            Column::make(__('Nombre'), 'name')->sortable()->searchable(),
+            Column::make(__('Usuario'), 'name')
+                ->sortable()
+                ->searchable()
+                ->description('email'),
 
-            Column::make(__('Email'), 'email')->sortable()->searchable(),
+            // El email no tiene columna propia: va como segunda línea de «Usuario».
+            // Se declara igualmente para que la búsqueda global siga alcanzándolo,
+            // porque WithSearch recorre todas las columnas declaradas, no solo las
+            // visibles.
+            Column::make(__('Email'), 'email')
+                ->searchable()
+                ->hidden(),
 
             BadgeColumn::make(__('Rol'), 'id')
                 ->format(fn (mixed $value, User $row): string => (string) ($row->roles->first()?->getAttribute('name') ?? __('Sin rol')))

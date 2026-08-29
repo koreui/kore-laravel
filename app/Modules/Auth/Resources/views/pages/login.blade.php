@@ -8,13 +8,13 @@
 
         @if (session('status'))
             <div class="mb-4">
-                <x-kore::alert color="info" :description="session('status')" />
+                <x-kore::alert type="info" live="polite" :description="session('status')" />
             </div>
         @endif
 
         @if ($errors->any())
             <div class="mb-4">
-                <x-kore::alert color="destructive" :description="$errors->first()" />
+                <x-kore::alert type="destructive" live="assertive" :description="$errors->first()" />
             </div>
         @endif
 

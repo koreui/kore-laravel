@@ -141,8 +141,8 @@
                     <div class="rounded-xl border border-kore-border bg-kore-bg p-6">
                         <h3 class="mb-4 text-sm font-semibold uppercase tracking-wider text-kore-muted-fg">{{ __('Alertas') }}</h3>
                         <div class="space-y-3">
-                            <x-kore::alert color="info" :title="__('Información')" :description="__('Tu sesión expira en 15 minutos.')" />
-                            <x-kore::alert color="success" :title="__('Listo')" :description="__('El módulo Users se generó correctamente.')" />
+                            <x-kore::alert type="info" :title="__('Información')" :description="__('Tu sesión expira en 15 minutos.')" />
+                            <x-kore::alert type="success" :title="__('Listo')" :description="__('El módulo Users se generó correctamente.')" />
                         </div>
                     </div>
                 </div>

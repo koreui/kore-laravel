@@ -57,7 +57,7 @@ Reglas vivas y resúmenes en `CLAUDE.md` / `AGENTS.md`. Detalles en [`docs/`](do
 - [`docs/quality/`](docs/quality/) — pipeline (Pint, Larastan, Rector, Pest, hooks, CI)
 - [`docs/ai/`](docs/ai/) — trabajar con la AI (Boost, skills)
 
-> `koreUi` se consume desde Packagist (`kore-ui/kore-ui ^1.1`). No hay path repository; un `composer install` lo instala como cualquier otra dependencia.
+> `koreUi` se consume desde Packagist (`kore-ui/kore-ui ^2.2`). No hay path repository; un `composer install` lo instala como cualquier otra dependencia.
 
 ## Toggles (`.env`)
 

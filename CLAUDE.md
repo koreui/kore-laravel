@@ -105,6 +105,13 @@ Cuando un toggle está OFF, su `ServiceProvider` debe hacer `return` temprano y 
 - **Siempre** usar componentes de koreUi: `<x-kore::button />`, `<x-kore::input />`, etc.
 - Para conocer la API de un componente, llamar a la herramienta MCP de kore-ui (`mcp__kore-ui__get-component-docs`).
 - Antes de crear un componente nuevo, verificar con `mcp__kore-ui__list-components` si ya existe.
+- **Verificar las props antes de escribirlas.** Una prop que no existe no falla: Blade la vuelca en el
+  bag como atributo HTML suelto y el componente usa su valor por defecto en silencio. Así estuvieron
+  las alertas de auth pintadas de azul con `color="destructive"` (la prop es `type`).
+- `config/kore-ui.php` está **publicado**, y Pint lo reformatea (añade `declare(strict_types=1)` y
+  desalinea los `=>`). Al actualizar koreUi hay que reconciliar las claves nuevas a mano con:
+  `diff -w vendor/kore-ui/kore-ui/config/kore-ui.php config/kore-ui.php` — el `-w` deja fuera el
+  ruido de alineación y solo quedan las diferencias reales.
 
 ## Comandos útiles
 
