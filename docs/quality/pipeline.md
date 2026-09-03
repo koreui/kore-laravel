@@ -185,12 +185,12 @@ $ composer ci
 ✓ Pint passed
 ✓ Larastan nivel 8: 0 errors
 ✓ Rector: nothing to refactor
-✓ Pest: 139 passed (346 assertions)
+✓ Pest: 149 passed (376 assertions)
 ```
 
-Reparto de los 139 tests: 16 arch (`tests/Arch`), 41 del módulo Auth, 48 del
-módulo Users, 3 de Tenancy y 31 en `tests/Feature` (health, scheduler, Sentry,
-Pulse, Pennant, mass assignment, landing). Aparte, 45 specs E2E de Playwright
+Reparto de los 149 tests: 16 arch (`tests/Arch`), 41 del módulo Auth, 48 del
+módulo Users, 3 de Tenancy y 41 en `tests/Feature` (health, scheduler, Sentry,
+Pulse, Pennant, mass assignment, landing, traducciones). Aparte, 45 specs E2E de Playwright
 (`npm run e2e`).
 
 Actualiza esta cifra cuando cambie. Un número inventado en los docs es peor que

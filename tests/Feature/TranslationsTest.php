@@ -110,7 +110,7 @@ function koreJsonTranslationFiles(string $locale): array
     return array_values(array_filter(array_merge(
         [base_path("lang/{$locale}.json")],
         glob(base_path("app/Modules/*/Resources/lang/{$locale}.json")) ?: [],
-    ), 'is_file'));
+    ), is_file(...)));
 }
 
 /**

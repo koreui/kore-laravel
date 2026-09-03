@@ -40,6 +40,14 @@ tocar un solo texto.
 
 ### Añadido
 
+- **i18n por módulo con español como idioma fuente**: `APP_LOCALE=es`,
+  fallback `en`, faker `es_ES`. `lang/es/{auth,pagination,passwords,validation}.php`
+  traducidos; `en.json` en `app/Modules/{Modulo}/Resources/lang/` cargado por
+  cada provider, `lang/en.json` compartido y `lang/es.json` para literales
+  ingleses de Fortify y correos del framework; español para el correo del
+  magic link (`lang/vendor/one-time-passwords/es`). `TranslationsTest` falla
+  listando cada `__()` sin traducción. `phpunit.xml` fija el locale para que
+  la suite no dependa del `.env` local. Guía: `docs/guides/i18n.md`.
 - **Action Pattern real en Users**: `UserCreateAction`, `UserUpdateAction` y
   `UserDeleteAction` (`final`, extienden `App\Core\Actions\Action`, un único
   `handle()`), con `UserData` como DTO y los eventos `UserCreated`,

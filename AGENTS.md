@@ -139,6 +139,14 @@ del provider del módulo (ver `FortifyServiceProvider::configureTwoFactorFeature
   `diff -w vendor/kore-ui/kore-ui/config/kore-ui.php config/kore-ui.php` — el `-w` deja fuera el
   ruido de alineación y solo quedan las diferencias reales.
 
+## Idioma e i18n
+
+- **Español es el idioma fuente**: escribe `__('Texto en español')`; con `APP_LOCALE=es` la clave se devuelve tal cual.
+- Traduce al inglés en `app/Modules/{Modulo}/Resources/lang/en.json` (texto del módulo) o `lang/en.json`
+  (compartido); si el literal ya está en inglés (Fortify, correos del framework), su traducción va en `lang/es.json`.
+- Nunca interpoles dentro de un `__()`: usa placeholders (`__('Hola, :name', ['name' => $user->name])`).
+- `tests/Feature/TranslationsTest.php` falla listando cada clave sin traducir. Ver [`docs/guides/i18n.md`](docs/guides/i18n.md).
+
 ## Tests E2E (Playwright)
 
 - La suite vive en `tests/e2e/` y se corre con `npm run e2e` (o `composer e2e`). Ver [`docs/quality/e2e.md`](docs/quality/e2e.md).
