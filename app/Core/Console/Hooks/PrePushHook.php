@@ -51,7 +51,10 @@ final class PrePushHook implements PrePushHookContract
     public function handle(Log $log, Closure $next): mixed
     {
         foreach (self::STEPS as $step => $label) {
-            $result = Process::path(base_path())->timeout(600)->run($step);
+            // APP_ENV explícito: el proceso hijo hereda el .env cargado por
+            // este artisan; phpunit.xml lo fuerza igualmente (force="true"),
+            // pero aquí se deja claro que la suite nunca corre como `local`.
+            $result = Process::path(base_path())->env(['APP_ENV' => 'testing'])->timeout(600)->run($step);
 
             if ($result->successful()) {
                 continue;

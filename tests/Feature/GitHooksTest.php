@@ -3,12 +3,14 @@
 declare(strict_types=1);
 
 use App\Core\Console\Hooks\ArchCheckPreCommitHook;
+use App\Core\Console\Hooks\PrePushCommand;
 use App\Core\Console\Hooks\PrePushHook;
 use Igorsgm\GitHooks\Exceptions\HookFailException;
 use Igorsgm\GitHooks\Git\ChangedFiles;
 use Igorsgm\GitHooks\Git\Log;
 use Illuminate\Console\Command;
 use Illuminate\Console\OutputStyle;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Process;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\BufferedOutput;
@@ -143,4 +145,19 @@ it('el hook de pre-push aborta el push y no llega a Pest si PHPStan falla', func
     }
 
     Process::assertRanTimes(fn ($process): bool => str_contains($process->command, 'pest'), 0);
+});
+
+/*
+ * El script que instala igorsgm/laravel-git-hooks reenvía con `$@` los dos
+ * argumentos que git pasa al pre-push (remote y url), pero el comando del
+ * paquete no los declara y todo push moría antes de correr el hook.
+ * App\Core\Console\Hooks\PrePushCommand lo reemplaza con la firma correcta.
+ */
+it('accepts the remote and url arguments git passes to the pre-push hook', function (): void {
+    $definition = Artisan::all()['git-hooks:pre-push']->getDefinition();
+
+    expect(Artisan::all()['git-hooks:pre-push'])->toBeInstanceOf(PrePushCommand::class)
+        ->and($definition->hasArgument('remote'))->toBeTrue()
+        ->and($definition->hasArgument('url'))->toBeTrue()
+        ->and($definition->getArgument('remote')->isRequired())->toBeFalse();
 });

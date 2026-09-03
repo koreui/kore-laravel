@@ -274,6 +274,27 @@ Excepciones documentadas en el propio archivo:
 ],
 ```
 
+> **Bug conocido del paquete (2.1) y cómo lo esquiva el boilerplate.** El
+> script que `git-hooks:register` escribe en `.git/hooks/pre-push` reenvía con
+> `$@` los dos argumentos que git pasa al hook (`remote` y `url`), pero el
+> comando `git-hooks:pre-push` del paquete no declara argumentos, así que todo
+> `git push` moría con `No arguments expected ... got "origin"` sin llegar a
+> correr nada. `App\Core\Console\Hooks\PrePushCommand` registra un comando
+> con el mismo nombre y la firma `{remote?} {url?}`; como el provider de la app
+> arranca después que el del paquete, reemplaza al original. `GitHooksTest` lo
+> verifica. Si el paquete lo corrige aguas arriba, basta con borrar esa clase y
+> su registro en `AppServiceProvider`.
+
+> **Segunda trampa del mismo hook.** Pest corre como proceso hijo de un
+> `artisan` que ya cargó `.env` en `$_SERVER`, y los `<env>` de `phpunit.xml`
+> no pisan variables ya presentes. Sin `force="true"` la suite heredaba
+> `APP_ENV=local` y el `.env` del desarrollador (seis tests rojos sólo dentro
+> del hook). Por eso todos los `<env>` de `phpunit.xml` llevan `force="true"`
+> y el hook añade `APP_ENV=testing` al proceso. Consecuencia: para correr la
+> suite contra otra base (MySQL, por ejemplo) hay que editar `phpunit.xml`, no
+> exportar variables.
+
+
 Las dos clases propias viven en `app/Core/Console/Hooks/`:
 
 - **`ArchCheckPreCommitHook`** toma los archivos del commit y se los pasa al

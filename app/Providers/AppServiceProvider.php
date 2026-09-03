@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Core\Console\ArchCheckCommand;
+use App\Core\Console\Hooks\PrePushCommand;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -49,6 +50,8 @@ final class AppServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 ArchCheckCommand::class,
+                // Reemplaza al del paquete: acepta los argumentos que git pasa al pre-push.
+                PrePushCommand::class,
             ]);
         }
     }

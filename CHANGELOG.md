@@ -131,6 +131,18 @@ Sin cambios de comportamiento para el usuario final: la suite E2E —45 tests en
   `App\Console\Commands` extienda `Command`, y el layout modular no usa esa
   carpeta.
 
+### Corregido
+
+- `git push` moría con `No arguments expected for "git-hooks:pre-push"
+  command, got "origin"`: el script que instala `igorsgm/laravel-git-hooks`
+  reenvía los argumentos de git (`remote`, `url`) y su comando no los declara.
+  `App\Core\Console\Hooks\PrePushCommand` reemplaza al comando del paquete
+  con la firma correcta, de modo que la capa 2 (PHPStan + Pest) por fin corre
+  en cada push.
+- Pest lanzado desde un hook heredaba el `.env` del desarrollador
+  (`APP_ENV=local`) porque los `<env>` de `phpunit.xml` no pisan variables ya
+  presentes: ahora llevan `force="true"` y el hook fija `APP_ENV=testing`.
+
 ### Eliminado
 
 - Dos `.gitkeep` que ya no guardaban ninguna carpeta vacía:
