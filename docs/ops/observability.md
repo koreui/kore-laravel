@@ -70,7 +70,25 @@ la app, la definición del boilerplate gana.
 > Las rutas de Pulse se registran aunque `PULSE_ENABLED=false`; el toggle sólo
 > apaga los *recorders*. Por eso el gate importa siempre.
 
-Recorders activos por defecto: requests, queries lentas, jobs lentos, cache hits, exceptions, slow outgoing requests.
+Los **diez** recorders que registra `config/pulse.php` (`php artisan tinker
+--execute 'print_r(array_keys(config("pulse.recorders")));'` los lista):
+
+| Recorder | Qué graba |
+|----------|-----------|
+| `CacheInteractions` | hits y misses de caché |
+| `Exceptions` | excepciones por clase y ubicación |
+| `Queues` | throughput de las colas (encolados, procesados, fallidos) |
+| `Servers` | CPU, memoria y disco del servidor (necesita `pulse:check`) |
+| `SlowJobs` | jobs por encima del umbral |
+| `SlowOutgoingRequests` | llamadas HTTP salientes lentas |
+| `SlowQueries` | consultas por encima del umbral |
+| `SlowRequests` | peticiones lentas |
+| `UserJobs` | qué usuario despacha más jobs |
+| `UserRequests` | qué usuario hace más peticiones |
+
+`Servers` es el único que necesita un proceso aparte (`php artisan pulse:check`);
+el resto graba desde la propia petición. Los umbrales de los `Slow*` y los
+`ignore` de cada uno se editan en `config/pulse.php`.
 
 Cron para `pulse:check` y `pulse:work` (no están en el scheduler del
 boilerplate porque sólo aplican con Pulse encendido):
@@ -196,8 +214,12 @@ activity()
     ->log('cancelled');        // log manual
 ```
 
-Purga: `activitylog:clean` corre a diario desde el scheduler (retención en
-`config/activitylog.php`).
+Purga: `activitylog:clean` corre a diario desde el scheduler. La retención es
+`activitylog.clean_after_days`, **365 días** por defecto. El boilerplate no
+publica `config/activitylog.php`: el valor lo registra el propio paquete, así
+que el comando funciona tal cual. Para cambiarlo, o `--days=N` en el schedule, o
+publica el config con `php artisan vendor:publish --tag=activitylog-config` y
+edítalo.
 
 ## 5. Scheduler
 
@@ -243,6 +265,21 @@ Y en `.env` de producción:
 LOG_CHANNEL=production
 LOG_LEVEL=error
 ```
+
+## Tests
+
+La observabilidad tiene tres suites propias en `tests/Feature/`, 21 tests en
+total (`./vendor/bin/pest tests/Feature/HealthTest.php tests/Feature/PulseAccessTest.php tests/Feature/SentryIntegrationTest.php`):
+
+| Archivo | Qué cubre | Tests |
+|---------|-----------|-------|
+| `HealthTest` | los dos endpoints, el gate `viewHealth`, el token de `/health/json` y los checks registrados | 12 |
+| `PulseAccessTest` | el gate `viewPulse` (sólo superadmin) y que las rutas existan con el toggle apagado | 5 |
+| `SentryIntegrationTest` | que `Integration::handles()` esté enganchado y el canal de log `sentry` declarado | 4 |
+
+`PulseAccessTest` renderiza el dashboard de Pulse, que arrastra su bundle JS: por
+eso `phpunit.xml` fija `memory_limit=512M`. Con el 128M de algunas instalaciones
+de PHP la suite se cae por memoria, no por el test.
 
 ## Recursos
 

@@ -1,6 +1,8 @@
 # Pipeline de calidad
 
-**TL;DR**: Pint formatea, Larastan nivel 8 analiza, Rector refactoriza, Pest 3 testea, igorsgm/laravel-git-hooks corre Pint en pre-commit, GitHub Actions corre todo en cada PR. El comando único es `composer ci`.
+**TL;DR**: Pint formatea, Larastan nivel 8 analiza los tipos, PHPat vigila el grafo de dependencias, `phpstan-disallowed-calls` prohíbe llamadas concretas, `kore:arch:check` hace los checks textuales, Rector refactoriza y Pest 3 testea. `igorsgm/laravel-git-hooks` reparte el trabajo entre pre-commit y pre-push, y GitHub Actions lo corre todo en cada PR. El comando único es `composer ci`.
+
+El catálogo de reglas —qué se verifica, con qué herramienta y con qué severidad— vive en [`../architecture/rules.md`](../architecture/rules.md). Este documento explica cómo está montado el pipeline; aquel dice qué comprueba.
 
 Los tests end-to-end en navegador van aparte, con Playwright y su propio workflow: ver [`e2e.md`](e2e.md).
 
@@ -12,11 +14,35 @@ composer test:parallel     # Pest --parallel
 composer test:coverage     # Pest --coverage --min=80
 composer lint              # Pint (aplica fixes)
 composer lint:test         # Pint --test (no fix)
-composer analyse           # Larastan
+composer analyse           # Larastan + PHPat + disallowed-calls (un solo binario)
+composer arch              # kore:arch:check (checks textuales)
 composer refactor          # Rector (aplica)
 composer refactor:test     # Rector --dry-run
-composer ci                # lint:test + analyse + refactor:test + test
+composer ci                # lint:test + analyse + arch + refactor:test + test
 ```
+
+## Capas de verificación
+
+Cada capa tiene un presupuesto de tiempo. Si una se pasa, se mueve trabajo a la
+siguiente: un pre-commit lento se acaba saltando con `--no-verify`, y entonces
+no verifica nada.
+
+| Capa | Presupuesto | Medido | Qué corre |
+|------|-------------|--------|-----------|
+| **pre-commit** | ~2 s | **0,4 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
+| **pre-push** | ~30 s | **2,5 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
+| **`composer ci`** | ~90 s | **6 s** | `pint --test` (0,3) + `phpstan` (0,6 con caché, 2,0 en frío) + `composer arch` (0,2) + `rector --dry-run` (2,4) + `pest` (4,5, secuencial) |
+| **CI (GitHub)** | ~3 min | — | `composer ci` en matriz 8.3 / 8.4 + `composer audit` + `npm ci && npm run build` + E2E |
+
+Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v1.2.0 y
+232 tests Pest. La suite E2E —45 tests en 12 archivos— va aparte y tarda 14 s
+en local.
+
+> Nota de entorno: `composer test` limpia la config cacheada antes de correr
+> Pest a propósito. Con un `bootstrap/cache/config.php` viejo, `PulseAccessTest`
+> renderiza el dashboard de Pulse entero y un PHP con `memory_limit=128M` se
+> queda sin memoria. Si lanzas `./vendor/bin/pest` a pelo y ves un fatal en
+> `Pulse.php`, es eso: `php artisan config:clear`.
 
 ## Configuraciones
 
@@ -24,28 +50,123 @@ composer ci                # lint:test + analyse + refactor:test + test
 
 Preset Laravel + reglas extra:
 
-- `declare_strict_types`: header obligatorio en cada PHP
-- `date_time_immutable`: prefiere `DateTimeImmutable` sobre `DateTime`
+- `declare_strict_types`: header obligatorio en cada PHP (R13)
+- `date_time_immutable`: prefiere `DateTimeImmutable` sobre `DateTime` (R16)
 - `fully_qualified_strict_types`: imports completos en docblocks
 - `modernize_types_casting`: `(int)` en lugar de `intval()`
 - `ordered_imports` (alfa)
 - `single_quote`: comillas simples por default
 - `ordered_class_elements`: orden estable de miembros de clase
 
-### Larastan / PHPStan — `phpstan.neon`
+### PHPStan — `phpstan.neon`
+
+Un solo binario carga cuatro cosas:
 
 ```yaml
-level: 8
-checkOctaneCompatibility: true
-checkModelProperties: true
-treatPhpDocTypesAsCertain: false
-excludePaths:
-  analyseAndScan:
-    - app/Modules/*/Database/Migrations/*
-    - app/Modules/*/Tests/**/*
+includes:
+    - ./vendor/larastan/larastan/extension.neon        # tipos + magia de Laravel
+    - ./vendor/phpat/phpat/extension.neon              # reglas de arquitectura
+    - ./vendor/spaze/phpstan-disallowed-calls/extension.neon
+    - ./phpstan-disallowed.neon                        # la lista concreta del boilerplate
+
+parameters:
+    level: 8
+    paths:
+        - app
+        - tests/Arch/PhpatArchitecture.php
+    excludePaths:
+        analyseAndScan:
+            - app/Modules/*/Database/Migrations/*
+            - app/Modules/*/Tests/**/*
+    phpat:
+        ignore_built_in_classes: true
+        show_rule_names: true
+
+services:
+    -
+        class: Tests\Arch\PhpatArchitecture
+        tags: [phpat.test]
 ```
 
-Pest tests son excluidos porque su sintaxis funcional confunde a PHPStan (no extiende clase, las assertions vienen via `pest()->extend()` en runtime).
+Los tests de Pest se excluyen porque su sintaxis funcional confunde a PHPStan
+(no extienden una clase; las expectativas llegan por `pest()->extend()` en
+runtime). La excepción es `tests/Arch/PhpatArchitecture.php`, que es una clase
+PHP normal y **tiene** que estar en `paths` para que PHPStan pueda reflejarla.
+
+### PHPat — `tests/Arch/PhpatArchitecture.php`
+
+Reglas de arquitectura escritas como reglas de PHPStan. Ven lo que Pest arch no
+ve: el grafo de dependencias completo (parámetros, retornos, `new`, `catch`,
+atributos, docblocks).
+
+| Método | Regla |
+|--------|-------|
+| `testCoreNoDependeDeNingunModulo` | R6 |
+| `testModulosNoSeImportanEntreSi` | R5 — genera una regla por **cada par** de módulos a partir de `glob(app/Modules/*)`, ignorando `Tests` |
+| `testElDominioNoDependeDeLaCapaDeEntrega` | R4 · R19 — `Actions`, `Data`, `Rules`, `Models` no dependen de `Livewire\*`, `Illuminate\Http\Request` ni de `Modules\*\{Http,Forms}` |
+| `testLosDtosSoloDependenDeDatos` | R8 — `canOnly()->dependOn()`: sólo `Core\Data`, `Core\Enums`, `Spatie\LaravelData` y enums |
+| `testLosContractsDeCoreSonInterfaces` | R7 |
+| `testLasActionsExponenUnSoloHandle` | R1 — `haveOnlyOnePublicMethodNamed('handle')` |
+
+Un módulo nuevo queda cubierto sin tocar el archivo: las reglas de R5 se generan
+desde el sistema de archivos.
+
+> Detalle de implementación que cuesta media hora si no se sabe: los selectores
+> por namespace con regex necesitan **frontera final**
+> (`/^App\\Modules\\[^\\]+\\Data(\\|$)/`). Sin ella, `Data` también captura
+> `Database`, y el seeder del módulo acaba acusado de ser un DTO.
+
+### Llamadas prohibidas — `phpstan-disallowed.neon`
+
+Una entrada por regla, con `message:` citando su número y `allowIn:` /
+`allowExceptIn:` diciendo **dónde sí** es correcto:
+
+| Identificador | Regla | Prohíbe | Dónde sí |
+|---------------|-------|---------|----------|
+| `kore.r19` | R19 | `auth()`, `request()`, `session()`, `cookie()` | todo menos `Core`, `Models`, `Actions`, `Data`, `Rules` |
+| `kore.r20` | R20 | `abort()`, `abort_if()`, `abort_unless()` | `app/Http`, `Modules/*/Http`, `routes` |
+| `kore.r17` | R17 | `env()` | `config/` |
+| `kore.r18` | R18 | `dd()`, `dump()`, `var_dump()`, `ray()` | en ningún sitio |
+| `kore.r21` | R21 | `DB::table()` | migraciones y seeders |
+| `kore.r22` | R22 | cliente HTTP y `Mail::send` / `Mail::raw` | todo menos controllers y componentes Livewire |
+| `kore.r27` | R27 | `Model::unguard()` | en ningún sitio |
+
+> Otro detalle que cuesta caro: la firma que hay que escribir es la que ve
+> Larastan **después** de resolver el facade, no el facade. `DB::table()` se
+> configura como `Illuminate\Database\ConnectionInterface::table()` y `Http::get()`
+> como `Illuminate\Http\Client\PendingRequest::*`; el facade `Mail`, en cambio,
+> se detecta por su propio nombre. Comprobado entrada por entrada introduciendo
+> una violación temporal y viendo el error.
+
+### Checks textuales — `php artisan kore:arch:check`
+
+Lo que ninguna de las anteriores ve: atributos que faltan, comentarios,
+estructura de archivos. Todo por lectura de archivos, sin tocar la base de
+datos, en ~0,2 s.
+
+```bash
+composer arch                                  # todo el repositorio
+php artisan kore:arch:check --files=a.php,b.md # lo que usa el pre-commit
+php artisan kore:arch:check --rule=R29         # un solo check
+php artisan kore:arch:check --root=/otro/repo  # otra raíz (lo usan sus tests)
+```
+
+| Check | Qué mira |
+|-------|----------|
+| R11 | toda clave de `config/kore-app.php` la lee alguien |
+| R23 | todo método de escritura de un componente Livewire llama a `authorize()`, `can()` o `Gate::`. Prefijos reconocidos: `save*`, `store*`, `create*`, `update*`, `delete*`, `destroy*`, `remove*`, `confirm*`, `toggle*`, `add*`, `send*`, `sync*`, `assign*`, `approve*`, `import*` |
+| R24 | `#[Locked]` en `public $id` / `$model` / `$algoId` de `Forms/` y `Http/Livewire/` |
+| R29 | toda migración define `down()` |
+| R30 | ninguna Blade usa Eloquent |
+| R37 | ninguna Blade tiene `data-testid` |
+| R38 | ningún `.ts` de `tests/e2e` llama a `waitForTimeout()` (los comentarios que explican por qué no se usa, sí) |
+| R40 | todo `docs/**/*.md` está enlazado desde `docs/README.md`, y toda `R{n}` citada en el código, los skills, los `*.neon` y `CLAUDE.md`/`AGENTS.md` existe en `rules.md` (cuenta cualquier `R{n}` suelta, no sólo las seguidas de `:` o `·`) |
+| R44 | las válvulas de escape tienen la gramática correcta, citan una regla existente, llevan `@owner`, no han caducado y **usan la forma que esa regla declara** en su `> Escape:` |
+| R45 | si hay `phpstan-baseline.neon`, su primera línea es `# arch-baseline: vence YYYY-MM-DD` y la fecha no ha pasado |
+
+Salida: `R{n} archivo:línea mensaje`, y exit code 1 si hay algo. Tests:
+`tests/Feature/ArchCheckCommandTest.php` (73 casos, un árbol de fixtures que
+viola cada check y otro que lo cumple).
 
 ### Rector — `rector.php`
 
@@ -88,73 +209,90 @@ pest()->extend(TestCase::class)
 ni tocan la base de datos, así que no necesitan `TestCase` ni `RefreshDatabase`.
 
 `tests/TestCase.php` ejecuta `withoutVite()` en `setUp()` para que los tests no
-requieran assets compilados. Está **sólo** ahí: el `beforeEach` que lo repetía en
-`tests/Pest.php` se quitó en la v1.0.0.
+requieran assets compilados.
 
 Las suites las declara `phpunit.xml`: `Arch` (`tests/Arch`), `Unit`
 (`tests/Unit`), `Feature` (`tests/Feature`) y `Modules` (`app/Modules/*/Tests`).
 
-### Arch tests — `tests/Arch/ArchitectureTest.php`
+`tests/Arch/PhpatArchitecture.php` vive dentro de `tests/Arch` pero **no** es un
+test de PHPUnit: no acaba en `Test.php`, así que el descubrimiento de suites lo
+ignora. Lo consume PHPStan.
 
-Las reglas de oro de `CLAUDE.md` dejaron de ser prosa y fallan el build:
+### Arch tests de Pest — `tests/Arch/ArchitectureTest.php`
 
 | Regla | Expectativa |
 |-------|-------------|
 | preset `php()` | buenas prácticas base de PHP |
 | preset `security()` | sin `md5`, `sha1`, `eval`, `extract`, `mt_rand`... |
-| preset `laravel()` | convenciones del framework, **ignorando `App\Modules`** |
-| Regla 5 | `declare(strict_types=1)` en todo `App` |
-| — | sin `dd`, `dump`, `var_dump`, `ray` ni `env()` dentro de `App` |
-| Regla 1 | `App\Modules\*\Actions` son `final`, con sufijo `Action` y extienden `App\Core\Actions\Action` |
-| Regla 3 | `App\Modules\Users` no usa `App\Modules\Auth` (y al revés), ignorando `Tests/` |
-| Regla 4 | `App\Modules\*\Data` y `App\Core\Data\Authorization` son `final` y extienden `App\Core\Data\Data` |
-| Regla 6 | `App\Modules\*\Policies` son `final` y con sufijo `Policy` |
-| — | `App\Core` no usa `App\Modules` |
-| — | `App\Core\Contracts` son interfaces |
-| — | `App\Modules\*\Providers` son `final` y con sufijo `ServiceProvider` |
+| preset `laravel()` | convenciones del framework, **ignorando `App\Modules`, `App\Core\Enums` y `App\Core\Console`** |
+| R13 | `declare(strict_types=1)` en todo `App` |
+| R17 · R18 | sin `dd`, `dump`, `var_dump`, `ray` ni `env()` dentro de `App` |
+| R1 · R2 | `App\Modules\*\Actions` son `final`, con sufijo `Action` y extienden `App\Core\Actions\Action` |
+| R3 | un módulo sólo tiene las carpetas permitidas (y `Database/`, `Http/` y `Resources/` sólo sus subcarpetas fijas) |
+| R5 | `App\Modules\Users` no usa `App\Modules\Auth` (y al revés), ignorando `Tests/` |
+| R5 · R14 | `App\Modules\*\Events` son `final readonly` |
+| R6 | `App\Core` no usa `App\Modules` |
+| R7 | `App\Core\Contracts` son interfaces |
+| R8 | `App\Modules\*\Data` y `App\Core\Data\Authorization` son `final`, extienden `App\Core\Data\Data` y no usan `Illuminate\Http` |
+| R9 | `App\Modules\*\Providers` son `final` y con sufijo `ServiceProvider` |
+| R14 | `App\Modules\*\Rules` son `final` e implementan `ValidationRule` |
+| R25 | `App\Modules\*\Policies` son `final` y con sufijo `Policy` |
 
 Los namespaces usan comodín (`App\Modules\*\Actions`), así que un módulo nuevo
 queda cubierto sin tocar el archivo.
 
 Excepciones documentadas en el propio archivo:
 
-- El preset `laravel()` se aplica con `->ignoring('App\Modules')`. El preset
-  asume el layout plano del framework (sólo `App\Http\Controllers` puede tener
-  sufijo `Controller`, sólo `App\Models` puede extender `Model`...), que es
-  justo lo contrario de un modular monolith. Sigue vigilando `App\Core`,
-  `App\Models` y `App\Providers`; las reglas equivalentes para los módulos se
-  escriben a mano debajo.
-- `App\Core\Enums` también queda fuera del preset: éste exige que sólo
-  `App\Enums` contenga enums, y en el layout modular el enum compartido vive en
-  Core.
+- El preset `laravel()` se aplica con `->ignoring([...])`. El preset asume el
+  layout plano del framework (sólo `App\Http\Controllers` puede tener sufijo
+  `Controller`, sólo `App\Models` puede extender `Model`, sólo
+  `App\Console\Commands` puede extender `Command`...), que es justo lo contrario
+  de un modular monolith. Sigue vigilando `App\Core`, `App\Models` y
+  `App\Providers`; las reglas equivalentes para los módulos se escriben a mano
+  debajo.
+- `App\Core\Enums` y `App\Core\Console` quedan fuera del preset por lo mismo: el
+  enum compartido y los comandos transversales viven en Core, no en `App\Enums`
+  ni en `App\Console\Commands`.
 - Desde la v1.1 **no hay excepciones en la regla de Actions**: los stubs que
-  publica Fortify (`CreateNewUser`, `PasswordValidationRules`...) viven en
-  `App\Modules\Auth\Fortify`, porque son adaptadores del paquete y no casos de
-  uso del boilerplate.
+  publica Fortify viven en `App\Modules\Auth\Fortify`, porque son adaptadores del
+  paquete y no casos de uso del boilerplate.
 
-La regla "sin imports cruzados entre módulos" está **activa desde la v1.1**, en
-los dos sentidos y con `Tests/` ignorado (los tests sí pueden cruzar módulos).
-La acompañan: `App\Core` no depende de `App\Modules`, los `App\Core\Contracts`
-son interfaces, y los DTOs (`App\Modules\*\Data` y `App\Core\Data\Authorization`)
-son `final` y extienden `App\Core\Data\Data`.
+## Hooks de git
 
-## Pre-commit hooks
-
-`igorsgm/laravel-git-hooks` instala el hook automáticamente vía `post-autoload-dump`:
+`igorsgm/laravel-git-hooks` los instala automáticamente vía
+`post-autoload-dump`:
 
 ```php
 // config/git-hooks.php
 'pre-commit' => [
-    Igorsgm\GitHooks\Console\Commands\Hooks\PintPreCommitHook::class,
+    PintPreCommitHook::class,            // formato
+    ArchCheckPreCommitHook::class,       // kore:arch:check sobre los staged
+],
+
+'pre-push' => [
+    PrePushHook::class,                  // phpstan + pest --parallel
 ],
 ```
 
-Cada `git commit` corre Pint sobre los archivos staged. Si falla, aborta el commit.
+Las dos clases propias viven en `app/Core/Console/Hooks/`:
 
-Para ejecutar manualmente:
+- **`ArchCheckPreCommitHook`** toma los archivos del commit y se los pasa al
+  comando por `--files`. Si el comando devuelve distinto de 0, lanza
+  `HookFailException` y el commit se aborta.
+- **`PrePushHook`** corre PHPStan y después Pest en paralelo, parando en el
+  primero que falle e imprimiendo su salida. Rector, `composer audit` y el build
+  de Vite **no** están aquí a propósito: romperían el presupuesto de 30 s.
+
+Tests: `tests/Feature/GitHooksTest.php` prueba la decisión de cada hook (seguir
+o abortar) con un `Command` de doble y `Process::fake()`. No se prueba con un
+commit real porque haría falta escribir un archivo con una violación dentro de
+`app/` o `tests/`, y con `pest --parallel` ese archivo lo vería el proceso que
+corre los arch tests de verdad.
+
+Para reinstalarlos a mano:
 
 ```bash
-php artisan git-hooks:register   # re-registra el hook si fue borrado
+php artisan git-hooks:register
 ```
 
 ## CI — GitHub Actions
@@ -168,9 +306,10 @@ Job `quality`:
   1. `composer install` (cache de `vendor/`)
   2. `composer audit` — advisories de seguridad, bloqueante
   3. `vendor/bin/pint --test --format=checkstyle`
-  4. `vendor/bin/phpstan analyse --no-progress --memory-limit=2G`
-  5. `vendor/bin/rector process --dry-run --no-progress-bar`
-  6. `vendor/bin/pest --parallel --compact`
+  4. `vendor/bin/phpstan analyse --no-progress --memory-limit=2G` (Larastan + PHPat + disallowed-calls)
+  5. `php artisan kore:arch:check`
+  6. `vendor/bin/rector process --dry-run --no-progress-bar`
+  7. `vendor/bin/pest --parallel --compact`
 
 Job `assets`: Node 20, `npm ci`, `npm run build`. Los tests corren con
 `withoutVite()`, así que sin este job un build de Vite roto pasaría verde.
@@ -183,31 +322,40 @@ Job `assets`: Node 20, `npm ci`, `npm run build`. Los tests corren con
 ```
 $ composer ci
 ✓ Pint passed
-✓ Larastan nivel 8: 0 errors
+✓ Larastan nivel 8 + PHPat + disallowed-calls: 0 errors
+✓ kore:arch:check: sin violaciones
 ✓ Rector: nothing to refactor
-✓ Pest: 149 passed (376 assertions)
+✓ Pest: 232 passed (524 assertions)
 ```
 
-Reparto de los 149 tests: 16 arch (`tests/Arch`), 41 del módulo Auth, 48 del
-módulo Users, 3 de Tenancy y 41 en `tests/Feature` (health, scheduler, Sentry,
-Pulse, Pennant, mass assignment, landing, traducciones). Aparte, 45 specs E2E de Playwright
-(`npm run e2e`).
+Reparto de los 232 tests: 21 arch (`tests/Arch`), 41 del módulo Auth, 48 del
+módulo Users, 3 de Tenancy y 119 en `tests/Feature` (health, scheduler, Sentry,
+Pulse, Pennant, mass assignment, landing, traducciones, `kore:arch:check` y los
+hooks). Aparte, la suite E2E de Playwright (`npm run e2e`): 45 tests en 12
+archivos —11 de spec más `auth.setup.ts`, que hace el login por rol—.
 
-Actualiza esta cifra cuando cambie. Un número inventado en los docs es peor que
-no ponerlo: la auditoría de septiembre de 2026 encontró aquí «15 tests» cuando
-había 32.
+Actualiza esta cifra cuando cambie (R41). Un número inventado en los docs es
+peor que no ponerlo: la auditoría de septiembre de 2026 encontró aquí «15 tests»
+cuando había 32.
 
 ## Cómo subir el listón
 
-| Cambio                       | Impacto                                      |
+| Cambio                        | Impacto                                      |
 |-------------------------------|----------------------------------------------|
-| Larastan nivel 8 → 9          | strict, harder, prepara baseline             |
-| Pest coverage min 80% → 90%   | test:coverage exige más cobertura            |
+| Larastan nivel 8 → 9          | strict, harder, prepara baseline (con fecha, R45) |
+| Pest coverage min 80% → 90%   | `test:coverage` exige más cobertura          |
 | Agregar mutation testing      | `composer require --dev pestphp/pest-plugin-mutate` |
-| Arch test de "una Action = un método público" | hoy sólo se vigila el nombre, el `final` y la clase base |
+| Hook `commit-msg` de conventional commits | automatiza R43, hoy manual       |
 
 Antes de subir el nivel, agrega un baseline para no romper nada existente:
 
 ```bash
 ./vendor/bin/phpstan analyse --generate-baseline
+```
+
+Y ponle la cabecera de caducidad en la primera línea, o `composer arch` lo
+rechazará (R45):
+
+```
+# arch-baseline: vence 2027-03-01
 ```

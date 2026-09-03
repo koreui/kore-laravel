@@ -4,18 +4,27 @@ declare(strict_types=1);
 
 use App\Core\Actions\Action;
 use App\Core\Data\Data;
+use Illuminate\Contracts\Validation\ValidationRule;
 
 /*
 |--------------------------------------------------------------------------
 | Arch tests
 |--------------------------------------------------------------------------
 |
-| Las "reglas de oro" de CLAUDE.md dejan de ser prosa y pasan a fallar el
-| build. Estos tests son estáticos: no bootean la aplicación ni tocan la base
-| de datos (ver la nota en tests/Pest.php).
+| Las reglas de `docs/architecture/rules.md` dejan de ser prosa y pasan a
+| fallar el build. Estos tests son estáticos: no bootean la aplicación ni tocan
+| la base de datos (ver la nota en tests/Pest.php).
 |
 | Convención: los namespaces usan comodín (`App\Modules\*\Actions`) para que un
-| módulo nuevo quede cubierto sin tocar este archivo.
+| módulo nuevo quede cubierto sin tocar este archivo, y cada bloque cita la
+| regla que implementa (`// R7`).
+|
+| Reparto de responsabilidades entre las tres herramientas estáticas:
+|
+|   - Pest arch (este archivo): namespaces y declaraciones (`final`, sufijos,
+|     `toExtend`, `toBeInterfaces`) + los checks de estructura de carpetas.
+|   - PHPat (`tests/Arch/PhpatArchitecture.php`): grafo de dependencias real.
+|   - disallowed-calls (`phpstan-disallowed.neon`): llamadas concretas.
 |
 */
 
@@ -37,11 +46,17 @@ arch()->preset()->security();
  * eso vive en `App\Modules\{X}\...` (y el kernel compartido en `App\Core\...`),
  * así que el preset completo falla por diseño, no por bugs.
  *
- * Se aplica ignorando `App\Modules` y `App\Core\Enums`: sigue vigilando
- * `App\Models`, `App\Providers`, el resto de `App\Core` y `app/` en general,
- * y las reglas equivalentes para los módulos se escriben abajo a mano.
+ * Se aplica ignorando `App\Modules`, `App\Core\Enums` y `App\Core\Console`:
+ * sigue vigilando `App\Models`, `App\Providers`, el resto de `App\Core` y
+ * `app/` en general, y las reglas equivalentes para los módulos se escriben
+ * abajo a mano.
+ *
+ * `App\Core\Console` queda fuera por lo mismo que `App\Core\Enums`: el preset
+ * exige que sólo `App\Console\Commands` extienda `Command`, y en el layout
+ * modular esa carpeta no existe — los comandos de dominio viven en su módulo
+ * (`App\Modules\{X}\Console\Commands`) y los transversales en Core.
  */
-arch()->preset()->laravel()->ignoring(['App\Modules', 'App\Core\Enums']);
+arch()->preset()->laravel()->ignoring(['App\Modules', 'App\Core\Enums', 'App\Core\Console']);
 
 /*
 |--------------------------------------------------------------------------
@@ -49,45 +64,53 @@ arch()->preset()->laravel()->ignoring(['App\Modules', 'App\Core\Enums']);
 |--------------------------------------------------------------------------
 */
 
-arch('regla 5 · declare(strict_types=1) en todo App')
+// R13
+arch('R13 · declare(strict_types=1) en todo App')
     ->expect('App')
     ->toUseStrictTypes();
 
-arch('sin helpers de debug ni env() fuera de config')
+// R17 · R18
+arch('R17/R18 · sin helpers de debug ni env() fuera de config')
     ->expect(['dd', 'dump', 'dump_die', 'var_dump', 'ray', 'env'])
     ->not->toBeUsedIn('App');
 
 /*
- * Regla 1 · 1 Action = 1 caso de uso, `final`, sufijo `Action`, extendiendo la
- * base de Core.
+ * R1 · 1 Action = 1 caso de uso, `final`, sufijo `Action`, extendiendo la base
+ * de Core. Que exponga un único `handle()` público lo verifica PHPat, que sí
+ * ve la firma de los métodos.
  *
  * Ya no hay excepciones: desde la v1.1 los stubs de Fortify viven en
  * `App\Modules\Auth\Fortify` (son adaptadores del paquete, no casos de uso).
  */
-arch('regla 1 · las Actions son final')
+// R1 · R14
+arch('R1 · las Actions son final')
     ->expect('App\Modules\*\Actions')
     ->toBeFinal();
 
-arch('regla 1 · las Actions llevan sufijo Action')
+// R2
+arch('R2 · las Actions llevan sufijo Action')
     ->expect('App\Modules\*\Actions')
     ->toHaveSuffix('Action');
 
-arch('regla 1 · las Actions extienden App\Core\Actions\Action')
+// R1
+arch('R1 · las Actions extienden App\Core\Actions\Action')
     ->expect('App\Modules\*\Actions')
     ->toExtend(Action::class);
 
-arch('regla 6 · las Policies son final y llevan sufijo Policy')
+// R14 · R25
+arch('R25 · las Policies son final y llevan sufijo Policy')
     ->expect('App\Modules\*\Policies')
     ->toBeFinal()
     ->toHaveSuffix('Policy');
 
-arch('los Providers de módulo llevan sufijo ServiceProvider')
+// R9 · R14
+arch('R9 · los Providers de módulo llevan sufijo ServiceProvider')
     ->expect('App\Modules\*\Providers')
     ->toBeFinal()
     ->toHaveSuffix('ServiceProvider');
 
 /*
- * Regla 3 · sin imports cruzados entre módulos.
+ * R5 · sin imports cruzados entre módulos.
  *
  * Users habla con Auth por `App\Core\Contracts\AuthorizationCatalog` y por el
  * enum `App\Core\Enums\SystemRole`; Auth no conoce Users en absoluto (si
@@ -95,39 +118,222 @@ arch('los Providers de módulo llevan sufijo ServiceProvider')
  *
  * Los tests SÍ pueden cruzar módulos: montan el mundo real (seeders, roles) y
  * no son código de producción.
+ *
+ * PHPat genera esta misma regla para TODO par de módulos a partir de
+ * `app/Modules/*`, así que un módulo nuevo queda cubierto sin tocar nada; los
+ * dos `arch()` de abajo se quedan como red de seguridad legible.
  */
-arch('regla 3 · sin imports cruzados entre módulos')
+// R5
+arch('R5 · sin imports cruzados entre módulos')
     ->expect('App\Modules\Users')
     ->not->toUse('App\Modules\Auth')
     ->ignoring('App\Modules\Users\Tests');
 
-arch('regla 3 · sin imports cruzados entre módulos (inverso)')
+// R5
+arch('R5 · sin imports cruzados entre módulos (inverso)')
     ->expect('App\Modules\Auth')
     ->not->toUse('App\Modules\Users')
     ->ignoring('App\Modules\Auth\Tests');
 
 /*
- * Core es el kernel compartido: lo pueden usar todos los módulos, pero él no
- * puede depender de ninguno. En cuanto `App\Core` importe `App\Modules\X`, el
- * contrato deja de ser una frontera y pasa a ser decoración.
+ * R6 · Core es el kernel compartido: lo pueden usar todos los módulos, pero él
+ * no puede depender de ninguno. En cuanto `App\Core` importe `App\Modules\X`,
+ * el contrato deja de ser una frontera y pasa a ser decoración.
  */
-arch('Core no depende de ningún módulo')
+// R6
+arch('R6 · Core no depende de ningún módulo')
     ->expect('App\Core')
     ->not->toUse('App\Modules');
 
-arch('los Contracts de Core son interfaces')
+// R7
+arch('R7 · los Contracts de Core son interfaces')
     ->expect('App\Core\Contracts')
     ->toBeInterfaces();
 
 /*
- * Regla 4 · DTOs en lugar de arrays asociativos entre capas.
+ * R8 · DTOs en lugar de arrays asociativos entre capas.
  */
-arch('regla 4 · los DTOs de módulo son final y extienden App\Core\Data\Data')
+// R8
+arch('R8 · los DTOs de módulo son final y extienden App\Core\Data\Data')
     ->expect('App\Modules\*\Data')
     ->toBeFinal()
     ->toExtend(Data::class);
 
-arch('regla 4 · los DTOs de Core son final y extienden App\Core\Data\Data')
+// R8
+arch('R8 · los DTOs de Core son final y extienden App\Core\Data\Data')
     ->expect('App\Core\Data\Authorization')
     ->toBeFinal()
     ->toExtend(Data::class);
+
+/*
+ * R8 · un DTO no conoce la petición HTTP: si necesita un `Request` es que la
+ * traducción de input a datos se quedó a medias en la capa de entrega.
+ */
+// R8
+arch('R8 · los DTOs no dependen de Illuminate\Http')
+    ->expect('App\Modules\*\Data')
+    ->not->toUse('Illuminate\Http');
+
+/**
+ * FQCN de todos los DTOs del proyecto, deducidos de la ruta del archivo.
+ *
+ * @return list<class-string>
+ */
+function koreDataClasses(): array
+{
+    $classes = [];
+
+    $files = array_merge(
+        glob(__DIR__.'/../../app/Modules/*/Data/*.php') ?: [],
+        glob(__DIR__.'/../../app/Core/Data/*.php') ?: [],
+        glob(__DIR__.'/../../app/Core/Data/*/*.php') ?: [],
+    );
+
+    foreach ($files as $file) {
+        $relative = substr((string) realpath($file), strlen((string) realpath(__DIR__.'/../../app')) + 1);
+        /** @var class-string $class */
+        $class = 'App\\'.str_replace('/', '\\', substr($relative, 0, -4));
+
+        if (class_exists($class)) {
+            $classes[] = $class;
+        }
+    }
+
+    sort($classes);
+
+    return $classes;
+}
+
+/*
+ * R8 · un DTO es un dato, no un objeto con estado: sus propiedades son
+ * `readonly`.
+ *
+ * Esto no se puede expresar con `arch()`. `toBeReadonly()` mira
+ * `ReflectionClass::isReadOnly()`, es decir la clase readonly de PHP 8.2, y
+ * nuestros DTOs son `final class` con propiedades promovidas `public readonly`
+ * —que es lo que spatie/laravel-data soporta—. Y `toHaveProperties...` no llega
+ * al modificador. Así que aquí va reflexión en un test normal.
+ *
+ * Sólo se miran las propiedades **declaradas por la propia clase**: la `Data` de
+ * spatie añade `_additional` y `_dataContext`, que son suyas y no son readonly.
+ */
+// R8
+test('R8 · las propiedades de los DTOs son readonly', function (): void {
+    expect(koreDataClasses())->not->toBeEmpty();
+
+    $mutables = [];
+
+    foreach (koreDataClasses() as $class) {
+        $reflection = new ReflectionClass($class);
+
+        if ($reflection->isAbstract()) {
+            continue;
+        }
+
+        foreach ($reflection->getProperties() as $property) {
+            if ($property->getDeclaringClass()->getName() !== $class) {
+                continue;
+            }
+
+            if ($property->isStatic() || $property->isReadOnly()) {
+                continue;
+            }
+
+            $mutables[] = $class.'::$'.$property->getName();
+        }
+    }
+
+    expect($mutables)->toBe([], sprintf(
+        "Estas propiedades de DTO no son readonly:\n  · %s\n\n".
+        'Un DTO viaja entre capas: si lo que lo recibe puede modificarlo, deja de ser un dato. Ver R8 en docs/architecture/rules.md.',
+        implode("\n  · ", $mutables),
+    ));
+});
+
+/*
+ * R5 · los eventos son el canal público de un módulo hacia los demás: se
+ * publican, se serializan a una cola y los escucha código que no controlas.
+ * `final readonly` es lo que hace que ese contrato no cambie por el camino.
+ */
+// R5 · R14
+arch('R5 · los Events de módulo son final y readonly')
+    ->expect('App\Modules\*\Events')
+    ->toBeFinal()
+    ->toBeReadonly();
+
+/*
+ * R14 · una Rule es una pieza de validación, no una clase base: `final` y
+ * atada al contrato del framework para que el validador la reconozca.
+ */
+// R14
+arch('R14 · las Rules de módulo son final e implementan ValidationRule')
+    ->expect('App\Modules\*\Rules')
+    ->toBeFinal()
+    ->toImplement(ValidationRule::class);
+
+/*
+|--------------------------------------------------------------------------
+| R3 · Lista cerrada de carpetas por módulo
+|--------------------------------------------------------------------------
+|
+| Un módulo no puede inventarse capas. La lista de abajo es la estructura
+| documentada en docs/architecture/module-pattern.md; cualquier carpeta fuera
+| de ella falla el build, y ampliarla es una decisión de arquitectura que se
+| toma en el doc (y aquí) antes que en el código.
+|
+| Se comprueban también las subcarpetas de `Database/`, `Http/` y `Resources/`,
+| que son las tres que tienen estructura fija. Dentro de `Models/`, `Support/`
+| o `Actions/` cada módulo se organiza como quiera.
+|
+*/
+
+test('R3 · un módulo sólo tiene las carpetas permitidas', function (): void {
+    $allowed = [
+        // Dominio
+        'Actions', 'Data', 'Events', 'Listeners', 'Models', 'Policies', 'Rules', 'Support',
+        // Entrega
+        'Forms', 'Http', 'Routes', 'Resources',
+        // Infraestructura del módulo
+        'Console', 'Database', 'Providers', 'Tests',
+        // Adaptadores de paquete cuyo contrato (nombre y firma) lo fija un
+        // tercero y por eso no puede vivir en Actions/. Ver app/Modules/Auth/Fortify.
+        'Fortify',
+    ];
+
+    $nested = [
+        'Database' => ['Migrations', 'Factories', 'Seeders'],
+        'Http' => ['Controllers', 'Livewire', 'Requests', 'Middleware'],
+        'Resources' => ['views', 'lang'],
+    ];
+
+    $offenders = [];
+    $root = dirname(__DIR__, 2);
+
+    foreach ((array) glob($root.'/app/Modules/*', GLOB_ONLYDIR) as $module) {
+        $moduleName = basename((string) $module);
+
+        foreach ((array) glob($module.'/*', GLOB_ONLYDIR) as $folder) {
+            $name = basename((string) $folder);
+
+            if (! in_array($name, $allowed, true)) {
+                $offenders[] = "R3: carpeta {$moduleName}/{$name} no permitida; ver rules.md";
+
+                continue;
+            }
+
+            if (! isset($nested[$name])) {
+                continue;
+            }
+
+            foreach ((array) glob($folder.'/*', GLOB_ONLYDIR) as $child) {
+                $childName = basename((string) $child);
+
+                if (! in_array($childName, $nested[$name], true)) {
+                    $offenders[] = "R3: carpeta {$moduleName}/{$name}/{$childName} no permitida; ver rules.md";
+                }
+            }
+        }
+    }
+
+    expect($offenders)->toBe([]);
+});

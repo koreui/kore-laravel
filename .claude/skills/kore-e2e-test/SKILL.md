@@ -12,16 +12,18 @@ Doc de referencia: [`docs/quality/e2e.md`](../../../docs/quality/e2e.md). Léelo
 - **Sí**: un flujo completo de usuario en el navegador (login, alta, búsqueda, borrado con confirmación), verificar que un `wire:model` / dropdown / modal de koreUi se comporta, o comprobar quién ve qué según su rol.
 - **No**: reglas de una Action, validaciones de un Form Object, políticas o un componente Livewire aislado. Eso es Pest (`app/Modules/{Domain}/Tests/`), es más rápido y más preciso.
 
-## Reglas
+## Reglas (catálogo completo: `docs/architecture/rules.md`)
 
-- La suite vive **sólo** en `tests/e2e/`. No se toca nada de `app/` para hacerla pasar: **nada de añadir `data-testid` a las Blade**.
+- **R37** · La suite vive **sólo** en `tests/e2e/`. No se toca nada de `app/` para
+  hacerla pasar: **nada de añadir `data-testid` a las Blade**. Lo verifica
+  `composer arch`, así que el atajo ni siquiera llega al commit.
 - `declare(strict_types=1)` y `final class` aplican al PHP; aquí es TypeScript estricto: tipos explícitos, sin `any`.
 - Localizadores accesibles: `getByRole` → `getByLabel` → `getByPlaceholder` → `getByText`. **Lee la Blade real** antes de escribir un locator (los textos están en español) y, si el componente es de koreUi, mira `vendor/kore-ui/kore-ui/resources/views/` para saber qué HTML genera.
-- **Prohibido `page.waitForTimeout()`.** Se espera a un cambio observable: toast, fila, URL, `toHaveCount`.
-- **Datos únicos por test** con `uniqueEmail()` / `uniqueName()`. La base sólo se resetea en `globalSetup`; ningún test puede depender de otro ni del orden.
+- **R38 · Prohibido `page.waitForTimeout()`.** Se espera a un cambio observable: toast, fila, URL, `toHaveCount`. También lo verifica `composer arch` (los comentarios que explican por qué no se usa, sí valen).
+- **R39 · Datos únicos por test** con `uniqueEmail()` / `uniqueName()`. La base sólo se resetea en `globalSetup`; ningún test puede depender de otro ni del orden.
 - Las cuentas de `E2eSeeder` (`superadmin@`, `editor@`, `viewer@`, `member@` `e2e.test`, contraseña `password`) son de **sólo lectura**: si el test necesita modificar un usuario, que lo cree él.
 
-## Checklist para un módulo nuevo
+## Checklist para un módulo nuevo (R36: smoke + happy path + autorización)
 
 1. `mkdir tests/e2e/specs/{modulo}`
 2. Page object en `tests/e2e/pages/{Pantalla}Page.ts` por cada pantalla del módulo.

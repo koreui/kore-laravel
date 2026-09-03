@@ -10,6 +10,184 @@ desde el upstream (`git remote add kore https://github.com/koreui/kore-laravel`)
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-03
+
+«Disciplina verificable». Las reglas del boilerplate eran prosa en `CLAUDE.md` y
+su único verificador eran 16 arch tests. Ahora son un catálogo numerado de 45
+reglas (`R1..R45`), cada una con su enunciado, quién la verifica, con qué
+comando, con qué severidad, la válvula de escape que admite y **la cicatriz real
+que la originó** —sacada del CHANGELOG y de la auditoría, no inventada—. De las
+45, **37 tienen verificador automático** que falla el build; las 8 restantes son
+manuales y lo dicen.
+
+Las reglas que no se podían verificar con lo que había ahora se verifican con
+tres herramientas nuevas: PHPat (grafo de dependencias),
+`spaze/phpstan-disallowed-calls` (llamadas prohibidas por ruta) y
+`php artisan kore:arch:check` (checks textuales: `#[Locked]`, `authorize()`,
+`down()`, válvulas caducadas, toggles fantasma, docs sin enlazar). Las tres
+caben en el pipeline sin notarse: el pre-commit tarda 0,4 s, el pre-push 2,5 y
+`composer ci` completo, 6.
+
+Sin cambios de comportamiento para el usuario final: la suite E2E —45 tests en
+12 archivos— pasa sin tocar una línea de vista.
+
+### Añadido
+
+- **`docs/architecture/rules.md`** — catálogo `R1..R45` repartido en siete
+  secciones (arquitectura, código, seguridad, datos, UI/i18n, tests, docs y
+  versionado). Cada regla lleva `> Enforcement: herramienta · comando ·
+  severidad`, `> Escape:`, un **Por qué** y una **Cicatriz** con su versión. Al
+  final: el índice por herramienta, la gramática de las válvulas de escape y la
+  tabla de capas de verificación con tiempos medidos.
+- **PHPat** (`phpat/phpat` 0.12, dev) registrado como servicio de PHPStan con el
+  tag `phpat.test`. `tests/Arch/PhpatArchitecture.php` implementa R1, R4, R5,
+  R6, R7, R8 y R19 sobre el grafo de dependencias real, que es lo que Pest arch
+  no ve. La regla de imports cruzados se **genera para cada par de módulos** a
+  partir de `glob(app/Modules/*)`, así que un módulo nuevo queda cubierto sin
+  tocar el archivo.
+- **`spaze/phpstan-disallowed-calls`** (4.x, dev) con `phpstan-disallowed.neon`:
+  una entrada por regla —R17, R18, R19, R20, R21, R22 y R27—, cada una con
+  `message:` citando el número y `allowIn:` / `allowExceptIn:` diciendo dónde sí
+  es correcto. Comprobadas una a una introduciendo una violación temporal.
+- **`php artisan kore:arch:check`** (`app/Core/Console/ArchCheckCommand.php`) con
+  `--files`, `--rule` y `--root`. Diez checks textuales: R11 (toggles que nadie
+  lee), R23 (`authorize()` en los métodos de escritura de Livewire), R24
+  (`#[Locked]`), R29 (`down()`), R30 (Eloquent en Blade), R37 (`data-testid`),
+  R38 (`waitForTimeout`), R40 (índice de docs y citas de reglas), R44 (gramática
+  y caducidad de las válvulas) y R45 (baseline con fecha). Salida
+  `R{n} archivo:línea mensaje`, exit 1 si hay algo, ~0,2 s. Script `composer arch`,
+  dentro de `composer ci` y de CI.
+- **Válvulas de escape con gramática fija y caducidad**:
+  `// arch-exception: R12 · razón · @owner · 2026-12-31` (temporal; el build
+  falla cuando vence) y `// arch-accepted: R20 · razón · @owner` (decisión
+  aceptada). Documentadas en `rules.md`, `CLAUDE.md` y `AGENTS.md`, con la regla
+  R44: **el agente nunca escribe una válvula por su cuenta**; si la necesita, se
+  detiene y pregunta, porque el `@owner` lo firma una persona.
+  Las dos formas **no son intercambiables**: cada regla declara en su
+  `> Escape:` cuál admite, y el check lo verifica. Una `arch-exception` sobre una
+  regla que sólo acepta `arch-accepted` falla el build y, además, no exime nada
+  —una válvula de la forma equivocada no silencia su check—.
+- **Hooks de git propios** en `app/Core/Console/Hooks/`:
+  `ArchCheckPreCommitHook` (pasa los archivos staged al comando) y `PrePushHook`
+  (PHPStan + `pest --parallel`, parando en el primero que falle). Registrados en
+  `config/git-hooks.php`.
+- **Arch tests nuevos** (16 → 21): la lista cerrada de carpetas de módulo (R3),
+  `Events` `final readonly`, `Rules` `final` que implementan `ValidationRule`,
+  DTOs que no dependen de `Illuminate\Http` y **DTOs con todas sus propiedades
+  `readonly`** (R8). Este último no es un `arch()` sino un `test()` con
+  reflexión: `toBeReadonly()` mira la clase readonly de PHP 8.2 y estos DTOs son
+  `final class` con propiedades promovidas `public readonly`. Todos citan su
+  `R{n}`.
+- **Tests nuevos** (149 → 232): `ArchCheckCommandTest` (73 casos con árboles de
+  fixtures que violan y cumplen cada check, vía `--root`) y `GitHooksTest`
+  (5 casos sobre la decisión de cada hook, con `Process::fake()`).
+- `down()` en tres migraciones publicadas de vendor que no lo tenían
+  (`one_time_passwords`, `activity_log` y las tablas de `spatie/laravel-health`).
+  Las encontró la propia regla R29 al escribirla.
+
+### Cambiado
+
+- **`phpstan.neon`** carga ahora cuatro cosas: Larastan, la extensión de PHPat,
+  la de disallowed-calls y `./phpstan-disallowed.neon`. `paths` incluye
+  `tests/Arch/PhpatArchitecture.php` (PHPStan tiene que analizarlo para poder
+  reflejarlo); `tests/Arch/ArchitectureTest.php` sigue fuera, porque su sintaxis
+  funcional de Pest no la entiende.
+- **`CLAUDE.md` y `AGENTS.md`**: las «reglas de oro» pasan a ser un resumen de 13
+  líneas que cita `R{n}` y enlaza el catálogo. Se añaden las secciones «Válvulas
+  de escape» y «Capas de verificación», y `composer arch` a los comandos. No se
+  ha borrado ninguna regla: todas están integradas con su número.
+- **`docs/README.md`** es ahora un índice con enlaces reales a cada doc, y R40
+  falla si aparece un `.md` que no esté listado.
+- **`docs/architecture/module-pattern.md`**: la lista de carpetas de un módulo es
+  cerrada, con una tabla que dice qué contiene cada una y quién la vigila, y el
+  procedimiento para pedir una carpeta nueva.
+- **`docs/quality/pipeline.md`**: PHPat, disallowed-calls, `kore:arch:check`, los
+  hooks nuevos, la tabla de capas con tiempos medidos y las cifras al día
+  (232 tests).
+- **Skills** (`.claude/skills/` y su copia idéntica en `.agents/skills/`):
+  `module-scaffold` documenta la lista cerrada y `composer arch`;
+  `kore-action-create` cita R1, R2, R8, R19, R20 y R21; `kore-livewire-create`
+  cita R23, R24 y R30; `kore-e2e-test` cita R36, R37, R38 y R39.
+- **`app/Providers/AppServiceProvider.php`**: nuevo `registerCoreCommands()`, que
+  registra `ArchCheckCommand` cuando la app corre en consola. Laravel sólo
+  autodescubre `app/Console/Commands`, carpeta que el layout modular no usa: los
+  comandos de dominio los registra el provider de su módulo y los transversales
+  de `App\Core\Console` se registran aquí. Sin esto, `php artisan kore:arch:check`
+  no existe y `composer arch` falla con "command not found".
+- **`composer.json`**: script `arch` (`@php artisan kore:arch:check`), añadido
+  también a la cadena `ci` entre `analyse` y `refactor:test`; y las dos
+  dependencias de desarrollo nuevas (`phpat/phpat`,
+  `spaze/phpstan-disallowed-calls`).
+- **`.github/workflows/ci.yml`**: paso `php artisan kore:arch:check` entre
+  PHPStan y Rector.
+- **`phpunit.xml`**: `<ini name="memory_limit" value="512M"/>`. `PulseAccessTest`
+  renderiza el bundle JS de Pulse y con el `memory_limit` de 128M de algunas
+  instalaciones de PHP la suite reventaba por memoria, no por el test.
+- **`README.md`**: `rules.md` encabeza la lista de documentación, el quality
+  stack menciona PHPat, disallowed-calls y `kore:arch:check`, y `composer arch`
+  entra en los comandos útiles.
+- El preset `laravel()` de los arch tests ignora también `App\Core\Console`, por
+  la misma razón que ya ignoraba `App\Core\Enums`: el preset exige que sólo
+  `App\Console\Commands` extienda `Command`, y el layout modular no usa esa
+  carpeta.
+
+### Eliminado
+
+- Dos `.gitkeep` que ya no guardaban ninguna carpeta vacía:
+  `app/Modules/.gitkeep` (hay tres módulos desde hace dos releases) y
+  `app/Core/Contracts/.gitkeep` (hay un contrato desde la v1.1.0). Los de
+  `Core/Concerns/`, `Core/Support/` y `Tenancy/Database/Migrations/` se quedan:
+  esas carpetas siguen vacías a propósito.
+
+### Nota de migración (proyectos derivados)
+
+1. **Dos dependencias de desarrollo nuevas.** `composer update` las trae con la
+   release; si aplicas los archivos a mano,
+   `composer require --dev phpat/phpat spaze/phpstan-disallowed-calls`.
+2. **`phpstan.neon` cambia de forma.** Si el tuyo está personalizado, copia los
+   cuatro `includes:`, el bloque `phpat:` de `parameters:`, la entrada de
+   `paths:` y el bloque `services:` con el tag `phpat.test`. Sin el `services:`,
+   PHPat no encuentra ninguna regla y pasa en verde sin verificar nada.
+3. **Copia `docs/architecture/rules.md` antes que nada.** Es el catálogo, pero
+   también es **entrada del programa**: `kore:arch:check` saca de ahí la lista de
+   reglas conocidas leyendo las cabeceras `### R{n} · …`. Sin el archivo,
+   `knownRules()` devuelve `[]`, y entonces **toda** válvula de escape del
+   repositorio falla con «cita R…, que no existe» y toda `R{n}` citada desde el
+   código también. Si adaptas el catálogo a tu proyecto, conserva el formato de
+   las cabeceras y no borres una regla que sigas citando.
+4. **Registra el comando.** `ArchCheckCommand` vive en `App\Core\Console`, que
+   Laravel **no** autodescubre (sólo mira `app/Console/Commands`). Copia
+   `registerCoreCommands()` de `app/Providers/AppServiceProvider.php` y llámalo
+   desde `boot()`, o registra la clase donde te encaje. Comprueba que aparece:
+   `php artisan list | grep kore:arch`.
+5. **Añade el script `arch` a `composer.json`** (`"arch": ["@php artisan
+   kore:arch:check"]`) y mételo en la cadena `ci`, entre `@analyse` y
+   `@refactor:test`. Si no entra en `ci`, el check existe pero nadie lo corre.
+6. **Añade el paso al workflow.** En `.github/workflows/ci.yml`, un
+   `- name: Kore arch check` con `run: php artisan kore:arch:check` entre
+   PHPStan y Rector. Los hooks locales cubren el pre-commit y el pre-push, pero
+   quien mergea desde la web sólo pasa por CI.
+7. **La primera ejecución va a encontrar violaciones.** Es lo esperado: son
+   reglas que hasta ahora nadie comprobaba. El orden recomendado es
+   `composer arch` primero (checks baratos y de arreglo obvio) y después
+   `composer analyse`. Para lo que no puedas arreglar hoy, usa una válvula **con
+   fecha**:
+   `// arch-exception: R23 · pendiente de refactor del panel · @tu-usuario · 2026-12-31`.
+   No uses `arch-accepted` para aplazar: eso es para decisiones ya tomadas.
+8. **Los hooks nuevos se instalan solos** con `composer install`
+   (`post-autoload-dump` → `git-hooks:register`). Si mantienes tu propio
+   `config/git-hooks.php`, añade `ArchCheckPreCommitHook` a `pre-commit` y
+   `PrePushHook` a `pre-push`, o quédate sólo con Pint si prefieres que el push
+   no analice.
+9. **Si tu módulo tiene carpetas fuera de la lista de R3** (`Services/`,
+   `Repositories/`, `Transformers/`...), el arch test fallará. Muévelas a
+   `Actions/`, `Support/` o `Data/`, o amplía la lista `$allowed` de
+   `tests/Arch/ArchitectureTest.php` **y** documéntalo en tu
+   `module-pattern.md`: la lista es una decisión de arquitectura, no un detalle
+   de configuración.
+10. **Si añades un baseline de PHPStan**, su primera línea tiene que ser
+    `# arch-baseline: vence YYYY-MM-DD` o `composer arch` lo rechaza (R45).
+
 ## [1.1.0] - 2026-09-02
 
 «El boilerplate se demuestra a sí mismo». La v1.0.0 cerró la brecha entre lo que
@@ -19,8 +197,8 @@ tres reglas de oro que CLAUDE.md predicaba y que él mismo incumplía: Action
 Pattern, DTOs y cero imports cruzados entre módulos. Los arch tests que estaban
 comentados con un `TODO v1.1` pasan a fallar el build.
 
-Sin cambios visibles para el usuario final: la suite E2E (45 specs) pasa sin
-tocar un solo texto.
+Sin cambios visibles para el usuario final: la suite E2E (45 tests en 12
+archivos) pasa sin tocar un solo texto.
 
 ### Seguridad
 
@@ -79,7 +257,7 @@ tocar un solo texto.
   ambos sentidos (ignorando `Tests/`), `App\Core` no depende de `App\Modules`,
   los `Core\Contracts` son interfaces, los DTOs son `final` y extienden
   `Core\Data\Data`, y las Actions extienden `Core\Actions\Action`.
-- Tests: 100 → 139 Pest (45 E2E sin cambios).
+- Tests: 100 → 149 Pest (los E2E sin cambios: 45 tests en 12 archivos).
 
 ### Cambiado
 
@@ -169,7 +347,8 @@ scaffold, cifras inventadas en los docs).
 ### Añadido
 
 - **Suite E2E con Playwright** (`tests/e2e/`, `playwright.config.ts`):
-  45 specs sobre landing, auth (login, registro, reset, magic link con lectura
+  45 tests en 12 archivos (11 de spec + `auth.setup.ts`, que hace el login por
+  rol) sobre landing, auth (login, registro, reset, magic link con lectura
   del código real desde el log, rutas protegidas) y Users (listado, alta,
   edición, borrado, permisos por rol). Entorno aislado con `.env.e2e`,
   `database/e2e.sqlite` y `E2eSeeder`; fixtures por rol; page objects;
@@ -278,6 +457,7 @@ scaffold, cifras inventadas en los docs).
   el paquete cambiara. Republicarlas es un `vendor:publish` cuando de verdad
   haya que personalizarlas.
 
-[Unreleased]: https://github.com/koreui/kore-laravel/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/koreui/kore-laravel/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/koreui/kore-laravel/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/koreui/kore-laravel/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/koreui/kore-laravel/releases/tag/v1.0.0

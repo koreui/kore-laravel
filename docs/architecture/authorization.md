@@ -203,12 +203,27 @@ class ModulesSeeder extends Seeder
 ## Proteger rutas
 
 ```php
-Route::middleware(['web', 'auth', 'verified'])->prefix('users')->group(function () {
-    Route::middleware('permission:users.view')->get('/', 'index')->name('users.index');
-    Route::middleware('permission:users.create')->get('/create', 'create');
-    Route::middleware('permission:users.edit')->get('/{user}/edit', 'edit');
-});
+use App\Modules\Users\Http\Controllers\UsersController;
+
+Route::middleware(['web', 'auth', 'verified'])
+    ->prefix('users')
+    ->as('users.')
+    ->controller(UsersController::class)   // ← sin esto, 'index' no es una acción válida
+    ->group(function (): void {
+        Route::middleware('permission:users.view')->get('/', 'index')->name('index');
+        Route::middleware('permission:users.create')->get('/create', 'create')->name('create');
+        Route::middleware('permission:users.edit')->get('/{user}/edit', 'edit')->name('edit');
+    });
 ```
+
+Es `app/Modules/Users/Routes/web.php` tal cual. Dos detalles que no son opcionales:
+
+- **`->controller(...)`**: con la acción escrita como cadena suelta (`'index'`),
+  Laravel necesita saber de qué controller es. Sin esa llamada la ruta no
+  resuelve.
+- **`->as('users.')`**: prefija los nombres, así que dentro del grupo se escribe
+  `->name('index')` y sale `users.index`. Poner `->name('users.index')` con el
+  `as()` puesto daría `users.users.index`.
 
 Los aliases `permission`, `role` y `role_or_permission` están registrados en `bootstrap/app.php`.
 

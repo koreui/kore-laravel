@@ -27,6 +27,8 @@
         </exclude>
     </source>
     <php>
+        <!-- PulseAccessTest renderiza el bundle JS de Pulse; con el memory_limit de 128M de algunos PHP la suite revienta. -->
+        <ini name="memory_limit" value="512M"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_LOCALE" value="es"/>
         <env name="APP_FALLBACK_LOCALE" value="en"/>

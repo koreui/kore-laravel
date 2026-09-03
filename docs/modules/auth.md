@@ -249,15 +249,18 @@ Route::middleware(['api', 'auth:sanctum'])
 |---------|-----------|-------|
 | `LoginTest` | página, login válido, login inválido, logout | 4 |
 | `RegisterTest` | página, registro exitoso, email duplicado | 3 |
+| `AuthUserRegisterActionTest` | `AuthUserRegisterAction`: crea, hashea y dispara el evento | 3 |
 | `PasswordResetTest` | página, envío de notificación de reset | 2 |
 | `ApiTokenTest` | `/api/user` con `Sanctum::actingAs` | 1 |
 | `ApiRateLimitTest` | `throttle:api` en el grupo y limiter `api` registrado | 3 |
 | `MagicLinkTest` | envío, rate limit, anti-enumeración, login con código | 6 |
 | `AuthorizationSeederTest` | módulos, permisos y roles que siembra `ModulesSeeder` | 7 |
 | `TwoFactorToggleTest` | el toggle `AUTH_2FA_ENABLED` añade/quita la feature y sus rutas | 5 |
+| `DashboardTest` | el componente Livewire `Dashboard` y sus DTOs de cifras | 3 |
+| `FactoryResolutionTest` | los modelos del módulo resuelven su factory dentro del módulo | 4 |
 
-Total Auth: **31 tests / 78 assertions**. (Cifra real de
-`./vendor/bin/pest app/Modules/Auth/Tests --compact`; actualízala cuando cambie.)
+Total Auth: **41 tests / 113 assertions**. (Cifra real de
+`./vendor/bin/pest app/Modules/Auth --compact`; actualízala cuando cambie.)
 
 ## Cómo extender
 

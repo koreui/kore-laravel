@@ -5,13 +5,13 @@ description: Crear un componente Livewire 4 dentro de un módulo de kore-laravel
 
 # Crear Livewire component en kore-laravel
 
-## Reglas
+## Reglas (catálogo completo: `docs/architecture/rules.md`)
 
 - Vive en `app/Modules/{Domain}/Http/Livewire/{Component}.php`.
 - Vista en `app/Modules/{Domain}/Resources/views/livewire/{component}.blade.php`.
 - Registro **explícito** en `{Domain}ModuleServiceProvider::boot()` (no auto-discovery).
-- Usa **siempre** componentes koreUi: `<x-kore::input>`, `<x-kore::password>`, `<x-kore::button>`, `<x-kore::card>`, `<x-kore::input-otp>`, etc. — nunca Flux UI ni otras librerías.
-- **Toda escritura va en una Action** (skill `kore-action-create`). El componente
+- **R31 · R32** · Usa **siempre** componentes koreUi: `<x-kore::input>`, `<x-kore::password>`, `<x-kore::button>`, `<x-kore::card>`, `<x-kore::input-otp>`, etc. — nunca Flux UI ni otras librerías. Y **verifica las props con el MCP de kore-ui antes de escribirlas**: una prop que no existe no falla, se vuelca al attribute bag y el componente usa su default en silencio.
+- **R4 · Toda escritura va en una Action** (skill `kore-action-create`). El componente
   hace **autorizar → validar → DTO → Action → feedback → redirect**, nada más.
 - Las Actions llegan **por inyección de método**: Livewire resuelve del
   contenedor los parámetros que no viajan en la llamada del cliente.
@@ -19,13 +19,23 @@ description: Crear un componente Livewire 4 dentro de un módulo de kore-laravel
   (`RowAction::confirm()`) invocan el método sin pasar por el contenedor, así
   que ahí se resuelve a mano con `resolve({Action}::class)` y se comenta el
   porqué.
-- **Autoriza dentro del componente, siempre.** Las peticiones Livewire van a
+- **R23 · Autoriza dentro del componente, siempre.** Las peticiones Livewire van a
   `/livewire/update`, donde el middleware `permission:*` de las rutas NO corre.
-- `final class`, `declare(strict_types=1)`, tipos en propiedades públicas.
+  `kore:arch:check` exige un `authorize()`, `can()` o `Gate::` en todo método
+  público `save*`/`store*`/`update*`/`delete*`/`destroy*`/`confirm*`/`remove*`/`toggle*`.
+- **R24 · `#[Locked]` en toda propiedad pública que identifique un modelo**
+  (`$id`, `$model`, `$algoId`). Sin el candado, el cliente decide sobre qué
+  registro opera el servidor: es la escalada de privilegios que costó una
+  crítica en la v1.0.0.
+- **R13 · R14 · R15** · `final class`, `declare(strict_types=1)`, tipos en propiedades públicas.
 - Validación inline en métodos vía `$this->validate([...])`, o un Form Object en
   `Forms/` con `rules()` + `toData()` si el formulario tiene entidad propia.
-- **Nada de Eloquent en la blade**: lo que la vista necesite se calcula en un
-  `#[Computed]` y viaja como array o DTO.
+- **R30 · Nada de Eloquent en la blade**: lo que la vista necesite se calcula en
+  un `#[Computed]` y viaja como array o DTO. `kore:arch:check` falla ante
+  `::query()`, `::where(`, `::count(`, `::all(`, `::find(` o `\App\Models` en un
+  `.blade.php`.
+- **R22** · Nada de `Http::*` ni `Mail::send|raw` desde el componente: eso va en
+  una Action y, si tarda, en un job.
 - Los datos para la vista van en computed properties, nunca en propiedades
   públicas sueltas (viajan en el snapshot en cada request).
 
@@ -38,11 +48,18 @@ declare(strict_types=1);
 
 namespace App\Modules\{Domain}\Http\Livewire;
 
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 
+#[Layout('layouts.app')]
 final class {Component} extends Component
 {
+    /** R24: identifica el registro sobre el que se opera, así que va bloqueada. */
+    #[Locked]
+    public ?{Model} $model = null;
+
     public string $someField = '';
 
     public function submit({Domain}{Object}CreateAction $create{Object}): void
@@ -168,5 +185,7 @@ it('validates required fields', function (): void {
 
 ## Después de crear
 
-- `composer ci` para validar Pint + Larastan + Rector + Pest.
+- `composer arch` (0,2 s: `#[Locked]`, `authorize()`, Eloquent en Blade) y
+  después `composer ci` para validar Pint + Larastan/PHPat/disallowed-calls +
+  Rector + Pest.
 - Si el componente expone una ruta (`Route::get('/x', {Component}::class)`), agrega test feature que verifique la URL.

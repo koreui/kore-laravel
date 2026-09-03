@@ -31,11 +31,20 @@ app/Modules/Users/
 │   ├── GrantablePermission.php
 │   └── GrantableRole.php
 ├── Providers/UsersModuleServiceProvider.php
-├── Resources/views/
-│   ├── pages/                          # index, create, edit (usan x-layouts.app)
-│   └── livewire/form-component.blade.php
+├── Resources/
+│   ├── lang/en.json                    # traducción al inglés (español es la fuente, R33)
+│   └── views/
+│       ├── pages/                      # index, create, edit (usan x-layouts.app)
+│       └── livewire/form-component.blade.php
 ├── Routes/web.php
 └── Tests/Feature/
+    ├── UserCreateActionTest.php        # una clase por Action…
+    ├── UserUpdateActionTest.php
+    ├── UserDeleteActionTest.php
+    ├── UsersCrudTest.php               # …y el flujo completo por HTTP + Livewire
+    ├── UsersAuthorizationTest.php      # permisos por rol en rutas y componentes
+    ├── PrivilegeEscalationTest.php     # R26: nadie concede lo que no tiene
+    └── UserActivityLogTest.php         # el audit log de spatie
 ```
 
 El módulo **no importa una sola clase de `App\Modules\Auth`** (arch test que lo
@@ -232,7 +241,17 @@ Auto-generados por `Module::permissions()` para el slug `users`:
 - `users.edit`
 - `users.delete`
 
-Asignados al rol `Role::ADMIN` en `ModulesSeeder::seedRoles()` (todos los permisos).
+`ModulesSeeder::seedRoles()` los reparte así:
+
+| Rol | Permisos de `users` |
+|-----|---------------------|
+| `Role::SUPERADMIN` | todos (además del bypass por `Gate::before`) |
+| `Role::ADMIN` | todos |
+| `Role::USER` | ninguno — sólo `dashboard.view` |
+
+El seeder sincroniza los permisos del superadmin aunque tenga el `Gate::before`,
+para que los `@can` de las vistas sigan funcionando si algún día se quita ese
+bypass.
 
 ## Auditoría
 

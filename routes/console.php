@@ -47,7 +47,10 @@ Schedule::command('queue:prune-failed --hours=168')
     ->daily()
     ->onOneServer();
 
-// Purga del audit log (retención en config/activitylog.php).
+// Purga del audit log. La retención es `activitylog.clean_after_days`, que el
+// propio paquete registra (365 días por defecto): aquí no se publica
+// `config/activitylog.php`. Para cambiarla, `--days=N` o publicar el config con
+// `php artisan vendor:publish --tag=activitylog-config`.
 Schedule::command('activitylog:clean')
     ->daily()
     ->withoutOverlapping()

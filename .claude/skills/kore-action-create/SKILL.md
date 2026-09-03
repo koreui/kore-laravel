@@ -10,19 +10,39 @@ description: Crear una Action (caso de uso) dentro de un módulo en app/Modules/
 - Hay lógica de negocio que excede 10 líneas dentro de un controller, componente Livewire, Form Object o cualquier callsite.
 - El usuario describe un caso de uso concreto: "registrar usuario", "cancelar orden", "generar factura", "enviar invitación al equipo".
 
-## Reglas
+## Reglas (catálogo completo: `docs/architecture/rules.md`)
 
-- **1 Action = 1 caso de uso.** Un solo método público `handle(...)` con parámetros tipados explícitos.
-- `final class`, **extiende `App\Core\Actions\Action`**, `declare(strict_types=1)`.
-- Naming: `{Domain}{Object}{Verb}Action`. Cuando el objeto coincide con el dominio, no repitas el prefijo:
+- **R1** · **1 Action = 1 caso de uso.** Un solo método público `handle(...)` con
+  parámetros tipados explícitos. PHPat lo verifica con
+  `haveOnlyOnePublicMethodNamed('handle')`: un segundo método público falla
+  `composer analyse`.
+- **R1 · R13 · R14** · `final class`, **extiende `App\Core\Actions\Action`**,
+  `declare(strict_types=1)`.
+- **R2** · Naming: `{Domain}{Object}{Verb}Action`. Cuando el objeto coincide con el dominio, no repitas el prefijo:
   - `UserCreateAction` (módulo Users), no `UsersUserCreateAction`
   - `AuthUserRegisterAction` (módulo Auth: el objeto no es el dominio)
   - `OrderCancelAction`, `BillingInvoiceCreateAction`, `TeamInvitationSendAction`
-- Recibe **DTOs y modelos**, nunca arrays sueltos ni el `Request`. Si la entrada es compleja, crea un DTO en `app/Modules/{Domain}/Data/{Object}Data.php` (`final`, extiende `App\Core\Data\Data`, propiedades promovidas y `readonly`).
-- **Prohibido `auth()`, `request()` y `session()` dentro de la Action.** La autorización la hace quien llama (el componente Livewire o el controller). Así la Action sirve igual desde un job, un comando artisan o un seeder.
+- **R8** · Recibe **DTOs y modelos**, nunca arrays sueltos ni el `Request`. Si la
+  entrada es compleja, crea un DTO en `app/Modules/{Domain}/Data/{Object}Data.php`
+  (`final`, extiende `App\Core\Data\Data`, propiedades promovidas y `readonly`).
+- **R19** · **Prohibido `auth()`, `request()`, `session()` y `cookie()` dentro de
+  la Action**; el actor se pasa por constructor o por parámetro. La autorización
+  la hace quien llama (el componente Livewire o el controller). Así la Action
+  sirve igual desde un job, un comando artisan o un seeder. Lo bloquea
+  `phpstan-disallowed.neon` (`kore.r19`).
+- **R4 · R19** · Tampoco `Livewire\*` ni `Illuminate\Http\Request` como
+  dependencia: PHPat lo comprueba con `testElDominioNoDependeDeLaCapaDeEntrega`.
+- **R20** · Nada de `abort()` / `abort_if()` / `abort_unless()`: eso es capa Http.
+  Desde una Action, lanza una excepción de dominio.
+- **R21** · Nada de `DB::table()`: eso es de migraciones y seeders. Aquí se usan
+  modelos Eloquent (`DB::transaction()` sí, obviamente).
 - Envuelve en `DB::transaction()` sólo si varias escrituras tienen que caer juntas, y **dispara el evento fuera** de la transacción.
-- Si el caso de uso interesa a otros módulos, dispara un evento `final readonly` desde `app/Modules/{Domain}/Events/`.
-- Tests Pest obligatorios en `app/Modules/{Domain}/Tests/Feature/{Action}Test.php` (ahí corre `RefreshDatabase`).
+- **R5 · R14** · Si el caso de uso interesa a otros módulos, dispara un evento
+  `final readonly` desde `app/Modules/{Domain}/Events/`.
+- **R35** · Tests Pest obligatorios en
+  `app/Modules/{Domain}/Tests/Feature/{Action}Test.php` (ahí corre `RefreshDatabase`).
+- **R44** · Si crees que una de estas reglas no aplica a tu caso, **no escribas
+  una válvula ni un `@phpstan-ignore`**: para y pregúntale al usuario.
 
 ## Plantilla
 
@@ -121,9 +141,10 @@ y evita `app()` (Rector lo reescribe a `resolve()`); si tienes que resolver a
 mano —por ejemplo en un callback de koreUi que no pasa por el contenedor— usa
 `resolve({Action}::class)` y explica por qué en un comentario.
 
-## Comunicación entre módulos
+## Comunicación entre módulos (R5)
 
-- ❌ No importes `App\Modules\OtroModulo\*` directamente. Hay arch test.
+- ❌ No importes `App\Modules\OtroModulo\*` directamente. Lo verifican Pest arch
+  y PHPat (que genera la regla para cada par de módulos).
 - ✅ Define un Contract en `app/Core/Contracts/` y bindéalo en el provider del módulo dueño (ejemplo real: `App\Core\Contracts\AuthorizationCatalog` ↔ `App\Modules\Auth\Support\AuthorizationCatalog`).
 - ✅ O dispara un Event y deja que el otro módulo escuche.
 - ✅ Los valores compartidos (roles, estados) viven en `app/Core/Enums/`.
@@ -166,4 +187,5 @@ con su `UserData`, sus eventos y sus tests.
 
 ## Después de crear
 
-- `composer ci` debe quedar verde (Pint + Larastan + Rector + Pest).
+- `composer arch` (0,2 s) y después `composer ci`, que debe quedar verde: Pint +
+  Larastan/PHPat/disallowed-calls + `kore:arch:check` + Rector + Pest.

@@ -23,7 +23,7 @@ it('always exposes the kore:tenancy:enable artisan command', function (): void {
     expect($commands)->toContain('kore:tenancy:enable');
 });
 
-it('does not register the InitializeTenancyByDomain middleware on the central app', function (): void {
+it('does not register the tenant routes on the central app', function (): void {
     Config::set('kore-app.tenancy.enabled', false);
 
     // Routes del módulo Tenancy no deben existir cuando el toggle está apagado.

@@ -1,10 +1,20 @@
 includes:
     - ./vendor/larastan/larastan/extension.neon
+    # PHPat: reglas de arquitectura como reglas de PHPStan (tests/Arch/PhpatArchitecture.php).
+    - ./vendor/phpat/phpat/extension.neon
+    # spaze/phpstan-disallowed-calls: motor de llamadas prohibidas...
+    - ./vendor/spaze/phpstan-disallowed-calls/extension.neon
+    # ...y la lista concreta del boilerplate, una entrada por regla de rules.md.
+    - ./phpstan-disallowed.neon
 
 parameters:
     level: 8
     paths:
         - app
+        # Las reglas de PHPat viven en una clase normal; PHPStan tiene que
+        # analizarla para poder reflejarla. `tests/Arch/ArchitectureTest.php`
+        # NO entra: es sintaxis funcional de Pest.
+        - tests/Arch/PhpatArchitecture.php
     excludePaths:
         analyseAndScan:
             - app/Modules/*/Database/Migrations/*
@@ -17,3 +27,18 @@ parameters:
     treatPhpDocTypesAsCertain: false
     parallel:
         maximumNumberOfProcesses: 8
+
+    phpat:
+        # Las clases de PHP y de vendor no cuentan como dependencia: sin esto
+        # `canOnly()->dependOn()` obligaría a listar medio framework.
+        ignore_built_in_classes: true
+        # El mensaje del error dice qué regla falló (R5, R6...) en vez de sólo
+        # "should not depend on".
+        show_rule_names: true
+
+services:
+    # PHPat descubre sus tests por este tag.
+    -
+        class: Tests\Arch\PhpatArchitecture
+        tags:
+            - phpat.test

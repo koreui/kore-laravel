@@ -22,11 +22,16 @@ app/Modules/{Modulo}/
 │   └── Livewire/
 │       ├── FormComponent.php                     # 5. autoriza → valida → DTO → Action
 │       └── Table{Modelos}.php                    # 6. KoreDataTable
+├── Policies/{Modelo}Policy.php                   # 9. el único punto de decisión (R25)
 ├── Rules/                                        # reglas de validación propias
-├── Resources/views/
-│   ├── pages/                                    # blades index/create/edit
-│   └── livewire/form-component.blade.php
-└── Routes/web.php                                # 8. rutas con permission middleware
+├── Resources/
+│   ├── lang/en.json                              # traducción (español es la fuente, R33)
+│   └── views/
+│       ├── pages/                                # blades index/create/edit
+│       └── livewire/form-component.blade.php
+├── Routes/web.php                                # 8. rutas con permission middleware
+├── Providers/{Modulo}ModuleServiceProvider.php
+└── Tests/Feature/                                # 10. uno por Action, más el flujo (R35)
 ```
 
 El reparto de responsabilidades, en una línea:
@@ -487,6 +492,7 @@ final class {Modulo}ModuleServiceProvider extends ServiceProvider
         $base = __DIR__.'/..';
 
         $this->loadRoutesFrom("{$base}/Routes/web.php");
+        $this->loadJsonTranslationsFrom("{$base}/Resources/lang");
         $this->loadViewsFrom("{$base}/Resources/views", '{modulo}');
         Blade::anonymousComponentPath("{$base}/Resources/views", '{modulo}');
 

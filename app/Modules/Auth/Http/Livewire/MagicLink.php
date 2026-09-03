@@ -38,6 +38,13 @@ final class MagicLink extends Component
 
     public bool $codeSent = false;
 
+    /**
+     * Pedir un código es, por definición, una acción de invitado: no hay sesión
+     * todavía y por tanto no hay nada que autorizar. Lo que protege el endpoint
+     * es el rate limit de abajo (R28) más la respuesta genérica, que es lo que
+     * impide usarlo para enumerar usuarios o como enviador de correo gratis.
+     */
+    // arch-accepted: R23 · flujo de invitado, protegido por rate limit R28 · @ovilla
     public function sendCode(): void
     {
         $this->validate([

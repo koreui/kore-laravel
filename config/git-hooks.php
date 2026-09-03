@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Core\Console\Hooks\ArchCheckPreCommitHook;
+use App\Core\Console\Hooks\PrePushHook;
 use Igorsgm\GitHooks\Console\Commands\Hooks\PintPreCommitHook;
 
 return [
@@ -22,7 +24,9 @@ return [
     |
     */
     'pre-commit' => [
+        // Capa 1 (~2 s). Ver docs/architecture/rules.md §Capas de verificación.
         PintPreCommitHook::class,
+        ArchCheckPreCommitHook::class,
     ],
 
     /*
@@ -157,7 +161,9 @@ return [
     |
     */
     'pre-push' => [
-
+        // Capa 2 (~30 s): PHPStan (Larastan + PHPat + disallowed-calls) y Pest.
+        // Ver docs/architecture/rules.md §Capas de verificación.
+        PrePushHook::class,
     ],
 
     /*

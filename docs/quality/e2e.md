@@ -178,7 +178,7 @@ En CI el workflow sube `tests/e2e/report` y `tests/e2e/results` como artefactos 
 5. `npm run e2e` con `CI=true` → 2 workers, 1 retry, `forbidOnly`
 6. Artefactos (reporte + traces/vídeos) sólo si falla, 7 días de retención
 
-Es un workflow **aparte** de `ci.yml` (Pint · Larastan · Rector · Pest): la suite E2E tarda más y necesita navegadores, y así un fallo de E2E no oculta uno de calidad ni al revés.
+Es un workflow **aparte** de `ci.yml` (Pint · Larastan + PHPat + disallowed-calls · `kore:arch:check` · Rector · Pest): la suite E2E tarda más y necesita navegadores, y así un fallo de E2E no oculta uno de calidad ni al revés.
 
 ## Troubleshooting
 
@@ -192,6 +192,12 @@ Es un workflow **aparte** de `ci.yml` (Pint · Larastan · Rector · Pest): la s
 | `Too many login attempts` en el proyecto `setup` | Rate limiter de Fortify (5/min por `email\|ip`). Ocurre si corres la suite muchas veces seguidas con muchos workers; espera un minuto o baja `--workers`. |
 | Un test pasa suelto y falla en la suite | Casi siempre estado compartido: revisa que use `uniqueEmail()` y que filtre antes de contar filas. Repróducelo con `--repeat-each=2`. |
 
-## Limitación conocida
+## Workaround vigente: confirmar una row action
 
-`tests/e2e/specs/users/delete.spec.ts` tiene el borrado real marcado con `test.fixme()`. El diálogo de confirmación de una **row action** del DataTable se construye en el cliente (`RowAction::buildKoreConfirmPayload`) y al aceptar emite `kore:confirm-callback`, pero `InteractsWithFeedback::handleConfirmCallback()` sólo ejecuta métodos previamente autorizados en `$koreConfirmable` — lista que rellena únicamente `Confirm::send()` en el servidor, camino que las row actions no recorren (las bulk actions sí). Resultado: `TableUsers::confirmDelete()` nunca se invoca. El spec sí cubre que el diálogo se abre, que cancelar no borra y que la acción se oculta a quien no tiene `users.delete`.
+Éste es el fallo que justifica la suite entera (**R36**), y hoy está **resuelto y cubierto**.
+
+El diálogo de confirmación de una **row action** del DataTable se construye en el cliente (`RowAction::buildKoreConfirmPayload`) y al aceptar emite `kore:confirm-callback`, pero `InteractsWithFeedback::handleConfirmCallback()` sólo ejecuta métodos previamente autorizados en `$koreConfirmable` — lista que rellena únicamente `Confirm::send()` en el servidor, camino que las row actions no recorren (las bulk actions sí). Con koreUi 2.2, borrar un usuario desde la fila no hacía **nada**: el listener descartaba la llamada y `TableUsers::confirmDelete()` nunca se invocaba.
+
+El workaround vive en `TableUsers::hydrate()`, que añade `confirmDelete` a `$koreConfirmable` después de restaurar el snapshot y antes de despachar el listener. **Se quita en cuanto koreUi autorice las row actions por su cuenta.**
+
+Lo importante para esta guía es *quién lo vio*: los tests de Livewire pasaban en verde porque invocan el método directamente, sin pasar por el diálogo del navegador. Sólo el E2E lo detectó. Por eso `specs/users/delete.spec.ts` cubre los cuatro casos del flujo —el diálogo se abre, cancelar no borra, **confirmar sí borra la fila** (`toHaveCount(0)` + toast) y la acción se oculta a quien no tiene `users.delete`— y no sólo la mitad que se puede comprobar sin navegador.

@@ -10,8 +10,9 @@ El desarrollador trabaja en español. Comunícate en español.
 
 Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta `docs/`:
 
+- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **catálogo R1–R45**: cada regla con su enforcement, su válvula y su cicatriz
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) — stack y patrón modular monolith
-- [`docs/architecture/module-pattern.md`](docs/architecture/module-pattern.md) — cómo se construye un módulo
+- [`docs/architecture/module-pattern.md`](docs/architecture/module-pattern.md) — cómo se construye un módulo (lista cerrada de carpetas)
 - [`docs/architecture/toggles.md`](docs/architecture/toggles.md) — `config/kore-app.php`
 - [`docs/architecture/authorization.md`](docs/architecture/authorization.md) — roles, permisos y modules
 - [`docs/modules/auth.md`](docs/modules/auth.md) — Fortify + Sanctum + permission + 2FA + OTP + Socialite
@@ -20,7 +21,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - [`docs/guides/crud.md`](docs/guides/crud.md) — patrón CRUD del boilerplate
 - [`docs/ops/deployment.md`](docs/ops/deployment.md) — Docker en VPS
 - [`docs/ops/observability.md`](docs/ops/observability.md) — Sentry · Pulse · Health · ActivityLog
-- [`docs/quality/pipeline.md`](docs/quality/pipeline.md) — Pint · Larastan · Rector · Pest · hooks · CI
+- [`docs/quality/pipeline.md`](docs/quality/pipeline.md) — Pint · Larastan · PHPat · disallowed-calls · `kore:arch:check` · Rector · Pest · hooks · CI
 - [`docs/ai/working-with-ai.md`](docs/ai/working-with-ai.md) — Boost · CLAUDE/AGENTS · skills
 - [`docs/README.md`](docs/README.md) — índice maestro
 
@@ -35,7 +36,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - Feature flags: Laravel Pennant
 - Tests: Pest 3 (con arch tests en `tests/Arch/ArchitectureTest.php`)
 - E2E: Playwright standalone (TypeScript) en `tests/e2e/`, entorno aislado con `.env.e2e`
-- Calidad: Pint + Larastan nivel 8 + Rector
+- Calidad: Pint + Larastan nivel 8 + PHPat + `spaze/phpstan-disallowed-calls` + `kore:arch:check` + Rector
 - Observabilidad: Sentry · Laravel Pulse · spatie/laravel-health · spatie/laravel-activitylog
 - AI: Laravel Boost MCP + skills propios en `.claude/skills/` (module-scaffold, kore-action-create, kore-livewire-create, kore-e2e-test)
 
@@ -46,59 +47,91 @@ app/
 ├── Core/                       # kernel compartido (no negocio)
 │   ├── Actions/Action.php      # base abstracta
 │   ├── Concerns/               # traits compartidos
+│   ├── Console/                # comandos transversales (kore:arch:check) y hooks de git
 │   ├── Contracts/              # interfaces compartidas (fronteras entre módulos)
 │   ├── Data/Data.php           # base DTO (extiende spatie/laravel-data)
 │   ├── Enums/                  # valores compartidos (SystemRole)
 │   └── Support/                # helpers
-├── Modules/{Domain}/
+├── Modules/{Domain}/           # lista CERRADA de carpetas (R3)
 │   ├── Actions/                # 1 clase = 1 caso de uso, método handle()
+│   ├── Console/                # comandos artisan del módulo
 │   ├── Data/                   # DTOs del módulo
 │   ├── Events/                 # lo que otros módulos pueden escuchar
 │   ├── Forms/                  # Livewire Form Objects (rules() + toData())
 │   ├── Http/
 │   │   ├── Controllers/
 │   │   ├── Livewire/
+│   │   ├── Middleware/
 │   │   └── Requests/
+│   ├── Listeners/              # reacciones a eventos propios o de otros
 │   ├── Models/
 │   ├── Policies/
 │   ├── Rules/                  # reglas de validación propias
 │   ├── Support/                # implementaciones de contratos de Core
 │   ├── Routes/                 # web.php, api.php cargados por su provider
+│   ├── Resources/
+│   │   ├── views/              # vistas namespaced ({domain}::)
+│   │   └── lang/               # en.json del módulo
 │   ├── Database/
 │   │   ├── Migrations/
 │   │   ├── Factories/          # {X}Factory de los modelos del módulo
 │   │   └── Seeders/
+│   ├── Tests/                  # Feature/ y Unit/ del módulo
+│   ├── Fortify/                # única carpeta de adaptadores de paquete (sólo Auth)
 │   └── Providers/{Module}ServiceProvider.php
 ├── Models/User.php             # único modelo verdaderamente global
 └── Providers/
 ```
 
-### Reglas de oro
+### Reglas de oro (resumen — el catálogo completo es [`docs/architecture/rules.md`](docs/architecture/rules.md))
 
-1. **1 Action = 1 caso de uso** con un único método público `handle(...)`,
-   `final`, extendiendo `App\Core\Actions\Action`. Naming:
-   `{Domain}{Object}{Verb}Action` (`AuthUserRegisterAction`, `OrderCancelAction`);
-   cuando el objeto coincide con el dominio se omite el prefijo repetido
-   (`UserCreateAction` en el módulo Users). Dentro de una Action **no** se lee
-   `auth()`, `request()` ni `session()`: autoriza quien llama, para que la
-   Action sirva igual desde un job o un comando.
-2. **Sin lógica de negocio en controllers, componentes Livewire ni Form
-   Objects**: el Form valida y empaqueta (`rules()` + `toData()`), el componente
-   hace `autorizar → validar → DTO → Action`, y la escritura vive en la Action.
-3. **Sin imports cruzados entre módulos** (hay arch test, en ambos sentidos).
-   Comunicación por Events (`{Domain}\Events\`), Contracts en `Core/Contracts/`
-   implementados en `{Domain}\Support\`, enums compartidos en `Core/Enums/`, o
-   llamando Actions públicas del módulo destino vía interfaz. `App\Core` nunca
-   depende de `App\Modules`.
-4. **DTOs en lugar de arrays asociativos** entre capas. Usar `spatie/laravel-data` extendiendo `App\Core\Data\Data`.
-5. **`declare(strict_types=1)`** en TODOS los archivos PHP creados.
-6. **`final class`** por defecto, salvo que se necesite herencia explícita.
-7. **Type hints obligatorios** en todos los parámetros, return types y propiedades.
-8. **`CarbonImmutable`** por defecto para fechas.
-9. **Tests obligatorios** con Pest para cada Action / endpoint Livewire / ruta.
-10. **Factories dentro del módulo**: `App\Modules\{X}\Models\{Y}` resuelve a
-    `App\Modules\{X}\Database\Factories\{Y}Factory` (lo registra
-    `AppServiceProvider::configureFactories()`).
+Las reglas están numeradas `R1..R45` para poder citarlas en un review, en un
+commit o en un comentario. Aquí va el resumen; el detalle —enforcement,
+severidad, por qué existe y la cicatriz que la originó— está en el catálogo.
+
+1. **R1 · R2** — 1 Action = 1 caso de uso, `final`, extiende `App\Core\Actions\Action`, un único `handle()` público. Naming `{Domain}{Object}{Verb}Action` (se omite el prefijo repetido: `UserCreateAction` en Users).
+2. **R3** — la lista de carpetas de un módulo es **cerrada**; inventarse una falla el build. Ver `module-pattern.md`.
+3. **R4** — sin lógica de negocio en controllers, Livewire ni Forms: el Form valida y empaqueta (`rules()` + `toData()`), el componente hace autorizar → validar → DTO → Action, y la escritura vive en la Action.
+4. **R5 · R6 · R7** — sin imports cruzados entre módulos: `App\Core\Contracts`, eventos o DTOs/enums de `Core`. `App\Core` no depende de ningún módulo y sus contratos son interfaces.
+5. **R8** — DTOs en vez de arrays asociativos: `final`, extienden `App\Core\Data\Data`, con **todas las propiedades `readonly`**, y sólo dependen de datos.
+6. **R11 · R12** — un toggle sólo existe si alguien lo lee, y un `config/*.php` nunca lee otro (se cargan en orden alfabético).
+7. **R13 · R14 · R15 · R16** — `declare(strict_types=1)`, `final class` por defecto, type hints completos y `CarbonImmutable`.
+8. **R17 · R18 · R19 · R20 · R21 · R22** — `env()` sólo en `config/`; nada de `dd`/`dump`/`ray`; el actor se pasa por constructor (sin `auth()`/`request()`/`session()` en Actions, Models, Data, Rules ni Core); `abort*()` sólo en Http; `DB::table()` sólo en migraciones y seeders; la E/S remota no vive en la capa de entrega.
+9. **R23 · R24 · R25 · R26 · R27** — autoriza **dentro** del componente Livewire (la llamada va por `/livewire/update`, sin el middleware de la ruta); `#[Locked]` en toda propiedad pública identificadora; la Policy es el único punto de decisión; nadie concede un rol o permiso que no tiene; mass assignment explícito.
+10. **R29 · R30** — toda migración define `down()`; cero Eloquent en Blade.
+11. **R33 · R34** — español es el idioma fuente y la traducción va en el `en.json` del módulo; nunca interpoles dentro de `__()`.
+12. **R35 · R36 · R40 · R42** — un test Pest por Action / componente / ruta; todo módulo con UI aporta smoke + happy path + autorización; el doc se actualiza en el mismo commit; toda release entra en el CHANGELOG.
+13. **Factories dentro del módulo**: `App\Modules\{X}\Models\{Y}` resuelve a `App\Modules\{X}\Database\Factories\{Y}Factory` (lo registra `AppServiceProvider::configureFactories()`).
+
+### Válvulas de escape
+
+```php
+// arch-exception: R12 · razón breve · @owner · 2026-12-31   ← temporal; caducada, falla el build
+// arch-accepted:  R20 · razón breve · @owner                ← decisión revisada, sin fecha
+```
+
+Las dos formas **no** son intercambiables, y `composer arch` lo verifica: cada
+regla declara en su `> Escape:` cuál admite. Si dice `arch-accepted`, una
+`arch-exception` sobre ella falla el build, y al revés; si dice «ninguna»,
+cualquiera de las dos falla.
+
+**Tú, como agente, nunca escribes una válvula por tu cuenta (R44).** Si el
+código necesita una excepción, párate y pregúntale al usuario: el `@owner` lo
+pone una persona, porque es quien responde cuando la fecha vence. Para PHPStan
+(PHPat y disallowed-calls), que no lee estos comentarios, la vía es `allowIn` en
+`phpstan-disallowed.neon` o un `@phpstan-ignore` con el mismo texto al lado.
+
+### Capas de verificación
+
+| Capa | Presupuesto | Qué corre |
+|------|-------------|-----------|
+| pre-commit | ~2 s | `pint --dirty` + `kore:arch:check --files=<staged>` |
+| pre-push | ~30 s | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
+| `composer ci` | ~90 s | + `pint --test` + `composer arch` + `rector --dry-run` + `pest` |
+| CI (GitHub) | ~3 min | todo + matriz 8.3/8.4 + `composer audit` + `npm run build` + E2E |
+
+Los hooks se instalan solos con `composer install`; se re-registran con
+`php artisan git-hooks:register`.
 
 ## Toggles del boilerplate
 
@@ -141,10 +174,10 @@ del provider del módulo (ver `FortifyServiceProvider::configureTwoFactorFeature
 
 ## Idioma e i18n
 
-- **Español es el idioma fuente**: escribe `__('Texto en español')`; con `APP_LOCALE=es` la clave se devuelve tal cual.
+- **R33 · Español es el idioma fuente**: escribe `__('Texto en español')`; con `APP_LOCALE=es` la clave se devuelve tal cual.
 - Traduce al inglés en `app/Modules/{Modulo}/Resources/lang/en.json` (texto del módulo) o `lang/en.json`
   (compartido); si el literal ya está en inglés (Fortify, correos del framework), su traducción va en `lang/es.json`.
-- Nunca interpoles dentro de un `__()`: usa placeholders (`__('Hola, :name', ['name' => $user->name])`).
+- **R34** · Nunca interpoles dentro de un `__()`: usa placeholders (`__('Hola, :name', ['name' => $user->name])`).
 - `tests/Feature/TranslationsTest.php` falla listando cada clave sin traducir. Ver [`docs/guides/i18n.md`](docs/guides/i18n.md).
 
 ## Tests E2E (Playwright)
@@ -153,12 +186,12 @@ del provider del módulo (ver `FortifyServiceProvider::configureTwoFactorFeature
 - Entorno aislado: `.env.e2e` (commiteado, `APP_ENV=e2e`), `database/e2e.sqlite` y `database/seeders/E2eSeeder.php`.
   `globalSetup` construye Vite, recrea la base y siembra; no hace falta preparar nada a mano.
 - Cuentas sembradas (password `password`): `superadmin@`, `editor@`, `viewer@`, `member@` + `e2e.test`.
-- **Nunca añadas `data-testid` a las Blade para que pase un test.** Localizadores accesibles
+- **R37 · Nunca añadas `data-testid` a las Blade para que pase un test.** Localizadores accesibles
   (`getByRole` → `getByLabel` → `getByPlaceholder` → `getByText`); si algo no se puede localizar,
   usa CSS estable y anótalo como mejora de accesibilidad.
-- **Prohibido `page.waitForTimeout()`**: espera a un cambio observable (toast, fila, URL, `toHaveCount`).
-- Cada test crea sus propios datos con `uniqueEmail()` / `uniqueName()`. La base sólo se resetea en `globalSetup`.
-- Todo módulo nuevo con UI aporta como mínimo: un smoke, un happy path y un spec de autorización por rol.
+- **R38 · Prohibido `page.waitForTimeout()`**: espera a un cambio observable (toast, fila, URL, `toHaveCount`).
+- **R39** · Cada test crea sus propios datos con `uniqueEmail()` / `uniqueName()`. La base sólo se resetea en `globalSetup`.
+- **R36** · Todo módulo nuevo con UI aporta como mínimo: un smoke, un happy path y un spec de autorización por rol.
 - Skill: `.claude/skills/kore-e2e-test/`.
 
 ## Comandos útiles
@@ -177,9 +210,14 @@ composer e2e                        # suite E2E (ver docs/quality/e2e.md)
 
 # Calidad
 composer lint                       # Pint
-composer analyse                    # PHPStan/Larastan
+composer analyse                    # Larastan nivel 8 + PHPat + disallowed-calls
+composer arch                       # kore:arch:check (checks textuales: R11, R23, R24, R29, R30, R37, R38, R40, R44, R45)
 composer refactor                   # Rector
 composer ci                         # todo lo anterior
+
+php artisan kore:arch:check --rule=R29        # un solo check
+php artisan kore:arch:check --files=a.php,b.md # lo que corre el pre-commit
+php artisan git-hooks:register                 # re-instala los hooks
 
 # Boost MCP (debugging IA)
 php artisan boost:mcp               # arranca el server (lo usa la IA)
@@ -187,21 +225,25 @@ php artisan boost:mcp               # arranca el server (lo usa la IA)
 
 ## NO HACER
 
-- ❌ No usar Flux UI ni componentes de otras librerías. Solo koreUi.
-- ❌ No poner lógica gorda en controllers, componentes Livewire ni Form Objects (mover a Action).
-- ❌ No usar Eloquent en blade directamente. Pasar DTOs / arrays preparados desde el componente Livewire.
+- ❌ No usar Flux UI ni componentes de otras librerías. Solo koreUi (R31).
+- ❌ No poner lógica gorda en controllers, componentes Livewire ni Form Objects (mover a Action) (R4).
+- ❌ No usar Eloquent en blade directamente. Pasar DTOs / arrays preparados desde el componente Livewire (R30).
 - ❌ No tocar `app/Modules/Tenancy/` si `TENANCY_ENABLED=false`.
-- ❌ No crear `app/Services/`, `app/Repositories/` globales — todo va dentro del módulo correspondiente.
+- ❌ No crear `app/Services/`, `app/Repositories/` globales ni carpetas nuevas dentro de un módulo — la lista de R3 es cerrada.
 - ❌ No instalar paquetes nuevos sin consultar al usuario.
-- ❌ No bypassear los toggles (`config('kore-app.*')`) con código directo — el boilerplate debe seguir siendo reusable.
-- ❌ No meter `data-testid` en las Blade ni usar `waitForTimeout` en los E2E.
+- ❌ No bypassear los toggles (`config('kore-app.*')`) con código directo — el boilerplate debe seguir siendo reusable (R11).
+- ❌ No meter `data-testid` en las Blade ni usar `waitForTimeout` en los E2E (R37, R38).
+- ❌ **No escribir una válvula `arch-exception` / `arch-accepted` por tu cuenta** ni silenciar una regla con `@phpstan-ignore`: párate y pregunta (R44).
 
 ## Antes de finalizar cualquier cambio
 
 1. `vendor/bin/pint --dirty --format agent`
-2. `./vendor/bin/pest` (al menos los tests del módulo tocado)
-3. (Cuando aplique) `./vendor/bin/phpstan analyse`
-4. (Si tocaste rutas, vistas, Livewire o permisos) `npm run e2e`; si añadiste una pantalla,
+2. `composer arch` — los checks textuales tardan 0,2 s y son los que más
+   fácilmente se rompen sin darte cuenta (un `#[Locked]` que falta, un doc nuevo
+   sin enlazar, una migración sin `down()`)
+3. `./vendor/bin/pest` (al menos los tests del módulo tocado)
+4. (Cuando aplique) `./vendor/bin/phpstan analyse`
+5. (Si tocaste rutas, vistas, Livewire o permisos) `npm run e2e`; si añadiste una pantalla,
    su spec en `tests/e2e/specs/{modulo}/`
 
 ---

@@ -37,8 +37,10 @@
         "nunomaduro/collision": "^8.6",
         "pestphp/pest": "^3.8",
         "pestphp/pest-plugin-laravel": "^3.2",
+        "phpat/phpat": "^0.12",
         "phpunit/phpunit": "^11.5.50",
-        "rector/rector": "^2.4"
+        "rector/rector": "^2.4",
+        "spaze/phpstan-disallowed-calls": "^4.0"
     },
     "autoload": {
         "psr-4": {
@@ -89,6 +91,9 @@
         "analyse": [
             "@php vendor/bin/phpstan analyse --memory-limit=2G"
         ],
+        "arch": [
+            "@php artisan kore:arch:check"
+        ],
         "refactor": [
             "@php vendor/bin/rector process"
         ],
@@ -98,6 +103,7 @@
         "ci": [
             "@lint:test",
             "@analyse",
+            "@arch",
             "@refactor:test",
             "@test"
         ],

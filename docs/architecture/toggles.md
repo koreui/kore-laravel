@@ -20,6 +20,14 @@ mentira en la documentación, y por eso en la v1.0.0 se borraron
 `REVERB_ENABLED`, `OCTANE_ENABLED`/`OCTANE_SERVER`, `SCOUT_ENABLED`/`SCOUT_DRIVER`,
 `TENANCY_MODE`, `SENTRY_ENABLED` y el bloque `observability.*`.
 
+**Y ya no depende de que alguien se acuerde: lo verifica el build.** El check
+`R11` de `php artisan kore:arch:check` (`composer arch`, dentro de `composer ci`
+y del pre-commit) aplana `config/kore-app.php` con `Arr::dot()` y busca cada
+clave como `config('kore-app.{clave}')` en `app/`, `bootstrap/`, `config/`,
+`database/`, `routes/`, `resources/` y `tests/`. La que no aparezca falla el
+build con su nombre. Añadir un toggle sin lector, o borrar al último lector de
+uno, se cae solo. Ver [`rules.md`](rules.md) → R11.
+
 ### Lo que NO es un toggle
 
 | Tema | Cómo se controla de verdad |

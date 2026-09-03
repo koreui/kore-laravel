@@ -1,5 +1,11 @@
 # Despliegue en VPS con Docker
 
+**TL;DR**: el stack Docker (Nginx + PHP-FPM + MySQL + Redis + worker + scheduler)
+escucha **sólo en `127.0.0.1:8081`**; el Nginx del host pone el TLS y hace
+`proxy_pass` hacia ahí. Se despliega con `docker compose -f docker-compose.prod.yml
+up -d --build` y los secretos viven en `secrets/`, no en el `.env`. Nada del stack
+interno se expone al exterior: ni MySQL, ni Redis, ni el puerto 8081.
+
 Esta guía describe cómo desplegar `kore-laravel` en un VPS usando Docker, con el Nginx del host manejando TLS y proxy_pass al stack interno.
 
 ## Arquitectura
@@ -22,6 +28,15 @@ Scheduler    (misma imagen, sin puertos)
 ```
 
 Todo el stack Docker corre detrás de un Nginx en el host que ya tiene TLS configurado para otros proyectos. Sólo se le agrega un server block para `kore-laravel`.
+
+> **Por qué `trustProxies(at: '*')` es seguro aquí.** `bootstrap/app.php` confía
+> en las cabeceras `X-Forwarded-*` de **cualquier** proxy. Eso sólo es aceptable
+> porque el contenedor de Nginx publica su puerto en `127.0.0.1:8081` y no en
+> `0.0.0.0`: la única forma de llegar a la app es a través del Nginx del host,
+> que reescribe esas cabeceras. Si publicas el puerto en todas las interfaces, o
+> metes el contenedor detrás de un balanceador accesible desde fuera, cualquiera
+> podría falsificar su IP con una cabecera y saltarse los rate limiters por IP.
+> En ese caso, cambia el `at: '*'` por la lista de IPs de tus proxies.
 
 ---
 
@@ -169,6 +184,11 @@ TENANCY_ENABLED=false
 AUTH_2FA_ENABLED=true
 AUTH_MAGIC_LINKS=true
 AUTH_SOCIAL_LOGIN=false
+# Sub-toggles por proveedor: con AUTH_SOCIAL_LOGIN=false no pintan nada, pero
+# son las otras dos claves de config/kore-app.php y el SocialiteController
+# devuelve 404 para un proveedor cuyo sub-toggle esté apagado.
+SOCIAL_GOOGLE=false
+SOCIAL_GITHUB=false
 
 # Observabilidad
 SENTRY_LARAVEL_DSN=

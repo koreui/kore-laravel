@@ -110,8 +110,11 @@ Route::middleware([
 ```php
 public function register(): void
 {
-    // El comando vive siempre disponible
-    $this->commands([EnableTenancyCommand::class]);
+    // El comando vive siempre disponible para que el usuario pueda activar
+    // tenancy con `php artisan kore:tenancy:enable`.
+    $this->commands([
+        EnableTenancyCommand::class,
+    ]);
 
     if (! $this->isTenancyEnabled()) {
         return;
@@ -126,8 +129,20 @@ public function boot(): void
         return;
     }
 
-    $this->loadMigrationsFrom(__DIR__.'/../Database/Migrations');
-    $this->loadRoutesFrom(__DIR__.'/../Routes/tenant.php');
+    $base = __DIR__.'/..';
+
+    $this->loadJsonTranslationsFrom("{$base}/Resources/lang");
+
+    // `kore:tenancy:enable` publica aquí las migraciones de stancl. En un
+    // clon fresco la carpeta puede no existir todavía (sólo lleva .gitkeep),
+    // y loadMigrationsFrom() con una ruta inexistente revienta al migrar.
+    if (is_dir($migrations = "{$base}/Database/Migrations")) {
+        $this->loadMigrationsFrom($migrations);
+    }
+
+    if (file_exists($routes = "{$base}/Routes/tenant.php")) {
+        $this->loadRoutesFrom($routes);
+    }
 }
 
 private function isTenancyEnabled(): bool
@@ -138,13 +153,26 @@ private function isTenancyEnabled(): bool
 
 `composer.json` tiene `stancl/tenancy` en `extra.laravel.dont-discover` para que NO se registre automáticamente — sólo cuando nuestro provider lo decide.
 
+Las dos guardas del `boot()` no son adorno: en un clon fresco `Database/Migrations/`
+sólo contiene un `.gitkeep` y `Routes/tenant.php` no existe hasta que corre
+`kore:tenancy:enable`. Sin ellas, encender el toggle antes de publicar revienta
+el primer `php artisan migrate`.
+
+Registrar `EnableTenancyCommand` **antes** del early return es la única excepción
+a R10 («un toggle apagado no registra nada»), y está escrita como tal en el
+catálogo: sin ella, `TENANCY_ENABLED=false` no tendría forma de encenderse.
+
 ## Tests del toggle
 
 `app/Modules/Tenancy/Tests/Feature/TenancyToggleTest.php` verifica:
 
-- Cuando `TENANCY_ENABLED=false`, `Stancl\Tenancy\TenancyServiceProvider` NO está cargado.
-- El comando `kore:tenancy:enable` siempre está expuesto.
-- Las rutas tenant (`tenant.home`) NO existen cuando OFF.
+- Cuando `TENANCY_ENABLED=false`, `Stancl\Tenancy\TenancyServiceProvider` NO está
+  cargado (y `TenancyModuleServiceProvider` sí existe, para distinguir «apagado»
+  de «roto»).
+- El comando `kore:tenancy:enable` está expuesto **siempre**, con el toggle
+  apagado incluido: es la excepción documentada de R10.
+- Con el toggle apagado, el router no tiene ninguna ruta llamada `tenant.home`,
+  que es la que carga `Routes/tenant.php`.
 
 ## Activar en producción (Docker)
 

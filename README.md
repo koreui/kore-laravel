@@ -9,8 +9,8 @@ Boilerplate Laravel 12 production-ready con Livewire 4, Tailwind CSS v4, koreUi 
 - **Auth** Fortify + Sanctum (toggle) + spatie/laravel-permission
 - **DTOs** spatie/laravel-data
 - **Feature flags** Laravel Pennant
-- **Tests** Pest 3 + arch tests (`tests/Arch/`)
-- **Calidad** Pint + Larastan nivel 8 + Rector
+- **Tests** Pest 3 + arch tests (`tests/Arch/`) + E2E Playwright (`tests/e2e/`)
+- **Calidad** Pint + Larastan nivel 8 + PHPat + `spaze/phpstan-disallowed-calls` + `kore:arch:check` + Rector
 - **Multi-tenancy** stancl/tenancy v3 (toggle)
 - **Observabilidad** Sentry + Laravel Pulse + spatie/laravel-health + spatie/laravel-activitylog
 - **AI** Laravel Boost (MCP) + CLAUDE.md + AGENTS.md + skills locales
@@ -51,10 +51,11 @@ Para desactivarlo, `TENANCY_ENABLED=false` en `.env` y todo el módulo deja de b
 
 Reglas vivas y resúmenes en `CLAUDE.md` / `AGENTS.md`. Detalles en [`docs/`](docs/README.md):
 
-- [`docs/architecture/`](docs/architecture/) — overview, module-pattern, toggles
-- [`docs/modules/`](docs/modules/) — auth, tenancy
+- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **las 45 reglas del boilerplate** (`R1..R45`), cada una con su verificador, su severidad y la cicatriz que la originó
+- [`docs/architecture/`](docs/architecture/) — overview, module-pattern, toggles, authorization
+- [`docs/modules/`](docs/modules/) — auth, tenancy, users
 - [`docs/ops/`](docs/ops/) — deployment, observability
-- [`docs/quality/`](docs/quality/) — pipeline (Pint, Larastan, Rector, Pest, hooks, CI)
+- [`docs/quality/`](docs/quality/) — pipeline (Pint, Larastan, PHPat, disallowed-calls, `kore:arch:check`, Rector, Pest, hooks, CI) y E2E
 - [`docs/ai/`](docs/ai/) — trabajar con la AI (Boost, skills)
 
 > `koreUi` se consume desde Packagist (`kore-ui/kore-ui ^2.2`). No hay path repository; un `composer install` lo instala como cualquier otra dependencia. Código fuente: [github.com/koreui/kore-ui](https://github.com/koreui/kore-ui).
@@ -91,7 +92,8 @@ composer test           # corre Pest 3
 
 # Quality stack
 composer lint           # Pint
-composer analyse        # PHPStan / Larastan
+composer analyse        # Larastan nivel 8 + PHPat + disallowed-calls
+composer arch           # kore:arch:check (checks textuales de arquitectura)
 composer refactor       # Rector
 composer ci             # todo lo anterior
 
@@ -153,7 +155,7 @@ Para mantener un proyecto derivado al día:
 ```bash
 git remote add kore https://github.com/koreui/kore-laravel
 git fetch kore --tags
-git merge v1.0.0        # y resuelve conflictos guiado por el CHANGELOG
+git merge v1.2.0        # y resuelve conflictos guiado por el CHANGELOG
 ```
 
 ## Licencia

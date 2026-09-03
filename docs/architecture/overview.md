@@ -15,8 +15,8 @@
 | Feature flags   | Laravel Pennant                             |
 | Tenancy         | stancl/tenancy v3 (toggle)                  |
 | Queues          | driver `database` (`queue:listen` en `composer dev`, `queue:work` en Docker) |
-| Tests           | Pest 3 + arch tests (`tests/Arch/`)         |
-| Calidad         | Pint + Larastan 8 + Rector                  |
+| Tests           | Pest 3 + arch tests (`tests/Arch/`) + E2E Playwright (`tests/e2e/`) |
+| Calidad         | Pint + Larastan (larastan 3, nivel 8) + PHPat + `spaze/phpstan-disallowed-calls` + `kore:arch:check` + Rector |
 | Observabilidad  | Sentry · Pulse · spatie/laravel-health · spatie/laravel-activitylog |
 | AI              | Laravel Boost MCP + CLAUDE.md/AGENTS.md     |
 
@@ -26,15 +26,21 @@
 app/
 ├── Core/                          # kernel compartido, NO negocio
 │   ├── Actions/Action.php         # base abstracta para Actions
-│   ├── Concerns/                  # traits compartidos
+│   ├── Concerns/                  # traits compartidos (hoy vacía)
+│   ├── Console/                   # comandos transversales
+│   │   ├── ArchCheckCommand.php   # kore:arch:check
+│   │   └── Hooks/                 # hooks de git (pre-commit, pre-push)
 │   ├── Contracts/                 # interfaces (puentes entre módulos)
-│   ├── Data/Data.php              # base DTO (extiende spatie/laravel-data)
+│   │   └── AuthorizationCatalog.php
+│   ├── Data/
+│   │   ├── Data.php               # base DTO (extiende spatie/laravel-data)
+│   │   └── Authorization/         # DTOs que cruzan la frontera Auth → Users
 │   ├── Enums/                     # valores compartidos (SystemRole)
-│   └── Support/                   # helpers
+│   └── Support/                   # helpers (hoy vacía)
 ├── Modules/{Domain}/              # cada feature aislada (ver module-pattern.md)
 ├── Models/User.php                # único modelo verdaderamente global
 └── Providers/
-    ├── AppServiceProvider.php
+    ├── AppServiceProvider.php     # registra también los comandos de Core
     └── HealthServiceProvider.php
 bootstrap/providers.php            # registra los providers
 config/kore-app.php                # toggles (ver toggles.md)
@@ -53,20 +59,25 @@ config/kore-app.php                # toggles (ver toggles.md)
 
 ## Reglas de oro
 
-1. **1 Action = 1 caso de uso** con método `handle(...)`. Naming `{Domain}{Object}{Verb}Action`.
-2. **Sin lógica gorda en controllers / Livewire** — pasa de 10 líneas, mover a Action.
-3. **Sin imports cruzados entre módulos** (arch test, en ambos sentidos).
-   Comunicación: Events, Contracts en `Core/Contracts/` (implementados en
-   `{Domain}/Support/`), enums compartidos en `Core/Enums/`, o Actions públicas
-   vía interfaz. `App\Core` nunca depende de `App\Modules`.
-4. **DTOs (spatie/laravel-data) en lugar de arrays** entre capas.
-5. **`declare(strict_types=1)`** obligatorio en todo PHP.
-6. **`final class`** por defecto.
-7. **Type hints** en TODO (params, returns, props).
-8. **`CarbonImmutable`** por defecto (forzado en `AppServiceProvider`).
-9. **Tests Pest** obligatorios para cada Action / endpoint Livewire / ruta.
+Las reglas del boilerplate son un catálogo numerado y citable: la fuente de
+verdad es [`rules.md`](rules.md), donde cada `R{n}` lleva su enunciado, quién la
+verifica, con qué comando, con qué severidad, la válvula de escape que admite y
+la cicatriz real que la originó. Este resumen sólo da el titular.
+
+| Regla | Titular |
+|-------|---------|
+| [R1](rules.md) · [R2](rules.md) | 1 Action = 1 caso de uso con `handle()`; naming `{Domain}{Object}{Verb}Action` |
+| [R4](rules.md) | sin lógica de negocio en controllers, Livewire ni Forms — pasa de ~10 líneas, va a una Action |
+| [R5](rules.md) · [R6](rules.md) · [R7](rules.md) | sin imports cruzados entre módulos: Events, `Core/Contracts/` (implementados en `{Domain}/Support/`) o enums y DTOs de `Core`. `App\Core` nunca depende de `App\Modules`, y sus contratos son interfaces |
+| [R8](rules.md) | DTOs (spatie/laravel-data) en lugar de arrays entre capas, `final` y con propiedades `readonly` |
+| [R13](rules.md) | `declare(strict_types=1)` en todo el PHP de `app/` |
+| [R14](rules.md) | `final class` por defecto |
+| [R15](rules.md) | type hints completos (params, returns, propiedades) |
+| [R16](rules.md) | `CarbonImmutable` por defecto (forzado en `AppServiceProvider`) |
+| [R35](rules.md) | un test Pest por Action, componente Livewire y ruta |
 
 Ver detalle en:
+- [`rules.md`](rules.md) — **el catálogo completo `R1..R45`** (fuente de verdad)
 - [`module-pattern.md`](module-pattern.md) — cómo se construye un módulo
 - [`toggles.md`](toggles.md) — `config/kore-app.php`
 - [`../quality/pipeline.md`](../quality/pipeline.md) — pipeline que hace cumplir esto

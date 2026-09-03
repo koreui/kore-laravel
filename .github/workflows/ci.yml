@@ -45,8 +45,14 @@ jobs:
       - name: Pint (lint)
         run: ./vendor/bin/pint --test --format=checkstyle
 
-      - name: Larastan (static analysis)
+      - name: Larastan + PHPat + disallowed-calls (static analysis)
         run: ./vendor/bin/phpstan analyse --no-progress --memory-limit=2G
+
+      # Checks textuales que ninguna herramienta estática ve: #[Locked] que
+      # falta, authorize() ausente, migración sin down(), válvula de escape
+      # caducada, toggle fantasma, doc sin enlazar. Ver docs/architecture/rules.md.
+      - name: Kore arch check
+        run: php artisan kore:arch:check
 
       - name: Rector (refactor — dry run)
         run: ./vendor/bin/rector process --dry-run --no-progress-bar

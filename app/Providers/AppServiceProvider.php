@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Core\Console\ArchCheckCommand;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -26,12 +27,30 @@ final class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->registerCoreCommands();
         $this->configureCommands();
         $this->configureModels();
         $this->configureFactories();
         $this->configureUrl();
         $this->configureDate();
         $this->configureAbout();
+    }
+
+    /**
+     * Comandos de infraestructura de `App\Core`.
+     *
+     * Laravel sólo autodescubre `app/Console/Commands`, y el layout modular no
+     * usa esa carpeta: los comandos de dominio viven en su módulo
+     * (`App\Modules\{X}\Console\Commands`, registrados por el provider del
+     * módulo) y los transversales aquí.
+     */
+    private function registerCoreCommands(): void
+    {
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                ArchCheckCommand::class,
+            ]);
+        }
     }
 
     private function configureCommands(): void

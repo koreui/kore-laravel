@@ -8,23 +8,26 @@ description: Crear un módulo nuevo en app/Modules/{Domain} siguiendo el patrón
 ## Cuándo usar
 - El usuario quiere agregar un dominio nuevo (Billing, Orders, Inventory, Notifications, etc.) y aún no existe la carpeta `app/Modules/{Nombre}/`.
 
-## Estructura objetivo
+## Estructura objetivo — lista CERRADA (R3)
 
-Para un módulo `{Domain}` (PascalCase), generar:
+Para un módulo `{Domain}` (PascalCase), generar sólo carpetas de esta lista:
 
 ```
 app/Modules/{Domain}/
 ├── Actions/                       # 1 clase = 1 caso de uso (handle()), extienden Core\Actions\Action
+├── Console/Commands/              # comandos artisan del dominio
 ├── Data/                          # DTOs final que extienden App\Core\Data\Data
-├── Events/                        # lo que otros módulos pueden escuchar
+├── Events/                        # lo que otros módulos pueden escuchar (final readonly)
 ├── Forms/                         # Livewire Form Objects (rules() + toData())
 ├── Http/
 │   ├── Controllers/
 │   ├── Livewire/
+│   ├── Middleware/
 │   └── Requests/
+├── Listeners/                     # reacciones a eventos de otros módulos
 ├── Models/
 ├── Policies/
-├── Rules/                         # reglas de validación propias
+├── Rules/                         # reglas de validación propias (final, ValidationRule)
 ├── Support/                       # implementaciones de contratos de Core
 ├── Routes/
 │   ├── web.php
@@ -33,13 +36,24 @@ app/Modules/{Domain}/
 │   ├── Migrations/
 │   ├── Factories/                 # {X}Factory de los modelos del módulo
 │   └── Seeders/
-├── Resources/views/               # vistas namespaced (`{domain}::`)
+├── Resources/
+│   ├── views/                     # vistas namespaced (`{domain}::`)
+│   └── lang/                      # en.json del módulo
 ├── Providers/{Domain}ModuleServiceProvider.php
 └── Tests/Feature/
 ```
 
 Crea sólo las carpetas que el módulo necesite; `Providers/` es la única
 obligatoria.
+
+⚠️ **La lista es cerrada y la vigila un arch test** (`R3 · un módulo sólo tiene
+las carpetas permitidas`). Nada de `Services/`, `Repositories/`, `Helpers/` o
+`Transformers/`: casi siempre son `Actions/`, `Support/` o `Data/`. Si de verdad
+hace falta una capa nueva, **para y pregúntale al usuario**: ampliar la lista
+toca `docs/architecture/module-pattern.md`, el `$allowed` de
+`tests/Arch/ArchitectureTest.php` y `docs/architecture/rules.md` en el mismo
+commit. La única excepción existente son los adaptadores de un paquete cuyo
+contrato fija un tercero (`app/Modules/Auth/Fortify/`).
 
 ## Pasos
 
@@ -64,6 +78,7 @@ final class {Domain}ModuleServiceProvider extends ServiceProvider
 
         $this->loadRoutesFrom("{$base}/Routes/web.php");
         $this->loadMigrationsFrom("{$base}/Database/Migrations");
+        $this->loadJsonTranslationsFrom("{$base}/Resources/lang");
         $this->loadViewsFrom("{$base}/Resources/views", strtolower('{Domain}'));
         Blade::anonymousComponentPath("{$base}/Resources/views", strtolower('{Domain}'));
 
@@ -95,26 +110,40 @@ Route::middleware('web')->prefix('{domain}')->group(function (): void {
    `AppServiceProvider::configureFactories()` ya mapea
    `App\Modules\{Domain}\Models\{X}` → `App\Modules\{Domain}\Database\Factories\{X}Factory`.
 7. **Crea un test inicial** en `Tests/Feature/{Domain}ModuleTest.php` que verifique al menos que el provider se registra. El path es auto-detectado por `tests/Pest.php`.
-8. **Ejecuta** `composer dump-autoload && composer ci` para confirmar que todo queda verde.
+8. **Ejecuta** `composer dump-autoload && composer arch && composer ci` para
+   confirmar que todo queda verde. `composer arch` tarda 0,2 s y es el que
+   detecta la carpeta inventada, el `#[Locked]` que falta, la migración sin
+   `down()` y el doc nuevo sin enlazar.
 
-## Reglas de oro (ver CLAUDE.md)
+## Reglas de oro (catálogo completo: `docs/architecture/rules.md`)
 
-- `declare(strict_types=1)` obligatorio en todo archivo PHP nuevo.
-- `final class` por default en clases sin herencia esperada.
-- Naming de Actions: `{Domain}{Object}{Verb}Action` (`OrderCancelAction`,
+- **R13** · `declare(strict_types=1)` obligatorio en todo archivo PHP nuevo.
+- **R14** · `final class` por default en clases sin herencia esperada.
+- **R1 · R2** · Naming de Actions: `{Domain}{Object}{Verb}Action` (`OrderCancelAction`,
   `BillingInvoiceCreateAction`); si el objeto coincide con el dominio, se omite
   el prefijo repetido (`UserCreateAction` en el módulo Users). Extienden
   `App\Core\Actions\Action` y exponen un único `handle()`.
-- La escritura vive en las Actions, no en el Form Object ni en el componente
-  Livewire: éste **autoriza → valida → DTO → Action**.
-- Sin imports cruzados a otros `Modules\*` (hay arch test). Si necesitas
+- **R4 · R23** · La escritura vive en las Actions, no en el Form Object ni en el
+  componente Livewire: éste **autoriza → valida → DTO → Action**. El
+  `authorize()` va dentro del componente, porque `/livewire/update` no pasa por
+  el middleware `permission:` de la ruta.
+- **R24** · Toda propiedad pública que identifique un modelo (`$id`, `$model`,
+  `$algoId`) lleva `#[Locked]`.
+- **R5** · Sin imports cruzados a otros `Modules\*` (lo verifican Pest arch y
+  PHPat, que genera la regla para cada par de módulos). Si necesitas
   comunicar entre módulos: Events (`{Domain}\Events\`), Contracts en
   `app/Core/Contracts/` implementados en `{Domain}\Support\`, enums compartidos
   en `app/Core/Enums/`, o llamar Actions públicas vía interfaz.
-- `App\Core` nunca depende de `App\Modules`.
-- Componentes UI: `<x-kore::*>` (siempre). Nunca otra librería.
-- DTOs en lugar de arrays asociativos entre capas.
-- Nada de Eloquent en las blades: prepara los datos en un `#[Computed]`.
+- **R6** · `App\Core` nunca depende de `App\Modules`.
+- **R31** · Componentes UI: `<x-kore::*>` (siempre). Nunca otra librería.
+- **R8** · DTOs en lugar de arrays asociativos entre capas.
+- **R30** · Nada de Eloquent en las blades: prepara los datos en un `#[Computed]`.
+- **R29** · Toda migración del módulo define `down()`.
+- **R11** · Si añades un toggle, alguien tiene que leerlo con
+  `config('kore-app.{clave}')`, o `composer arch` lo marca como fantasma.
+- **R44** · Si el código necesita una excepción a cualquiera de estas reglas,
+  **no la escribas tú**: para y pregúntale al usuario, que es quien firma el
+  `@owner` de la válvula.
 
 ## Módulo de referencia
 
@@ -124,6 +153,7 @@ Rules + Policy + tests. Cópialo cuando dudes; la guía es
 
 ## Después de crear
 
-- Confirma con `composer ci` (Pint + Larastan + Rector + Pest).
+- Confirma con `composer ci` (Pint + Larastan/PHPat/disallowed-calls +
+  `kore:arch:check` + Rector + Pest).
 - Si el provider necesita lógica condicional (toggles), añade el test correspondiente.
 - Agrega los nuevos comandos artisan al README si los hubo.

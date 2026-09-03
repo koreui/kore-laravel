@@ -1,0 +1,111 @@
+# Llamadas prohibidas — spaze/phpstan-disallowed-calls
+#
+# Cada entrada implementa una regla de docs/architecture/rules.md y cita su
+# número en `message`, para que el error del build diga qué leer.
+#
+# Semántica de las dos directivas que se usan aquí:
+#   allowIn:       prohibido en todas partes MENOS en estas rutas.
+#   allowExceptIn: permitido en todas partes MENOS en estas rutas.
+#
+# Las rutas son patrones fnmatch() resueltos contra `filesRootDir`, que apunta
+# a la raíz del proyecto para que funcionen igual en local y en CI.
+#
+# Válvula de escape puntual: `@phpstan-ignore` con el MISMO texto de la válvula
+# de rules.md al lado (ver §Válvulas). La vía normal es añadir la ruta a
+# `allowIn` aquí, que deja la excepción en un solo sitio revisable.
+
+parameters:
+    filesRootDir: %rootDir%/../../..
+
+    disallowedFunctionCalls:
+        # R19 · el actor se pasa por constructor
+        -
+            function:
+                - 'auth()'
+                - 'request()'
+                - 'session()'
+                - 'cookie()'
+            message: 'R19: el actor se pasa por constructor. Actions, Models, Data, Rules y Core deben servir igual desde un job o un comando, donde estos helpers devuelven null en silencio. Ver docs/architecture/rules.md'
+            errorIdentifier: 'kore.r19'
+            allowExceptIn:
+                - app/Core/*
+                - app/Models/*
+                - app/Modules/*/Actions/*
+                - app/Modules/*/Data/*
+                - app/Modules/*/Models/*
+                - app/Modules/*/Rules/*
+
+        # R20 · abortar es cosa de la capa Http
+        -
+            function:
+                - 'abort()'
+                - 'abort_if()'
+                - 'abort_unless()'
+            message: 'R20: abort*() sólo en la capa Http (controllers, componentes Livewire, middleware, rutas). Una Action, un Model o una Rule que aborta no se puede reutilizar fuera de una petición. Ver docs/architecture/rules.md'
+            errorIdentifier: 'kore.r20'
+            allowIn:
+                - app/Http/*
+                - app/Modules/*/Http/*
+                # Las dos casas de las rutas: las globales y las de cada módulo,
+                # que su provider carga con loadRoutesFrom(). R20 dice «rutas»
+                # sin distinguir, y sin la segunda línea un abort_unless() en
+                # app/Modules/*/Routes/web.php se marcaba como violación.
+                - routes/*
+                - app/Modules/*/Routes/*
+
+        # R17 · env() sólo dentro de config/
+        -
+            function: 'env()'
+            message: 'R17: env() sólo dentro de config/. Con la config cacheada (php artisan config:cache) devuelve null fuera de ahí. Ver docs/architecture/rules.md'
+            errorIdentifier: 'kore.r17'
+            allowIn:
+                - config/*
+
+        # R18 · nada de helpers de depuración en producción
+        -
+            function:
+                - 'dd()'
+                - 'dump()'
+                - 'var_dump()'
+                - 'ray()'
+            message: 'R18: los helpers de depuración no se commitean. Ver docs/architecture/rules.md'
+            errorIdentifier: 'kore.r18'
+
+    disallowedStaticCalls:
+        # R21 · DB::table() sólo en migraciones y seeders
+        #
+        # La firma es la del contrato, no la del facade: Larastan resuelve
+        # `DB::table()` a `Illuminate\Database\ConnectionInterface::table()`, y
+        # es ahí donde la extensión encuentra la llamada. Poner el facade a
+        # secas no detecta nada (comprobado).
+        -
+            method: 'Illuminate\Database\ConnectionInterface::table()'
+            message: 'R21: DB::table() sólo en migraciones y seeders. En el resto de la app se usan modelos Eloquent, que llevan casts, scopes y eventos. Ver docs/architecture/rules.md'
+            errorIdentifier: 'kore.r21'
+            allowIn:
+                - database/migrations/*
+                - database/seeders/*
+                - app/Modules/*/Database/Migrations/*
+                - app/Modules/*/Database/Seeders/*
+
+        # R22 · la E/S remota no vive en la capa de entrega
+        -
+            # Igual que arriba: `Http::get()` se resuelve a
+            # `PendingRequest`, que es donde el cliente HTTP declara los verbos.
+            # El facade `Mail` sí se detecta por su propio nombre.
+            method:
+                - 'Illuminate\Http\Client\PendingRequest::*'
+                - 'Illuminate\Support\Facades\Mail::send()'
+                - 'Illuminate\Support\Facades\Mail::raw()'
+            message: 'R22: llamar a un servicio externo o mandar un correo desde un controller o un componente Livewire deja la petición colgada de un tercero y no se puede testear sin red. Muévelo a una Action (y, si tarda, a un job). Ver docs/architecture/rules.md'
+            errorIdentifier: 'kore.r22'
+            allowExceptIn:
+                - app/Http/Controllers/*
+                - app/Modules/*/Http/Controllers/*
+                - app/Modules/*/Http/Livewire/*
+
+        # R27 · mass assignment explícito
+        -
+            method: 'Illuminate\Database\Eloquent\Model::unguard()'
+            message: 'R27: Model::unguard() global desactiva la protección de mass assignment de TODOS los modelos, propios y de vendor. Cada modelo declara su $fillable. Ver docs/architecture/rules.md'
+            errorIdentifier: 'kore.r27'
