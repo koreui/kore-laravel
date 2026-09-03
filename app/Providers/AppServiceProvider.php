@@ -35,10 +35,15 @@ final class AppServiceProvider extends ServiceProvider
         Command::macro('isProduction', fn (): bool => $this->getLaravel()->isProduction());
     }
 
+    /**
+     * Nada de `Model::unguard()` global: desactivarlo para toda la app anula la
+     * protección de mass assignment de TODOS los modelos (propios y de vendor).
+     * Cada modelo declara su propio `$fillable` / `$guarded`; las factories ya
+     * corren dentro de `Model::unguarded()` por su cuenta.
+     */
     private function configureModels(): void
     {
         Model::shouldBeStrict(! $this->app->isProduction());
-        Model::unguard();
     }
 
     private function configureUrl(): void

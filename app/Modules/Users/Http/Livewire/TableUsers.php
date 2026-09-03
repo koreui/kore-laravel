@@ -108,13 +108,25 @@ final class TableUsers extends KoreDataTable
         ];
     }
 
+    /**
+     * El `->hidden()` del RowAction es sólo cosmética: /livewire/update no pasa
+     * por el middleware `permission:*` de las rutas del módulo, así que la
+     * autorización real tiene que hacerse aquí.
+     */
     public function confirmDelete(int $id): void
     {
         $user = User::find($id);
 
-        if (! $user instanceof User || $user->id === auth()->id()) {
+        if (! $user instanceof User) {
             return;
         }
+
+        // Guarda explícita de auto-borrado: el Gate::before del superadmin
+        // devuelve true antes de consultar la policy, así que sin esto un
+        // superadmin podría borrarse a sí mismo desde la tabla.
+        abort_if($user->id === auth()->id(), 403);
+
+        $this->authorize('delete', $user);
 
         $user->delete();
 

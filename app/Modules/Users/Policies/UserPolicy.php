@@ -7,6 +7,14 @@ namespace App\Modules\Users\Policies;
 use App\Models\User;
 use App\Modules\Auth\Models\Role;
 
+/**
+ * Policy del módulo Users.
+ *
+ * OJO: `AuthModuleServiceProvider` registra un `Gate::before` que devuelve
+ * true para el rol superadmin, así que para ese rol la policy NUNCA se
+ * evalúa. Las guardas que deben aplicar incluso al superadmin (p. ej. no
+ * borrarse a sí mismo) se repiten en el componente Livewire.
+ */
 final class UserPolicy
 {
     public function viewAny(User $user): bool
@@ -24,6 +32,9 @@ final class UserPolicy
         return $user->can('users.create');
     }
 
+    /**
+     * Sólo un superadmin puede editar a otro superadmin.
+     */
     public function update(User $user, User $target): bool
     {
         if ($target->hasRole(Role::SUPERADMIN) && ! $user->hasRole(Role::SUPERADMIN)) {
@@ -33,6 +44,10 @@ final class UserPolicy
         return $user->can('users.edit');
     }
 
+    /**
+     * Bloquea el auto-borrado y el borrado de cualquier superadmin, incluso si
+     * quien lo intenta tiene el permiso `users.delete`.
+     */
     public function delete(User $user, User $target): bool
     {
         if ($target->id === $user->id) {

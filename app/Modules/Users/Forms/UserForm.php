@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Modules\Auth\Models\Role;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Livewire\Attributes\Locked;
 use Livewire\Form;
 
 /**
@@ -20,9 +21,16 @@ use Livewire\Form;
  *
  * Aparte del modelo, el form maneja role (string) y permissions (array)
  * que se aplican post-save via syncRoles + syncPermissions.
+ *
+ * SEGURIDAD: `$id` va con #[Locked]. Sin ese candado un cliente con permiso
+ * `users.create` podía mandar `form.id` por /livewire/update y hacer que el
+ * updateOrCreate sobrescribiera a CUALQUIER usuario (email, password, rol y
+ * permisos incluidos). El candado sólo bloquea escrituras del cliente: el
+ * mount() del componente sigue pudiendo asignarlo vía fill() (data_set).
  */
 class UserForm extends Form
 {
+    #[Locked]
     public ?int $id = null;
 
     public string $name = '';
@@ -56,22 +64,32 @@ class UserForm extends Form
         ];
     }
 
+    /**
+     * El modelo se resuelve explícitamente en vez de con
+     * `updateOrCreate(['id' => $this->id], ...)`: sin `Model::unguard()` global
+     * ese patrón revienta al crear (el `id` no es mass-assignable) y además
+     * dejaba la puerta abierta a sobrescribir cualquier usuario.
+     */
     public function store(): User
     {
+        $user = $this->id !== null
+            ? User::findOrFail($this->id)
+            : new User;
+
         $attributes = [
             'name' => $this->name,
             'email' => $this->email,
         ];
 
-        if ($this->password) {
+        if ($this->password !== null && $this->password !== '') {
             $attributes['password'] = Hash::make($this->password);
         }
 
-        if (! $this->id) {
+        if (! $user->exists) {
             $attributes['email_verified_at'] = now();
         }
 
-        $user = User::updateOrCreate(['id' => $this->id], $attributes);
+        $user->fill($attributes)->save();
 
         $user->syncRoles([$this->role]);
         $user->syncPermissions($this->permissions);

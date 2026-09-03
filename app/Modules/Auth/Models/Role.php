@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Auth\Models;
 
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 use Spatie\Permission\Models\Role as SpatieRole;
 
 /**
@@ -23,6 +25,8 @@ use Spatie\Permission\Models\Role as SpatieRole;
  */
 class Role extends SpatieRole
 {
+    use LogsActivity;
+
     public const string SUPERADMIN = 'superadmin';
 
     public const string ADMIN = 'Administrador';
@@ -46,5 +50,18 @@ class Role extends SpatieRole
     public static function assignableNames(): array
     {
         return array_column(self::allRoles(), 'value');
+    }
+
+    /**
+     * Audit log (spatie/laravel-activitylog). Se registra `guard_name` en vez
+     * de `email` (que no existe en este modelo): cambiar el guard de un rol es
+     * exactamente el tipo de movimiento que interesa auditar.
+     */
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['name', 'guard_name'])
+            ->logOnlyDirty()
+            ->dontLogEmptyChanges();
     }
 }

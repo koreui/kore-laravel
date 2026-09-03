@@ -8,9 +8,12 @@ use App\Models\User;
 use App\Modules\Auth\Console\Commands\RegeneratePermissionsCommand;
 use App\Modules\Auth\Http\Livewire\MagicLink;
 use App\Modules\Auth\Models\Role;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use Livewire\Livewire;
@@ -40,7 +43,9 @@ final class AuthModuleServiceProvider extends ServiceProvider
         $this->loadModule();
         $this->registerLivewireComponents();
         $this->configureSanctumStateful();
+        $this->configureApiRateLimiting();
         $this->registerSuperadminGate();
+        $this->registerObservabilityGates();
 
         if ($this->app->runningInConsole()) {
             $this->commands([
@@ -94,5 +99,41 @@ final class AuthModuleServiceProvider extends ServiceProvider
 
         $this->app->make(HttpKernel::class)
             ->prependMiddlewareToGroup('api', EnsureFrontendRequestsAreStateful::class);
+    }
+
+    /**
+     * Limiter del grupo `api` (bootstrap/app.php hace `throttleApi()`).
+     *
+     * Laravel 12 NO trae un `RateLimiter::for('api')` por defecto; sin él,
+     * `throttle:api` degradaría a `maxAttempts = (int) 'api' = 0` y bloquearía
+     * todas las peticiones. Por eso se registra siempre, incluso con
+     * `API_ENABLED=false`: el toggle sólo decide si se cargan las rutas.
+     *
+     * Va aquí y no en FortifyServiceProvider porque los limiters de Fortify
+     * (`login`, `two-factor`) son de ese paquete; éste es del módulo Auth,
+     * que es quien publica las rutas API y engancha Sanctum.
+     */
+    private function configureApiRateLimiting(): void
+    {
+        RateLimiter::for('api', fn (Request $request): Limit => Limit::perMinute(60)
+            ->by($request->user()?->getAuthIdentifier() ?? (string) $request->ip()));
+    }
+
+    /**
+     * Paneles de observabilidad: Pulse y el `/health` HTML exponen datos de
+     * toda la app (queries, jobs, excepciones, uso de disco), así que sólo
+     * entra el superadmin. Se definen aquí, junto al Gate::before del
+     * superadmin, para tener toda la autorización global en un solo sitio.
+     *
+     * Pulse registra su propio `viewPulse` (que sólo permite entorno local)
+     * vía `callAfterResolving(Gate::class)`; como los providers de paquete
+     * arrancan antes que los de la app, esta definición gana.
+     */
+    private function registerObservabilityGates(): void
+    {
+        $onlySuperadmin = fn (User $user): bool => $user->hasRole(Role::SUPERADMIN);
+
+        Gate::define('viewPulse', $onlySuperadmin);
+        Gate::define('viewHealth', $onlySuperadmin);
     }
 }

@@ -125,6 +125,20 @@ return [
             'handler' => NullHandler::class,
         ],
 
+        /*
+         * Canal de Sentry. El SDK registra uno por su cuenta si no existe, pero
+         * lo declaramos aquí para fijar el nivel y dejarlo visible.
+         *
+         * NO está en el stack por defecto: para enviar logs a Sentry en
+         * producción pon `LOG_STACK=single,sentry` en el `.env`. Sin
+         * `SENTRY_LARAVEL_DSN` el canal es no-op.
+         */
+        'sentry' => [
+            'driver' => 'sentry',
+            'level' => env('LOG_SENTRY_LEVEL', 'error'),
+            'bubble' => true,
+        ],
+
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],

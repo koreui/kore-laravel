@@ -25,11 +25,19 @@ app/Modules/{Modulo}/
 Vive en `app/Modules/{Modulo}/Forms/{Modelo}Form.php`. Extiende `Livewire\Form`.
 
 **Reglas**:
-- Tiene `public ?int $id = null;` (usado para `updateOrCreate`).
+- Tiene `#[Locked] public ?int $id = null;` — **el `#[Locked]` no es opcional**:
+  sin él, un cliente con permiso de *crear* puede mandar `form.id` por
+  `/livewire/update` y sobrescribir cualquier registro.
 - Tiene una propiedad pública por cada campo del modelo.
 - Implementa `rules(): array` (devuelve un array, **no** uses `#[Validate]`).
-- Implementa `store(): Model` que ejecuta `Model::updateOrCreate(['id' => $this->id], [...])` y devuelve el modelo.
+- Implementa `store(): Model` que resuelve el modelo (`findOrFail($this->id)` si
+  hay id, `new Model` si no), hace `fill(...)->save()` y lo devuelve.
 - Si hay relaciones / pivots, gestionarlos al final de `store()` con el modelo recién creado/actualizado.
+
+> **Por qué no `updateOrCreate(['id' => $this->id], [...])`**: la app ya no hace
+> `Model::unguard()` global, y ese patrón mass-asigna la clave `id` al crear, así
+> que revienta con `MassAssignmentException` en cualquier modelo con `$fillable`.
+> Además era el vector de la escalada de privilegios que arregló la v1.0.0.
 
 ```php
 <?php
@@ -39,10 +47,12 @@ declare(strict_types=1);
 namespace App\Modules\{Modulo}\Forms;
 
 use App\Modules\{Modulo}\Models\{Modelo};
+use Livewire\Attributes\Locked;
 use Livewire\Form;
 
 class {Modelo}Form extends Form
 {
+    #[Locked]
     public ?int $id = null;
     public string $nombre = '';
     // ... resto de propiedades
@@ -56,10 +66,11 @@ class {Modelo}Form extends Form
 
     public function store(): {Modelo}
     {
-        $model = {Modelo}::updateOrCreate(
-            ['id' => $this->id],
-            ['nombre' => $this->nombre],
-        );
+        $model = $this->id !== null
+            ? {Modelo}::findOrFail($this->id)
+            : new {Modelo};
+
+        $model->fill(['nombre' => $this->nombre])->save();
 
         $this->id = $model->id;
 
@@ -78,8 +89,11 @@ Vive en `app/Modules/{Modulo}/Http/Livewire/FormComponent.php`.
 - `use KoreUi\Core\Concerns\InteractsWithFeedback;` para toasts.
 - `#[Locked] public ?{Modelo} $model = null;` — el modelo para editar.
 - `public {Modelo}Form $form;` — siempre se llama `$form`.
-- `mount()` rellena el form si hay modelo.
-- `save()` valida, llama a `$this->form->store()`, dispara toast y redirige.
+- `mount()` **autoriza** (`create` / `update`) y rellena el form si hay modelo.
+- `save()` **autoriza**, valida, llama a `$this->form->store()`, dispara toast y redirige.
+- **La autorización va dentro del componente, siempre.** El middleware
+  `permission:*` de las rutas no corre en `/livewire/update`; el `->hidden()` de
+  un `RowAction` es sólo cosmética.
 - Datos para la vista van en **computed properties** (`#[Computed]`), nunca en propiedades públicas sueltas.
 - `#[Layout('layouts.app')]` envuelve con el layout global.
 
@@ -111,8 +125,12 @@ final class FormComponent extends Component
     public function mount(): void
     {
         if (! $this->model instanceof {Modelo}) {
+            $this->authorize('create', {Modelo}::class);
+
             return;
         }
+
+        $this->authorize('update', $this->model);
 
         $this->form->fill([
             'id'     => $this->model->id,
@@ -122,6 +140,13 @@ final class FormComponent extends Component
 
     public function save(): mixed
     {
+        // Livewire\Component ya trae AuthorizesRequests.
+        if ($this->model instanceof {Modelo}) {
+            $this->authorize('update', $this->model);
+        } else {
+            $this->authorize('create', {Modelo}::class);
+        }
+
         $this->form->validate();
         $this->form->store();
 
@@ -248,7 +273,18 @@ final class Table{Modelos} extends KoreDataTable
 
     public function confirmDelete(int $id): void
     {
-        {Modelo}::find($id)?->delete();
+        $model = {Modelo}::find($id);
+
+        if (! $model instanceof {Modelo}) {
+            return;
+        }
+
+        // Obligatorio: /livewire/update no pasa por el middleware `permission:*`
+        // de las rutas, y el ->hidden() del RowAction es sólo cosmética.
+        $this->authorize('delete', $model);
+
+        $model->delete();
+
         $this->toast()->success(__('¡Listo!'), __('Eliminado.'))->send();
         $this->dispatch('{modulo}-updated');
     }

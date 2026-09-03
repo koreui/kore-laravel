@@ -4,7 +4,63 @@ declare(strict_types=1);
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
+use Spatie\Health\Commands\RunHealthChecksCommand;
+use Spatie\Health\Commands\ScheduleCheckHeartbeatCommand;
 
 Artisan::command('inspire', function (): void {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+/*
+|--------------------------------------------------------------------------
+| Scheduler
+|--------------------------------------------------------------------------
+|
+| Un solo cron en el servidor dispara todo esto:
+|
+|   * * * * * cd /opt/kore-laravel && php artisan schedule:run >> /dev/null 2>&1
+|
+| (En Docker lo hace el servicio `scheduler` de docker-compose.prod.yml.)
+|
+*/
+
+// Health checks. `health:check` almacena los resultados que sirven /health y
+// /health/json; `health:schedule-check-heartbeat` es el latido que consume
+// ScheduleCheck para saber que el propio scheduler sigue vivo. Sin estos dos
+// los checks registrados en HealthServiceProvider nunca corren.
+Schedule::command(RunHealthChecksCommand::class)
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer();
+
+Schedule::command(ScheduleCheckHeartbeatCommand::class)
+    ->everyMinute()
+    ->onOneServer();
+
+// Mantenimiento de colas.
+Schedule::command('queue:prune-batches')
+    ->daily()
+    ->onOneServer();
+
+Schedule::command('queue:prune-failed --hours=168')
+    ->daily()
+    ->onOneServer();
+
+// Purga del audit log (retención en config/activitylog.php).
+Schedule::command('activitylog:clean')
+    ->daily()
+    ->withoutOverlapping()
+    ->onOneServer();
+
+// Tokens de Sanctum caducados: sólo tiene sentido con la API encendida.
+if ((bool) config('kore-app.api.enabled')) {
+    Schedule::command('sanctum:prune-expired --hours=24')
+        ->daily()
+        ->onOneServer();
+}
+
+// `model:prune` se deja fuera a propósito: hoy ningún modelo del boilerplate
+// usa el trait Prunable / MassPrunable, y el comando aborta si no encuentra
+// ninguno. Descoméntalo cuando añadas el primero.
+// Schedule::command('model:prune')->daily()->onOneServer();

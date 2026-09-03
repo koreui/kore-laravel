@@ -27,8 +27,12 @@ final class FormComponent extends Component
     public function mount(): void
     {
         if (! $this->model instanceof User) {
+            $this->authorize('create', User::class);
+
             return;
         }
+
+        $this->authorize('update', $this->model);
 
         $firstRole = $this->model->roles->first();
         $roleName = $firstRole !== null ? (string) $firstRole->getAttribute('name') : Role::USER;
@@ -42,8 +46,19 @@ final class FormComponent extends Component
         ]);
     }
 
+    /**
+     * Las rutas de `users` llevan middleware `permission:*`, pero las llamadas
+     * Livewire viajan por /livewire/update, donde ese middleware NO corre. Por
+     * eso la autorización tiene que vivir dentro del componente.
+     */
     public function save(): mixed
     {
+        if ($this->model instanceof User) {
+            $this->authorize('update', $this->model);
+        } else {
+            $this->authorize('create', User::class);
+        }
+
         $this->form->validate();
         $this->form->store();
 

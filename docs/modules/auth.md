@@ -87,8 +87,48 @@ Ver tabla completa en [`../architecture/toggles.md`](../architecture/toggles.md)
 
 - **`API_ENABLED`** (default `true`): registra middleware `EnsureFrontendRequestsAreStateful` en grupo `api` y carga `Routes/api.php`.
 - **`AUTH_2FA_ENABLED`** (default `true`): Fortify activa la feature `twoFactorAuthentication([confirm + confirmPassword])`. Ruta `/two-factor-challenge` con `<x-kore::input-otp />`.
-- **`AUTH_MAGIC_LINKS`** (default `true`): registra `/magic-link` (Livewire). El componente envía OTP de 6 dígitos via `User::sendOneTimePassword()` y autentica con `attemptLoginUsingOneTimePassword`.
+- **`AUTH_MAGIC_LINKS`** (default `true`): registra `/magic-link` (Livewire). El componente envía OTP de 6 dígitos via `User::sendOneTimePassword()` y autentica con `attemptLoginUsingOneTimePassword`. Ver [Magic links](#magic-links-otp) para el detalle de anti-enumeración y throttle.
 - **`AUTH_SOCIAL_LOGIN`** (default `false`): registra rutas socialite. Cada proveedor se controla por separado (`SOCIAL_GOOGLE`, `SOCIAL_GITHUB`); el controller `abort(404)` si el proveedor consultado no está habilitado en `config('kore-app.socialite.{provider}')`.
+
+## Magic links (OTP)
+
+`app/Modules/Auth/Http/Livewire/MagicLink.php`. Dos decisiones de seguridad que
+el componente tiene que resolver por su cuenta, porque **las peticiones Livewire
+viajan por `/livewire/update`** y ahí no corre ni el middleware de las rutas ni
+el `limit_req` de nginx:
+
+**1. Anti-enumeración.** `sendCode()` NO valida `exists:users,email`. Si el
+correo no está registrado no se envía nada, pero `codeSent` pasa a `true` y la
+UI muestra el mismo mensaje ambiguo («Si :email está registrado, te enviamos un
+código»). Así el formulario no sirve para descubrir cuentas. `authenticate()`
+devuelve el mismo error genérico tanto si el usuario no existe como si el código
+es incorrecto.
+
+**2. Throttle del envío.** `sendCode()` usa la facade `RateLimiter` con clave
+`magic-link:{email}|{ip}`: **5 envíos cada 5 minutos**. Al excederlo se añade un
+error de validación al campo `email` con los segundos restantes
+(`RateLimiter::availableIn`) — nunca una excepción.
+
+**Consumo del código**: no se duplica throttle. El paquete ya limita los
+intentos dentro de `ConsumeOneTimePasswordAction`
+(`config/one-time-passwords.php` → `rate_limit_attempts`: 5 intentos por usuario
+cada 60 s).
+
+Cubierto por `app/Modules/Auth/Tests/Feature/MagicLinkTest.php`.
+
+## Rate limiting
+
+| Limiter      | Dónde se define                                  | Límite                          |
+|--------------|--------------------------------------------------|---------------------------------|
+| `login`      | `FortifyServiceProvider::configureRateLimiting()` | 5/min por email+IP              |
+| `two-factor` | `FortifyServiceProvider::configureRateLimiting()` | 5/min por sesión de login       |
+| `api`        | `AuthModuleServiceProvider::configureApiRateLimiting()` | 60/min por usuario o IP  |
+| magic link   | `MagicLink::sendCode()`                          | 5 envíos / 5 min por email+IP   |
+
+`bootstrap/app.php` aplica `throttleApi()` al grupo `api` (el esqueleto de
+Laravel 12 no lo trae) y configura `trustProxies`, sin el cual `$request->ip()`
+sería siempre la IP interna del contenedor y el limiter por IP no serviría de
+nada.
 
 ## Roles y permisos (spatie)
 

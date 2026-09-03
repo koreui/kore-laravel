@@ -3,7 +3,8 @@
         <h1 class="text-xl font-semibold">{{ __('Iniciar sesión con código') }}</h1>
         <p class="text-sm text-kore-muted-fg">
             @if ($codeSent)
-                {{ __('Te enviamos un código de 6 dígitos a :email', ['email' => $email]) }}
+                {{-- Mensaje deliberadamente ambiguo: no confirma si la cuenta existe. --}}
+                {{ __('Si :email está registrado, te enviamos un código de 6 dígitos.', ['email' => $email]) }}
             @else
                 {{ __('Te enviaremos un código a tu correo') }}
             @endif

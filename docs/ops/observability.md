@@ -4,12 +4,12 @@
 
 ## Resumen
 
-| Tool                          | Endpoint  | Activación                              | Notas                                  |
-|-------------------------------|-----------|-----------------------------------------|----------------------------------------|
-| Sentry                        | —         | `SENTRY_LARAVEL_DSN` en `.env`          | sin DSN, el SDK es no-op               |
-| Laravel Pulse                 | `/pulse`  | `PULSE_ENABLED=true`                    | dashboard nativo Laravel               |
-| spatie/laravel-health         | `/health` | siempre (registra desde `HealthServiceProvider`) | checks DB, cache, disk, schedule, app  |
-| spatie/laravel-activitylog    | —         | trait `LogsActivity` por modelo         | tabla `activity_log` lista             |
+| Tool                       | Endpoint                | Activación                                      | Acceso                                        |
+|----------------------------|-------------------------|-------------------------------------------------|-----------------------------------------------|
+| Sentry                     | —                       | `SENTRY_LARAVEL_DSN` en `.env`                   | —                                             |
+| Laravel Pulse              | `/pulse`                | `PULSE_ENABLED=true` (default `false`)           | `auth` + gate `viewPulse` → sólo superadmin    |
+| spatie/laravel-health      | `/health`, `/health/json` | siempre (`HealthServiceProvider`)              | HTML: `auth` + gate `viewHealth`; JSON: token   |
+| spatie/laravel-activitylog | —                       | trait `LogsActivity` por modelo                  | ya activo en `User` y `Role`                   |
 
 ## 1. Sentry
 
@@ -19,9 +19,30 @@ SENTRY_TRACES_SAMPLE_RATE=0.1
 SENTRY_PROFILES_SAMPLE_RATE=0.1
 ```
 
-- Si `SENTRY_LARAVEL_DSN` está vacío → SDK queda inactivo, no envía nada.
+**Cómo se activa de verdad** (dos piezas, ambas necesarias):
+
+1. **DSN**: sin `SENTRY_LARAVEL_DSN` el SDK queda inactivo y no envía nada.
+2. **Handler de excepciones**: `bootstrap/app.php` llama a
+   `\Sentry\Laravel\Integration::handles($exceptions)` dentro de
+   `withExceptions()`. Sin esa línea las excepciones no capturadas **no llegan
+   a Sentry** aunque el DSN esté puesto (`withExceptions()` estaba vacío hasta
+   la v1.0.0).
+
+**Canal de log opcional** — `config/logging.php` declara un canal `sentry`
+(driver `sentry`, nivel `LOG_SENTRY_LEVEL`, default `error`). No está en el
+stack por defecto; para enviar también los logs en producción:
+
+```env
+LOG_STACK=single,sentry
+LOG_SENTRY_LEVEL=error
+```
+
+Otras notas:
+
 - Release tracking: el `Dockerfile` recibe `--build-arg GIT_SHA=$(git rev-parse --short HEAD)` y lo expone como `SENTRY_RELEASE` para correlacionar errores con commits.
 - Config: `config/sentry.php` (publicado).
+- `trustProxies` está configurado en `bootstrap/app.php`: sin él, la IP que
+  Sentry adjunta a cada evento sería siempre la interna del contenedor.
 
 Capturar manualmente en Actions:
 
@@ -37,20 +58,22 @@ try {
 ## 2. Laravel Pulse
 
 ```env
-PULSE_ENABLED=true
+PULSE_ENABLED=false   # default; ponlo en true sólo donde lo quieras grabar
 ```
 
-Dashboard: `/pulse` (proteger con middleware en `App\Providers\PulseServiceProvider` o `Gate::define`).
+**Autorización**: el gate `viewPulse` está definido en
+`AuthModuleServiceProvider::registerObservabilityGates()` y sólo deja pasar al
+rol `superadmin`. Pulse trae su propio `viewPulse` (que permitiría el entorno
+`local` a cualquiera); como los providers de paquete arrancan antes que los de
+la app, la definición del boilerplate gana.
+
+> Las rutas de Pulse se registran aunque `PULSE_ENABLED=false`; el toggle sólo
+> apaga los *recorders*. Por eso el gate importa siempre.
 
 Recorders activos por defecto: requests, queries lentas, jobs lentos, cache hits, exceptions, slow outgoing requests.
 
-Para producción agregar a `config/pulse.php`:
-
-```php
-'middleware' => ['web', 'auth', 'role:admin'],
-```
-
-Y un cron para `pulse:check` y `pulse:work`:
+Cron para `pulse:check` y `pulse:work` (no están en el scheduler del
+boilerplate porque sólo aplican con Pulse encendido):
 
 ```bash
 * * * * * cd /opt/kore-laravel && php artisan pulse:check >> /dev/null 2>&1
@@ -73,14 +96,52 @@ Health::checks([
 ]);
 ```
 
-Endpoints expuestos por el paquete:
+### Endpoints
 
-- `/health` — vista HTML
-- `/health/json` — JSON
+El paquete **no** publica rutas por su cuenta: las registra
+`HealthServiceProvider::registerRoutes()`.
 
-**Protegerlos** en producción si los expones públicamente: agrega un token con `HEALTH_OAUTH_TOKEN` y middleware (ver docs Spatie).
+| Ruta           | Para          | Protección                                                     |
+|----------------|---------------|----------------------------------------------------------------|
+| `/health`      | humanos (HTML)| `web` + `auth` + `can:viewHealth` (gate → sólo superadmin)      |
+| `/health/json` | monitores     | middleware `RequiresSecretToken` → header `X-Secret-Token`      |
 
-Agregar checks: edita `HealthServiceProvider` o crea un check custom (`spatie/laravel-health/v1/available-checks`).
+```env
+# config/health.php → secret_token
+HEALTH_SECRET_TOKEN=un-token-largo-y-aleatorio
+```
+
+> ⚠️ El middleware del paquete **deja pasar todo si el token está vacío**. En
+> producción `HEALTH_SECRET_TOKEN` es obligatorio.
+
+```bash
+curl -H "X-Secret-Token: $HEALTH_SECRET_TOKEN" https://tu-dominio/health/json
+```
+
+`?fresh=1` fuerza a re-ejecutar los checks en vez de servir el último resultado
+almacenado.
+
+### Almacenamiento
+
+Los resultados van a la tabla `health_check_result_history_items`
+(`EloquentHealthResultStore`). La migración está publicada en
+`database/migrations/*_create_health_tables.php`.
+
+### Scheduler
+
+`routes/console.php` programa (ver sección «Scheduler» más abajo):
+
+- `health:check` — cada minuto, genera los resultados que sirven ambos endpoints
+- `health:schedule-check-heartbeat` — cada minuto, el latido que consume `ScheduleCheck`
+
+Con un único cron en el servidor (o el servicio `scheduler` de
+`docker-compose.prod.yml`, que ahora sí tiene trabajo que hacer):
+
+```bash
+* * * * * cd /opt/kore-laravel && php artisan schedule:run >> /dev/null 2>&1
+```
+
+Agregar checks: edita `HealthServiceProvider::registerChecks()` o crea un check custom (`spatie/laravel-health/v1/available-checks`).
 
 Notificaciones a Slack cuando un check falla:
 
@@ -88,19 +149,24 @@ Notificaciones a Slack cuando un check falla:
 Health::notifications()->slackWebhookUrl(env('HEALTH_SLACK_WEBHOOK'));
 ```
 
-Cron requerido para que `ScheduleCheck` reciba heartbeats:
-
-```bash
-* * * * * cd /opt/kore-laravel && php artisan schedule:run >> /dev/null 2>&1
-```
-
 ## 4. spatie/laravel-activitylog
 
-Tabla `activity_log` ya está creada (migración aplicada en Fase 5). Para auditar un modelo:
+Tabla `activity_log` ya está creada. **Ya está en uso**: `App\Models\User` y
+`App\Modules\Auth\Models\Role` traen el trait, así que altas, cambios de
+nombre/email y cambios de rol quedan auditados con su `causer`.
+
+> El paquete es la v5: el trait vive en
+> `Spatie\Activitylog\Models\Concerns\LogsActivity` y `LogOptions` en
+> `Spatie\Activitylog\Support\LogOptions` (en v4 estaban en `Traits\` y en
+> la raíz). El método `dontSubmitEmptyLogs()` se llama ahora
+> `dontLogEmptyChanges()`, y los cambios se leen de `attribute_changes`, no de
+> `properties`.
+
+Para auditar otro modelo:
 
 ```php
-use Spatie\Activitylog\Traits\LogsActivity;
-use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 final class Order extends Model
 {
@@ -109,9 +175,9 @@ final class Order extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['status', 'total'])
+            ->logOnly(['status', 'total'])   // nunca password ni secretos
             ->logOnlyDirty()
-            ->dontSubmitEmptyLogs();
+            ->dontLogEmptyChanges();
     }
 }
 ```
@@ -119,12 +185,39 @@ final class Order extends Model
 Consultar:
 
 ```php
-$order->activities;            // colección de logs
+$order->activities;                        // colección de logs
+$activity->attribute_changes['attributes']; // valores nuevos
+$activity->attribute_changes['old'];        // valores anteriores
+$activity->causer;                          // quién lo hizo
 
 activity()
     ->causedBy($user)
     ->performedOn($order)
     ->log('cancelled');        // log manual
+```
+
+Purga: `activitylog:clean` corre a diario desde el scheduler (retención en
+`config/activitylog.php`).
+
+## 5. Scheduler
+
+`routes/console.php` concentra todas las tareas programadas:
+
+| Comando                                | Frecuencia | Por qué                                        |
+|----------------------------------------|------------|------------------------------------------------|
+| `health:check`                         | cada minuto| genera los resultados de `/health`             |
+| `health:schedule-check-heartbeat`      | cada minuto| latido que consume `ScheduleCheck`             |
+| `queue:prune-batches`                  | diario     | limpia batches viejos                          |
+| `queue:prune-failed --hours=168`       | diario     | limpia jobs fallidos de más de 7 días          |
+| `activitylog:clean`                    | diario     | purga el audit log                             |
+| `sanctum:prune-expired --hours=24`     | diario     | sólo si `API_ENABLED=true`                     |
+
+`model:prune` está comentado a propósito: hoy ningún modelo usa `Prunable`.
+
+Verificar en cualquier momento:
+
+```bash
+php artisan schedule:list
 ```
 
 ## Logs estructurados
