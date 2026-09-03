@@ -36,6 +36,13 @@
         <!-- PulseAccessTest renderiza el bundle JS de Pulse; con el memory_limit de 128M de algunos PHP la suite revienta. -->
         <ini name="memory_limit" value="512M"/>
         <env name="APP_ENV" value="testing" force="true"/>
+        <!--
+            Clave fija y desechable para la suite: sólo firma sesiones y cookies de
+            test. Sin ella, en CI (donde no hay .env) toda petición web muere con
+            MissingAppKeyException; con ella, la suite no depende de la APP_KEY del
+            desarrollador ni de copiar .env.example.
+        -->
+        <env name="APP_KEY" value="base64:zz0tTHUiTwWvBGr0R228Velea3LYg6PiPFW/ndcJVbc=" force="true"/>
         <env name="APP_LOCALE" value="es" force="true"/>
         <env name="APP_FALLBACK_LOCALE" value="en" force="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file" force="true"/>

@@ -10,7 +10,7 @@
         ['icon' => 'layers', 'title' => __('Modular Monolith'), 'body' => __('Cada dominio aislado en app/Modules con su propio provider, rutas, vistas, modelos y tests.')],
         ['icon' => 'shield-check', 'title' => __('Auth completo'), 'body' => __('Fortify · Sanctum · 2FA · Magic links · Socialite. Roles + permisos con bypass de superadmin.')],
         ['icon' => 'sparkles', 'title' => __('AI-friendly'), 'body' => __('Laravel Boost MCP, CLAUDE.md, AGENTS.md y skills propios para que la IA scaffold módulos sola.')],
-        ['icon' => 'gauge', 'title' => __('Calidad incluida'), 'body' => __('Pint, Larastan 8, Rector y Pest 3. Pre-commit hooks. CI con matrix PHP 8.3/8.4.')],
+        ['icon' => 'gauge', 'title' => __('Calidad incluida'), 'body' => __('Pint, Larastan 8, Rector y Pest 3. Pre-commit hooks. CI en PHP 8.4.')],
         ['icon' => 'building-2', 'title' => __('Multi-tenancy'), 'body' => __('stancl/tenancy v3 detrás de un toggle. Un comando lo activa: kore:tenancy:enable.')],
         ['icon' => 'rocket', 'title' => __('Producción ready'), 'body' => __('Stack Docker (PHP-FPM + Nginx + MySQL + Redis), Sentry, Pulse y health checks.')],
     ];

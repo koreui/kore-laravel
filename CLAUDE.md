@@ -35,7 +35,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 
 ## Stack
 
-- PHP 8.3+ (soporta 8.4) · Laravel 12 · Livewire 4 · Alpine.js · Tailwind CSS v4
+- PHP 8.4+ · Laravel 12 · Livewire 4 · Alpine.js · Tailwind CSS v4
 - Componentes UI: **koreUi** (`<x-kore::*>`), nunca Flux UI ni otras
 - Auth: Fortify + Sanctum (toggle) + spatie/laravel-permission
 - DTOs: spatie/laravel-data
@@ -138,7 +138,7 @@ pone una persona, porque es quien responde cuando la fecha vence. Para PHPStan
 | commit-msg | ~1 s | `ConventionalCommitMsgHook` — Conventional Commits (R43) |
 | pre-push | ~30 s | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
 | `composer ci` | ~90 s | + `pint --test` + `composer arch` + `rector --dry-run` + `pest` |
-| CI (GitHub) | ~3 min | todo + matriz 8.3/8.4 + `composer audit` + `npm run build` + E2E |
+| CI (GitHub) | ~3 min | todo (PHP 8.4) + `composer audit` + `npm run build` + E2E |
 | Release (GitHub) | — | al empujar un tag `v*`: `kore:changelog:section` + GitHub Release (R42) |
 
 Los hooks se instalan solos con `composer install`; se re-registran con

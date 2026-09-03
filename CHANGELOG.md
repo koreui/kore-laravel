@@ -10,6 +10,39 @@ desde el upstream (`git remote add kore https://github.com/koreui/kore-laravel`)
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-03
+
+### Corregido
+
+- **El workflow `ci.yml` llevaba en rojo desde la v1.0.0** por dos causas que
+  ninguna release había mirado (los hooks locales y el E2E sí pasaban, y el
+  E2E instala Composer). (1) El job `assets` hacía `npm run build` sin
+  `composer install`, y `resources/css/app.css` importa el tema de koreUi desde
+  `vendor/kore-ui/kore-ui/…`: «Can't resolve». Ahora instala PHP y Composer
+  (con caché) antes de Node. (2) El job `quality` corría Pest sin `.env`, y
+  toda petición web moría con `MissingAppKeyException`. `phpunit.xml` fija ahora
+  una `APP_KEY` de pruebas desechable con `force="true"`: la suite deja de
+  depender de la clave del desarrollador y pasa igual con `.env`, sin él o con
+  uno copiado de `.env.example` (los tres escenarios, comprobados).
+
+### Cambiado
+
+- **PHP 8.4 es el mínimo** (`composer.json` → `"php": "^8.4"`; la matriz de CI
+  pasa de 8.3/8.4 a 8.4). No es una decisión nueva sino la que el lock ya había
+  tomado sin decirlo: `spatie/laravel-activitylog` 5, `laravel-one-time-passwords`
+  1.1 y Symfony 8.1 exigen 8.4, así que el job de PHP 8.3 fallaba en
+  `composer install` con «Your lock file does not contain a compatible set of
+  packages» y el boilerplate nunca se pudo instalar en 8.3. Los docs que decían
+  «PHP 8.3+ (soporta 8.4)» dicen ahora 8.4+ (R41). PHP 8.5 entrará con la v2.0.
+
+### Migración desde 1.4.0
+
+Si tu derivado corre en PHP 8.3, ya no instalaba este lock: sube a 8.4 (la
+imagen de producción, `php:8.4-fpm-alpine`, ya lo era). Copia después los tres cambios (`.github/workflows/ci.yml` → pasos de PHP y Composer en
+el job `assets`; `phpunit.xml` → `<env name="APP_KEY" …>`). Genera tu propia
+clave con `php artisan key:generate --show`: es sólo para tests, pero no
+conviene compartirla entre repositorios.
+
 ## [1.4.0] - 2026-09-03
 
 «DX y AI tooling». Tres cosas del repositorio se mantenían a mano y sólo se
@@ -1024,7 +1057,8 @@ scaffold, cifras inventadas en los docs).
   el paquete cambiara. Republicarlas es un `vendor:publish` cuando de verdad
   haya que personalizarlas.
 
-[Unreleased]: https://github.com/koreui/kore-laravel/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/koreui/kore-laravel/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/koreui/kore-laravel/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/koreui/kore-laravel/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/koreui/kore-laravel/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/koreui/kore-laravel/compare/v1.1.0...v1.2.0

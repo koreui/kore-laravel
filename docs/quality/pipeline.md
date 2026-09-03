@@ -37,7 +37,7 @@ no verifica nada.
 | **commit-msg** | ~1 s | **0,3 s** | `ConventionalCommitMsgHook` — el asunto sigue Conventional Commits (R43) |
 | **pre-push** | ~30 s | **4 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
 | **`composer ci`** | ~90 s | **16 s** | `pint --test` (1,1) + `phpstan` (0,6 con caché, 2,0 en frío) + `composer arch` (0,2) + `rector --dry-run` (4,3) + `pest` (9,3, secuencial) |
-| **CI (GitHub)** | ~3 min | — | `composer ci` en matriz 8.3 / 8.4 + `composer audit` + `npm ci && npm run build` + E2E |
+| **CI (GitHub)** | ~3 min | — | `composer ci` en PHP 8.4 + `composer audit` + `npm ci && npm run build` + E2E |
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + `softprops/action-gh-release` |
 
 Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v1.4.0 y
@@ -355,7 +355,7 @@ php artisan git-hooks:register
 
 Job `quality`:
 
-- Matrix PHP 8.3 / 8.4
+- PHP 8.4 (la matriz 8.3/8.4 se retiró en la v1.4.1: el lock exige 8.4; 8.5 entrará en la v2.0)
 - Pasos (en orden, fallan rápido):
   1. `composer install` (cache de `vendor/`)
   2. `composer audit` — advisories de seguridad, bloqueante
@@ -365,7 +365,8 @@ Job `quality`:
   6. `vendor/bin/rector process --dry-run --no-progress-bar`
   7. `vendor/bin/pest --parallel --compact`
 
-Job `assets`: Node 20, `npm ci`, `npm run build`. Los tests corren con
+Job `assets`: `composer install` (el CSS importa el tema de koreUi desde
+`vendor/`), Node 20, `npm ci`, `npm run build`. Los tests corren con
 `withoutVite()`, así que sin este job un build de Vite roto pasaría verde.
 
 - Trigger: `push` a `main` y todo `pull_request` contra `main`

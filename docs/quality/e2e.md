@@ -12,7 +12,7 @@
 ## Requisitos en una máquina limpia
 
 ```bash
-# Node 20+ y PHP 8.3+
+# Node 20+ y PHP 8.4+
 composer install
 npm ci
 npm run e2e:install     # descarga Chromium (playwright install chromium)

@@ -43,7 +43,7 @@
     "Outline": "Outline",
     "Para que dejes de armar el mismo setup en cada proyecto.": "So you stop wiring up the same setup in every project.",
     "Pest": "Pest",
-    "Pint, Larastan 8, Rector y Pest 3. Pre-commit hooks. CI con matrix PHP 8.3/8.4.": "Pint, Larastan 8, Rector and Pest 3. Pre-commit hooks. CI with a PHP 8.3/8.4 matrix.",
+    "Pint, Larastan 8, Rector y Pest 3. Pre-commit hooks. CI en PHP 8.4.": "Pint, Larastan 8, Rector and Pest 3. Pre-commit hooks. CI on PHP 8.4.",
     "Primary": "Primary",
     "Producción ready": "Production ready",
     "Soft": "Soft",

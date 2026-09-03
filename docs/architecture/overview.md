@@ -6,7 +6,7 @@
 
 | Capa            | Tecnología                                  |
 |-----------------|---------------------------------------------|
-| Lenguaje        | PHP 8.3+ (soporta 8.4)                      |
+| Lenguaje        | PHP 8.4+                                    |
 | Framework       | Laravel 12                                  |
 | UI              | Livewire 4 + Alpine.js + Tailwind CSS v4    |
 | Componentes     | [koreUi](https://packagist.org/packages/kore-ui/kore-ui) — `<x-kore::*>` |

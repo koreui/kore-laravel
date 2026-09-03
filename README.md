@@ -4,7 +4,7 @@ Boilerplate Laravel 12 production-ready con Livewire 4, Tailwind CSS v4, koreUi 
 
 ## Stack
 
-- **PHP** 8.3+ (soporta 8.4) · **Laravel** 12
+- **PHP** 8.4+ · **Laravel** 12
 - **UI** Livewire 4 + Alpine.js + Tailwind CSS v4 + [koreUi](https://github.com/koreui/kore-ui)
 - **Auth** Fortify + Sanctum (toggle) + spatie/laravel-permission
 - **DTOs** spatie/laravel-data

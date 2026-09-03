@@ -12,7 +12,7 @@
     ],
     "license": "MIT",
     "require": {
-        "php": "^8.3",
+        "php": "^8.4",
         "kore-ui/kore-ui": "^2.2",
         "laravel/fortify": "^1.36",
         "laravel/framework": "^12.0",
