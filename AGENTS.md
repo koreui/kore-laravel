@@ -34,9 +34,10 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - DTOs: spatie/laravel-data
 - Feature flags: Laravel Pennant
 - Tests: Pest 3 (con arch tests en `tests/Arch/ArchitectureTest.php`)
+- E2E: Playwright standalone (TypeScript) en `tests/e2e/`, entorno aislado con `.env.e2e`
 - Calidad: Pint + Larastan nivel 8 + Rector
 - Observabilidad: Sentry · Laravel Pulse · spatie/laravel-health · spatie/laravel-activitylog
-- AI: Laravel Boost MCP + skills propios en `.claude/skills/` (module-scaffold, kore-action-create, kore-livewire-create)
+- AI: Laravel Boost MCP + skills propios en `.claude/skills/` (module-scaffold, kore-action-create, kore-livewire-create, kore-e2e-test)
 
 ## Arquitectura — Modular Monolith + Action Pattern
 
@@ -118,6 +119,20 @@ del provider del módulo (ver `FortifyServiceProvider::configureTwoFactorFeature
   `diff -w vendor/kore-ui/kore-ui/config/kore-ui.php config/kore-ui.php` — el `-w` deja fuera el
   ruido de alineación y solo quedan las diferencias reales.
 
+## Tests E2E (Playwright)
+
+- La suite vive en `tests/e2e/` y se corre con `npm run e2e` (o `composer e2e`). Ver [`docs/quality/e2e.md`](docs/quality/e2e.md).
+- Entorno aislado: `.env.e2e` (commiteado, `APP_ENV=e2e`), `database/e2e.sqlite` y `database/seeders/E2eSeeder.php`.
+  `globalSetup` construye Vite, recrea la base y siembra; no hace falta preparar nada a mano.
+- Cuentas sembradas (password `password`): `superadmin@`, `editor@`, `viewer@`, `member@` + `e2e.test`.
+- **Nunca añadas `data-testid` a las Blade para que pase un test.** Localizadores accesibles
+  (`getByRole` → `getByLabel` → `getByPlaceholder` → `getByText`); si algo no se puede localizar,
+  usa CSS estable y anótalo como mejora de accesibilidad.
+- **Prohibido `page.waitForTimeout()`**: espera a un cambio observable (toast, fila, URL, `toHaveCount`).
+- Cada test crea sus propios datos con `uniqueEmail()` / `uniqueName()`. La base sólo se resetea en `globalSetup`.
+- Todo módulo nuevo con UI aporta como mínimo: un smoke, un happy path y un spec de autorización por rol.
+- Skill: `.claude/skills/kore-e2e-test/`.
+
 ## Comandos útiles
 
 ```bash
@@ -132,7 +147,7 @@ composer test                       # Pest 3
 
 composer e2e                        # suite E2E (ver docs/quality/e2e.md)
 
-# Calidad (configurada en Fase 3)
+# Calidad
 composer lint                       # Pint
 composer analyse                    # PHPStan/Larastan
 composer refactor                   # Rector
@@ -151,12 +166,15 @@ php artisan boost:mcp               # arranca el server (lo usa la IA)
 - ❌ No crear `app/Services/`, `app/Repositories/` globales — todo va dentro del módulo correspondiente.
 - ❌ No instalar paquetes nuevos sin consultar al usuario.
 - ❌ No bypassear los toggles (`config('kore-app.*')`) con código directo — el boilerplate debe seguir siendo reusable.
+- ❌ No meter `data-testid` en las Blade ni usar `waitForTimeout` en los E2E.
 
 ## Antes de finalizar cualquier cambio
 
 1. `vendor/bin/pint --dirty --format agent`
 2. `./vendor/bin/pest` (al menos los tests del módulo tocado)
 3. (Cuando aplique) `./vendor/bin/phpstan analyse`
+4. (Si tocaste rutas, vistas, Livewire o permisos) `npm run e2e`; si añadiste una pantalla,
+   su spec en `tests/e2e/specs/{modulo}/`
 
 ---
 

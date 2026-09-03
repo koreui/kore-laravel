@@ -27,6 +27,8 @@ docs/
     └── working-with-ai.md     Laravel Boost + CLAUDE/AGENTS + skills propios
 ```
 
+Fuera de `docs/` viven también [`CHANGELOG.md`](../CHANGELOG.md) (qué cambió en cada versión y qué aplicar al actualizar un proyecto derivado) y [`docs/audit/`](audit/) (auditorías puntuales con su roadmap).
+
 ## Cómo se usa
 
 - **Trabajando en código**: lee `CLAUDE.md` (resumen + reglas de oro). Si necesitas profundizar, salta al doc relevante de aquí.

@@ -23,6 +23,23 @@ final class TableUsers extends KoreDataTable
 {
     use InteractsWithFeedback;
 
+    /**
+     * Workaround koreUi 2.2: `RowAction::confirm()` arma el diálogo en el
+     * cliente y, al aceptar, `handleConfirmCallback()` sólo ejecuta métodos
+     * presentes en `$koreConfirmable`, lista que únicamente rellena
+     * `Confirm::send()` (camino que las row actions no recorren, a diferencia
+     * de las bulk actions). Sin esto `confirmDelete()` nunca se invoca.
+     * `hydrate()` corre tras restaurar las propiedades del snapshot, justo
+     * antes de despachar el listener. Quitar cuando koreUi autorice las row
+     * actions por sí mismo.
+     */
+    public function hydrate(): void
+    {
+        if (! in_array('confirmDelete', $this->koreConfirmable, true)) {
+            $this->koreConfirmable[] = 'confirmDelete';
+        }
+    }
+
     /** @return Builder<User> */
     public function query(): Builder
     {

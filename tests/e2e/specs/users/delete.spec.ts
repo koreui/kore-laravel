@@ -34,23 +34,8 @@ test.describe('Users · borrar como superadmin', () => {
     });
 
     test('confirmar borra la fila', async ({ page }) => {
-        // BUG CONOCIDO (koreUi 2.2) — el borrado nunca llega a ejecutarse.
-        //
-        // RowAction::confirm() + ->wireMethod() construyen el diálogo en el
-        // CLIENTE (`buildKoreConfirmPayload`, vendor/kore-ui/kore-ui/src/
-        // DataTable/Actions/RowAction.php:214) y al aceptar, ConfirmDialog
-        // emite `kore:confirm-callback`. Pero el listener
-        // InteractsWithFeedback::handleConfirmCallback() (vendor/kore-ui/
-        // kore-ui/src/Core/Concerns/InteractsWithFeedback.php:51) sólo ejecuta
-        // métodos previamente autorizados en $koreConfirmable, y esa lista la
-        // rellena únicamente Confirm::send() en el SERVIDOR — camino que las
-        // acciones de fila no recorren (las bulk actions sí, y por eso ésas
-        // funcionan). Resultado: `confirmDelete` no se invoca, no hay toast y
-        // el usuario sigue en la base de datos.
-        //
-        // Quitar el fixme en cuanto koreUi autorice también las row actions.
-        test.fixme();
-
+        // koreUi 2.2 no autoriza el wireMethod de las row actions con confirm();
+        // TableUsers::hydrate() lo registra en $koreConfirmable como workaround.
         const created = await createUserViaUi(page);
         const users = new UsersIndexPage(page);
 

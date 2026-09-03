@@ -17,7 +17,19 @@ test.describe('Magic link (código por email)', () => {
         await expect(magic.digit(1)).toBeVisible();
         await expect(magic.verify).toBeVisible();
         await expect(magic.sendCode).toHaveCount(0);
-        await expect(page.getByText(/Te enviamos un código de 6 dígitos/)).toBeVisible();
+        await expect(page.getByText(/está registrado, te enviamos un código de 6 dígitos/)).toBeVisible();
+    });
+
+    test('un email no registrado muestra exactamente el mismo estado (anti-enumeración)', async ({ page }) => {
+        const magic = new MagicLinkPage(page);
+
+        await magic.goto();
+        await magic.requestCode('nadie-' + Date.now() + '@spec.test');
+
+        await expect(magic.digit(1)).toBeVisible();
+        await expect(magic.verify).toBeVisible();
+        await expect(magic.sendCode).toHaveCount(0);
+        await expect(page.getByText(/está registrado, te enviamos un código de 6 dígitos/)).toBeVisible();
     });
 
     test('un código incorrecto muestra el error y no autentica', async ({ page }) => {

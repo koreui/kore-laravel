@@ -10,10 +10,6 @@ desde el upstream (`git remote add kore https://github.com/koreui/kore-laravel`)
 
 ## [Unreleased]
 
-### Añadido
-
-- Suite E2E con Playwright (en integración).
-
 ## [1.0.0] - 2026-09-02
 
 Primera versión etiquetada. Cierra la brecha entre lo que la documentación
@@ -48,6 +44,13 @@ scaffold, cifras inventadas en los docs).
 
 ### Añadido
 
+- **Suite E2E con Playwright** (`tests/e2e/`, `playwright.config.ts`):
+  45 specs sobre landing, auth (login, registro, reset, magic link con lectura
+  del código real desde el log, rutas protegidas) y Users (listado, alta,
+  edición, borrado, permisos por rol). Entorno aislado con `.env.e2e`,
+  `database/e2e.sqlite` y `E2eSeeder`; fixtures por rol; page objects;
+  workflow `e2e.yml`; doc `docs/quality/e2e.md`; skill `kore-e2e-test`;
+  scripts `npm run e2e*` y `composer e2e`.
 - **Observabilidad conectada de punta a punta**: `Integration::handles()` de
   Sentry en `withExceptions()` y canal de log `sentry`; rutas `/health` (HTML,
   sesión + gate) y `/health/json` (token `HEALTH_SECRET_TOKEN`); scheduler real
@@ -116,6 +119,11 @@ scaffold, cifras inventadas en los docs).
 
 ### Corregido
 
+- Borrar un usuario desde la acción de fila de la tabla no hacía nada: koreUi
+  2.2 arma el diálogo de `RowAction::confirm()` en el cliente pero no autoriza
+  el método en `$koreConfirmable`, así que el listener lo descartaba.
+  `TableUsers::hydrate()` lo registra como workaround hasta que koreUi lo
+  resuelva.
 - `HEALTH_OAUTH_TOKEN` en `.env.example` no coincidía con el
   `HEALTH_SECRET_TOKEN` que lee `config/health.php`.
 - `UserForm` citaba `docs/guides/crud/livewire-form.md`, que no existe.
