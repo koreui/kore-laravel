@@ -64,6 +64,23 @@ return [
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
+
+            /*
+             * Opciones del dump que lee spatie/db-dumper a través de
+             * Spatie\Backup\Tasks\Backup\DbDumperFactory: cada clave de `dump`
+             * se convierte en una llamada al dumper (`use_single_transaction`
+             * → useSingleTransaction(), `timeout` → setTimeout(),
+             * `add_extra_option` → addExtraOption()). Sólo aquí: sqlite no
+             * necesita ninguna.
+             */
+            'dump' => [
+                'use_single_transaction' => true,
+                'timeout' => 300,
+                // La red interna de docker-compose.prod.yml va sin TLS y el
+                // cliente mariadb 11.x lo exige por defecto; con --skip-ssl
+                // vuelve a funcionar. Déjalo vacío si tu MySQL sí habla TLS.
+                'add_extra_option' => env('BACKUP_DUMP_EXTRA_OPTION', '--skip-ssl'),
+            ],
         ],
 
         'mariadb' => [

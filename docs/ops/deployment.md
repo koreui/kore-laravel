@@ -173,7 +173,11 @@ QUEUE_CONNECTION=redis
 REDIS_HOST=redis
 REDIS_PASSWORD=<openssl rand -base64 24>
 
-LOG_LEVEL=error
+# Logging: a stderr, en JSON, para que lo recoja Docker (ver § Logs)
+LOG_CHANNEL=stack
+LOG_STACK=stderr
+LOG_STDERR_FORMATTER=Monolog\Formatter\JsonFormatter
+LOG_LEVEL=warning
 TRUSTED_PROXIES=*
 
 # Toggles del boilerplate (kore-app)
@@ -198,7 +202,31 @@ PULSE_ENABLED=true
 # Health: /health/json exige este token en la cabecera X-Secret-Token.
 # Si lo dejas vacío, el endpoint queda ABIERTO.
 HEALTH_SECRET_TOKEN=<openssl rand -hex 32>
+
+# Cabeceras (ver «Cabeceras de seguridad y CSP»). Report-only el primer
+# despliegue; sin CSP_REPORT_URI nadie ve lo que se bloquearía.
+CSP_ENABLED=true
+CSP_REPORT_ONLY=true
+CSP_REPORT_URI=<endpoint de informes CSP, p. ej. el de Sentry>
+
+# Backups (ver «Backups» más abajo). La contraseña es OBLIGATORIA: sin ella el
+# zip va en claro.
+BACKUP_ENABLED=true
+BACKUP_DISKS=local
+BACKUP_ARCHIVE_PASSWORD=<openssl rand -base64 32, guardada fuera del VPS>
+BACKUP_NOTIFICATION_MAIL=ops@tu-dominio.com
 ```
+
+`APP_DEBUG=false` no es una recomendación: desde la v1.3.0 la aplicación **se
+niega a arrancar** con `APP_DEBUG=true` y `APP_ENV=production`
+(`AppServiceProvider::refuseToBootWithDebugInProduction()`, que lanza un
+`RuntimeException` durante el boot). La razón es que la pantalla de error de
+Laravel en modo debug vuelca el `.env` entero —`APP_KEY`, credenciales de base
+de datos, tokens de terceros— a quien provoque cualquier excepción, y un `.env`
+mal copiado no da ninguna otra señal hasta que alguien ve el volcado. Si el
+contenedor arranca y muere con ese mensaje en `docker compose logs app`, el
+arreglo es poner `APP_DEBUG=false` y volver a cachear la config
+(`php artisan config:cache`).
 
 ### Generar `APP_KEY`
 
@@ -309,15 +337,42 @@ docker compose -f docker-compose.prod.yml up -d --no-deps app queue scheduler
 docker compose -f docker-compose.prod.yml restart nginx
 ```
 
-Las migraciones se ejecutan automáticamente en el arranque del contenedor `app`.
+El entrypoint del contenedor `app` hace, en este orden: sincronizar los assets,
+`migrate --force`, calentar los caches (`config`, `route`, `view`) y, desde la
+v1.3.0, **avisar a los workers** con `queue:restart`.
+
+`queue:restart` deja una marca de tiempo en la caché (Redis en producción). Los
+workers la miran entre job y job: terminan el que tienen entre manos y salen
+limpiamente, en vez de que un `docker restart` les corte una ejecución a la
+mitad. Es la pieza que cierra la ventana entre «las migraciones ya están
+aplicadas» y «el worker todavía tiene el esquema viejo en memoria».
+
+Lo que `queue:restart` **no** hace es cambiar el código del worker: el
+contenedor `queue` se levanta con la imagen con la que fue creado, así que
+`queue` y `scheduler` siguen en el `up -d --no-deps` de arriba. Con la imagen
+reconstruida, `up -d` los recrea; sin él, el worker reaparece con la versión
+anterior.
+
+Cuándo hace falta tocarlos a mano:
+
+| Situación | Qué hacer |
+|-----------|-----------|
+| Código nuevo (el caso normal) | Nada: `up -d --no-deps app queue scheduler` ya los recrea |
+| Sólo migraciones o sólo config cacheada en `app` | Nada: el `queue:restart` del entrypoint basta |
+| Cambió el `.env` | `docker compose -f docker-compose.prod.yml restart queue scheduler` — leen su `env_file` al arrancar y cachean la config en su propio entrypoint |
 
 ---
 
 ## 7. Verificación post-despliegue
 
 ```bash
-# Headers de seguridad
-curl -sI https://tu-dominio.com | grep -iE "x-frame|strict-transport|x-content-type|content-security"
+# Headers de seguridad (los emite la app, no Nginx: ver «Cabeceras de seguridad y CSP»)
+curl -sI https://tu-dominio.com | grep -iE "content-security|strict-transport|x-frame|x-content-type|referrer-policy|permissions-policy"
+
+# En el primer despliegue debe salir Content-Security-Policy-REPORT-ONLY.
+# Si sale Content-Security-Policy a secas, alguien ya puso CSP_REPORT_ONLY=false.
+# Si salen las dos, hay una CSP colada en el Nginx del host: quítala.
+curl -sI https://tu-dominio.com | grep -ci "content-security-policy"   # debe ser 1
 
 # .env y vendor/ no accesibles (deben retornar 404)
 curl -s -o /dev/null -w "%{http_code}\n" https://tu-dominio.com/.env
@@ -333,6 +388,526 @@ nc -zv <IP-del-VPS> 6379
 # /health es HTML y pide sesión + rol superadmin.
 curl -s -H "X-Secret-Token: $HEALTH_SECRET_TOKEN" https://tu-dominio.com/health/json | jq .
 ```
+
+---
+
+## Cabeceras de seguridad y CSP
+
+### Quién pone qué
+
+Desde la v1.3.0 las cabeceras las emite **la aplicación**, no el hosting:
+`config/security.php` define la política y `App\Http\Middleware\SecurityHeaders`
+la añade a toda respuesta del grupo `web`. Así viajan con el código, se prueban
+en `tests/Feature/SecurityHeadersTest.php` y funcionan igual en este Docker, en
+Forge, en Laravel Cloud o en un `artisan serve`.
+
+| Cabecera | La emite | Dónde se cambia |
+|----------|----------|-----------------|
+| `Content-Security-Policy` (o `…-Report-Only`) | Sólo la app | `config/security.php` |
+| `Strict-Transport-Security` | Sólo la app, y sólo sobre HTTPS | `config/security.php` + `SECURITY_HSTS` |
+| `X-Frame-Options` | App + Nginx | `config/security.php` |
+| `X-Content-Type-Options` | App + Nginx | `config/security.php` |
+| `Referrer-Policy` | App + Nginx | `config/security.php` |
+| `Permissions-Policy` | App + Nginx | `config/security.php` |
+| `Cross-Origin-Opener-Policy` | Sólo la app | `config/security.php` |
+| `X-XSS-Protection` | Sólo Nginx | `docker/nginx/nginx.conf` |
+
+Las cuatro que están duplicadas lo están a propósito: Nginx sirve directamente
+`/build/`, las fuentes y las imágenes sin pasar por PHP, y esas respuestas no
+ven ningún middleware. Duplicar un valor idéntico no rompe nada —el navegador
+recibe la misma cabecera dos veces con el mismo valor—; lo que sí rompería es
+duplicar la **CSP**, porque el navegador aplicaría las dos políticas a la vez y
+ganaría siempre la intersección más restrictiva. Por eso la CSP de
+`nginx.conf` se retiró: ahora sale sólo de la app.
+
+`X-XSS-Protection` se queda únicamente en Nginx: el filtro XSS de los
+navegadores está retirado desde Chrome 78 y llegó a abrir sus propios agujeros.
+La aplicación no la emite.
+
+### Desplegar la CSP sin romper la aplicación
+
+Una CSP mal calibrada no da un error visible: deja de cargarse un script y la
+página parece «rara». La receta es estrenarla en modo informe.
+
+1. **Report-only con destino.** Primer despliegue con
+   `CSP_ENABLED=true`, `CSP_REPORT_ONLY=true` y `CSP_REPORT_URI` apuntando a un
+   recolector: Sentry lo da hecho en *Settings → Security Headers* del proyecto
+   (`https://oXXX.ingest.sentry.io/api/XXX/security/?sentry_key=…`). Sin
+   `CSP_REPORT_URI` el modo informe no sirve de nada: el navegador se queja en
+   su consola y nadie lo ve.
+
+   ```env
+   CSP_ENABLED=true
+   CSP_REPORT_ONLY=true
+   CSP_REPORT_URI=https://oXXX.ingest.sentry.io/api/XXX/security/?sentry_key=XXX
+   ```
+
+2. **Revisar los informes unos días**, con tráfico real y pasando por todas las
+   pantallas (login, 2FA, magic link, tablas, subidas). Cada violación dice qué
+   directiva y qué origen. Hay dos respuestas posibles: el origen es legítimo y
+   se añade a `config/security.php`, o no lo es y acabas de encontrar algo.
+
+   Ojo con el ruido: las extensiones del navegador generan violaciones que no
+   son tuyas (`chrome-extension:`, `moz-extension:`). Se ignoran.
+
+3. **Pasar a bloqueo** cuando el informe esté limpio:
+
+   ```env
+   CSP_REPORT_ONLY=false
+   ```
+
+   `CSP_REPORT_URI` se deja puesto: en modo bloqueo sigue informando de lo que
+   bloquea, que es cuando más interesa.
+
+Después de cada cambio, recargar la config (ver «Recargar config tras cambiar
+`.env`») y comprobar:
+
+```bash
+curl -sI https://tu-dominio.com | grep -i content-security-policy
+```
+
+### Añadir un origen nuevo
+
+Se edita **`config/security.php`**, nunca el Nginx. Por ejemplo, para un script
+de analítica y su endpoint:
+
+```php
+'script-src' => ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://cdn.ejemplo.com'],
+'connect-src' => ["'self'", 'wss:', 'https://api.ejemplo.com'],
+```
+
+Y después:
+
+```bash
+docker compose -f docker-compose.prod.yml exec app php artisan config:cache
+```
+
+Ventaja de tenerlo en el config: el cambio va en el mismo commit que el código
+que lo necesita, pasa por review y lo cubre `SecurityHeadersTest`. Si estuviera
+en `nginx.conf`, la política y el código que la necesita viajarían por caminos
+distintos y se desincronizarían en el primer despliegue.
+
+`'unsafe-inline'` y `'unsafe-eval'` en `script-src` no son un descuido: Livewire
+4 y Alpine los necesitan. Cuando Alpine tenga build compatible con CSP se
+quitan, y ese día lo dirá `SecurityHeadersTest`.
+
+---
+
+## Logs
+
+Los contenedores no escriben logs en disco: escriben en **stderr** y los recoge
+el runtime de Docker. Un `LOG_STACK=single` dentro del contenedor mandaría los
+logs a `storage/logs/laravel.log`, que vive en la capa efímera de la imagen —se
+pierde en cada `up -d --build`— y que `docker compose logs` no ve.
+
+Receta de `.env` para producción:
+
+```env
+LOG_CHANNEL=stack
+LOG_STACK=stderr
+LOG_STDERR_FORMATTER=Monolog\Formatter\JsonFormatter
+LOG_LEVEL=warning
+```
+
+Con `LOG_STACK=stderr,sentry` los mismos registros van además a Sentry a partir
+de `LOG_SENTRY_LEVEL` (por defecto `error`).
+
+`LOG_STDERR_FORMATTER` es un **nombre de clase** de Monolog, no un booleano: si
+lo dejas vacío el canal sigue funcionando, pero con el `LineFormatter` de texto
+plano. Es el fallo silencioso típico —nadie se entera hasta que el agregador de
+logs no encuentra un solo campo—, y por eso lo cubre
+`tests/Feature/LoggingTest.php`.
+
+### Leerlos
+
+```bash
+docker compose -f docker-compose.prod.yml logs -f app
+docker compose -f docker-compose.prod.yml logs -f --tail=100 queue scheduler
+
+# Con JsonFormatter, una línea es un objeto JSON:
+docker compose -f docker-compose.prod.yml logs --no-log-prefix app | jq -r 'select(.level_name=="ERROR") | .message'
+```
+
+`catch_workers_output = yes` en `docker/php/www.conf` hace que los errores del
+propio PHP (fatales, warnings de arranque) salgan también por ahí, sin
+decorar, en vez de perderse en el log interno de FPM.
+
+### Rotación
+
+Los seis servicios comparten el ancla `x-logging` de `docker-compose.prod.yml`:
+
+```yaml
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+```
+
+Sin ella, el driver `json-file` de Docker **no rota nada**: el archivo de
+`/var/lib/docker/containers/<id>/<id>-json.log` crece hasta llenar el disco del
+VPS. Con esta configuración el techo es 50 MB por contenedor (10 MB × 5), 300 MB
+para el stack entero. Si necesitas más historial, ese es el sitio: no subas
+`LOG_LEVEL`.
+
+---
+
+## Healthchecks
+
+`depends_on: condition: service_healthy` encadena el arranque, así que un
+healthcheck que miente es un stack que arranca en el orden equivocado.
+
+| Servicio | Qué ejecuta | Qué demuestra |
+|----------|-------------|---------------|
+| `db` | `mysqladmin ping` con el root password del secret | MySQL acepta conexiones y las credenciales del secret son las buenas |
+| `redis` | `redis-cli -a $REDIS_PASSWORD ping \| grep PONG` | Redis responde **y** la contraseña de `.env` coincide con la del `--requirepass` |
+| `app` | `cgi-fcgi` contra `127.0.0.1:9000` pidiendo `/ping` | PHP-FPM está escuchando en el socket y tiene un worker libre que contesta `pong` |
+| `nginx` | `wget -qO- http://127.0.0.1/up` | La cadena entera: Nginx → FastCGI → PHP-FPM → Laravel (`/up` es la ruta de salud que declara `bootstrap/app.php`) |
+
+Los dos de la app son nuevos en la v1.3.0:
+
+- **`app`** comprobaba antes `php -r "echo 'OK';"`, que sólo demuestra que el
+  binario de PHP existe dentro del contenedor. Con FPM caído o con el pool
+  agotado seguía diciendo `healthy`, y `queue`, `scheduler` y `nginx` —que
+  dependen de él— arrancaban contra una app muerta. Ahora habla FastCGI de
+  verdad:
+
+  ```yaml
+  test: ["CMD-SHELL", "SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"]
+  ```
+
+  `cgi-fcgi` lo trae el paquete `fcgi` de Alpine, que el `Dockerfile` instala; el
+  `ping.path = /ping` y el `ping.response = pong` los declara
+  `docker/php/www.conf`.
+
+- **`nginx`** no tenía ninguno. El suyo atraviesa toda la pila, así que se pone
+  en rojo tanto si se cae Nginx como si se cae la app. Usa el `wget` de busybox,
+  que `nginx:alpine` ya trae; `interval: 30s` porque es el más caro de los cuatro
+  (arranca PHP) y `start_period: 20s` para no contar los intentos de mientras
+  Nginx todavía está leyendo su config.
+
+### Verlos
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+docker inspect --format '{{json .State.Health}}' kore-laravel-app-1 | jq .
+```
+
+### Probarlos a mano
+
+```bash
+# app — desde dentro del contenedor
+docker compose -f docker-compose.prod.yml exec app \
+  sh -c 'SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000'
+
+# nginx — desde dentro del contenedor
+docker compose -f docker-compose.prod.yml exec nginx wget -qO- http://127.0.0.1/up
+
+# el mismo /up desde el host
+curl -s http://127.0.0.1:8081/up | head -c 100
+```
+
+No confundas estos healthchecks con `spatie/laravel-health`: aquéllos son para
+Docker («¿puedo mandarle tráfico a este contenedor?») y `/health` es para ti
+(«¿está sana la aplicación?»). Ver [`observability.md`](observability.md).
+
+---
+
+## PHP-FPM
+
+El pool está en **`docker/php/www.conf`** y el `Dockerfile` lo copia a
+`/usr/local/etc/php-fpm.d/zzz-kore.conf`. El nombre importa: la imagen
+`php:8.4-fpm-alpine` incluye `php-fpm.d/*.conf` en orden alfabético y trae ya
+`www.conf` (el pool por defecto) y `zz-docker.conf` (que fija `listen = 9000`).
+Como `zzz-kore.conf` se lee el último, sus directivas ganan sobre las dos.
+Copiarlo *encima* de `www.conf` funcionaría, pero dejaría `zz-docker.conf`
+pisando el `listen` por detrás.
+
+```ini
+pm = dynamic
+pm.max_children = 20
+pm.start_servers = 4
+pm.min_spare_servers = 2
+pm.max_spare_servers = 6
+pm.max_requests = 500
+request_terminate_timeout = 60s
+clear_env = no
+catch_workers_output = yes
+```
+
+### Cómo dimensionar `pm.max_children`
+
+Es el número máximo de peticiones PHP simultáneas, y el que decide cuánta RAM
+puede consumir el contenedor:
+
+```
+pm.max_children ≈ RAM disponible para PHP / RAM por worker (~40 MB)
+```
+
+En un VPS de 2 GB con MySQL y Redis al lado, quedan ~1 GB para PHP: 1024 / 40 ≈
+25, y se dejan **20** para tener margen. Mídelo en tu caso en vez de heredar el
+número:
+
+```bash
+docker compose -f docker-compose.prod.yml exec app \
+  sh -c "ps -o rss,comm -C php-fpm | awk '{s+=\$1; n++} END {print s/n/1024 \" MB por worker\"}'"
+```
+
+Si `pm.max_children` se queda corto, FPM lo dice en el log del contenedor
+(«server reached pm.max_children setting, consider raising it») y las peticiones
+esperan en la cola del socket. Si te pasas, el kernel empieza a matar procesos:
+es peor. Sube antes la RAM del VPS que el número.
+
+### Las otras directivas
+
+- **`pm.max_requests = 500`** — recicla el worker cada 500 peticiones. Corta en
+  seco cualquier fuga de memoria de una extensión o de un paquete de vendor.
+- **`request_terminate_timeout = 60s`** — una petición que pasa de un minuto en
+  producción está colgada, no lenta. Debe ser mayor que el `max_execution_time`
+  de PHP para que el error lo reporte PHP (y lo vea Sentry) antes de que FPM
+  mate el worker.
+- **`clear_env = no`** — los workers heredan el entorno del contenedor
+  (`env_file: .env`). La config va cacheada (`config:cache` en el entrypoint),
+  pero sin esto cualquier `$_ENV` de un paquete de vendor leería vacío.
+- **`ping.path` / `pm.status_path`** — los usa el healthcheck del servicio `app`
+  (ver § Healthchecks). `/status` no está expuesto por Nginx: sólo se consulta
+  desde dentro del contenedor.
+
+Después de tocar `www.conf` hay que **reconstruir la imagen**, no basta con
+reiniciar: el archivo se copia en el build.
+
+```bash
+docker compose -f docker-compose.prod.yml build app
+docker compose -f docker-compose.prod.yml up -d --no-deps app
+```
+
+---
+
+## Backups (spatie/laravel-backup)
+
+Un backup es un zip cifrado con **el dump de la base de datos** y **el contenido
+de `storage/app`**. El código no entra: vive en git y en la imagen. Lo
+irrecuperable es lo que suben los usuarios y lo que hay en la base.
+
+Todo está detrás del toggle `BACKUP_ENABLED`. Con el toggle apagado —el default
+del boilerplate— el provider del paquete ni se registra: no existen los comandos
+`backup:*`, ni el check de `/health`, ni las entradas del scheduler.
+
+### Variables de `.env`
+
+```env
+# Backups
+BACKUP_ENABLED=true
+
+# Destino. Lista separada por comas; los mismos discos que vigila el monitor.
+# Deja `local` el primero: es el disco que el check de /health abre al arrancar.
+# Para `s3`: composer require league/flysystem-aws-s3-v3 + las AWS_* de config/filesystems.php
+BACKUP_DISKS=local
+# BACKUP_DISKS=local,s3
+
+# OBLIGATORIA en producción. Sin ella el zip va en claro y cualquiera que llegue
+# al volumen o al bucket se lleva la base de datos entera.
+BACKUP_ARCHIVE_PASSWORD=<openssl rand -base64 32>
+
+# A dónde van los avisos. Vacío = MAIL_FROM_ADDRESS.
+BACKUP_NOTIFICATION_MAIL=ops@tu-dominio.com
+
+# Opcionales
+# BACKUP_NAME=kore-laravel          # carpeta dentro de cada disco (default: APP_NAME)
+# BACKUP_MAX_AGE_DAYS=1             # días sin backup nuevo antes de declararlo no sano
+# BACKUP_DUMP_EXTRA_OPTION=--skip-ssl
+```
+
+> ⚠️ **Guarda `BACKUP_ARCHIVE_PASSWORD` fuera del servidor** (gestor de
+> contraseñas, no el mismo VPS). Si se pierde, los zips son irrecuperables: el
+> cifrado es AES-256 y no hay puerta trasera. Y si cambias la contraseña, los
+> backups anteriores siguen pidiendo la vieja.
+
+Tras editar `.env`:
+
+```bash
+docker compose -f docker-compose.prod.yml exec app php artisan config:cache
+docker compose -f docker-compose.prod.yml restart app queue scheduler
+```
+
+### Qué programa el scheduler
+
+Las tres entradas viven en `routes/console.php`, dentro de un `if` sobre
+`config('kore-app.backup.enabled')`, y las dispara el servicio `scheduler` de
+`docker-compose.prod.yml`.
+
+| Hora    | Comando          | Qué hace |
+|---------|------------------|----------|
+| `01:00` | `backup:clean`   | aplica la política de retención (7 días completos, 16 diarios, 8 semanales, 4 mensuales, 2 anuales, tope de 5000 MB) |
+| `02:00` | `backup:run`     | dump + zip cifrado a cada disco de `BACKUP_DISKS` (`withoutOverlapping`: un dump largo no arranca dos veces) |
+| `03:00` | `backup:monitor` | comprueba edad y tamaño del último backup y avisa por correo si no está sano |
+
+Se limpia **antes** de hacer el backup del día, para que quepa.
+
+Verifica que están programados:
+
+```bash
+docker compose -f docker-compose.prod.yml exec app php artisan schedule:list | grep backup
+```
+
+### Dónde caen los zips
+
+El disco `local` tiene su raíz en `storage/app/private`, y el paquete crea
+dentro una carpeta con el nombre del backup:
+
+```
+/var/www/html/storage/app/private/<BACKUP_NAME>/2026-09-03-02-00-00.zip
+```
+
+Eso está en el volumen **`storage_data`**, montado en `app`, `queue` y
+`scheduler`. Es decir: sobrevive a `docker compose down` y a un redeploy, pero
+**está en la misma máquina que la base de datos**. Un backup que sólo vive en el
+mismo VPS no protege del incendio del VPS: para eso está `BACKUP_DISKS=local,s3`.
+
+Dentro del zip:
+
+```
+db-dumps/mysql-<DB_DATABASE>.sql
+var/www/html/storage/app/public/...
+var/www/html/storage/app/private/...
+```
+
+(Rutas absolutas sin la barra inicial; los backups anteriores quedan fuera
+gracias al `exclude` de `config/backup.php`.)
+
+### Listar y lanzar a mano
+
+```bash
+# Qué hay, en qué disco, de qué fecha y tamaño
+docker compose -f docker-compose.prod.yml exec app php artisan backup:list
+
+# Un backup completo ahora mismo
+docker compose -f docker-compose.prod.yml exec app php artisan backup:run
+
+# Sólo la base de datos / sólo los archivos
+docker compose -f docker-compose.prod.yml exec app php artisan backup:run --only-db
+docker compose -f docker-compose.prod.yml exec app php artisan backup:run --only-files
+
+# Comprobar salud sin esperar a las 03:00
+docker compose -f docker-compose.prod.yml exec app php artisan backup:monitor
+```
+
+---
+
+## Restore paso a paso
+
+Un backup que no se ha restaurado nunca no es un backup, es una carpeta.
+**Ensaya esto en staging al menos una vez.** Los pasos asumen que estás en el
+directorio del repo en el VPS, con `docker-compose.prod.yml` a mano.
+
+### 1. Elegir el backup y sacarlo del contenedor
+
+```bash
+docker compose -f docker-compose.prod.yml exec app php artisan backup:list
+
+# Copiar el zip elegido al host
+docker compose -f docker-compose.prod.yml cp \
+  app:/var/www/html/storage/app/private/kore-laravel/2026-09-03-02-00-00.zip \
+  ./restore.zip
+```
+
+Si el backup está en S3, bájalo del bucket en vez de copiarlo del contenedor.
+
+### 2. Descifrar el zip
+
+El zip va cifrado con **AES-256**, y eso descarta `unzip`: Info-ZIP 6.0 no
+soporta AES (`skipping: ... need PK compat. v5.1`), así que `unzip -P` **no
+sirve**. Dos opciones que sí funcionan:
+
+```bash
+# a) Con PHP, dentro del propio contenedor (no requiere instalar nada)
+docker compose -f docker-compose.prod.yml cp ./restore.zip app:/tmp/restore.zip
+docker compose -f docker-compose.prod.yml exec app php -r '
+$z = new ZipArchive;
+$z->open("/tmp/restore.zip");
+$z->setPassword(getenv("BACKUP_ARCHIVE_PASSWORD"));
+var_dump($z->extractTo("/tmp/restore"));
+'
+
+# b) Con 7-Zip en el host (apt install p7zip-full)
+7z x -p"$BACKUP_ARCHIVE_PASSWORD" restore.zip -o./restore
+```
+
+`extractTo` devolviendo `false` casi siempre significa contraseña incorrecta.
+
+### 3. Restaurar la base de datos
+
+El dump lo genera `mariadb-dump` (paquete `mysql-client` de Alpine, instalado en
+el `Dockerfile`). **Las versiones 11.4+ escriben como primera línea**
+
+```sql
+/*!999999\- enable the sandbox mode */
+```
+
+que el cliente `mysql` 8.4 del contenedor `db` **rechaza** con un error de
+sintaxis desconcertante. Hay que quitarla antes de importar:
+
+```bash
+cd restore/db-dumps
+sed -i '1{/enable the sandbox mode/d}' mysql-kore.sql
+
+# Importar (usa el root del secret; -T porque no hay TTY)
+docker compose -f docker-compose.prod.yml exec -T db \
+  mysql -u root -p"$(cat ../../secrets/db_root_password.txt)" "$DB_DATABASE" \
+  < mysql-kore.sql
+```
+
+Si prefieres partir de cero, borra y recrea el esquema antes de importar:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T db \
+  mysql -u root -p"$(cat secrets/db_root_password.txt)" \
+  -e "DROP DATABASE \`$DB_DATABASE\`; CREATE DATABASE \`$DB_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+```
+
+### 4. Restaurar `storage/app`
+
+Dentro del zip los archivos están en `var/www/html/storage/app/...`. Se copian
+de vuelta al volumen `storage_data` a través del contenedor `app`:
+
+```bash
+docker compose -f docker-compose.prod.yml cp \
+  ./restore/var/www/html/storage/app/. \
+  app:/var/www/html/storage/app/
+
+docker compose -f docker-compose.prod.yml exec app \
+  chown -R www-data:www-data /var/www/html/storage/app
+```
+
+### 5. Levantar y verificar
+
+```bash
+docker compose -f docker-compose.prod.yml exec app php artisan config:cache
+docker compose -f docker-compose.prod.yml restart app queue scheduler
+
+# ¿Migraciones al día respecto al código desplegado?
+docker compose -f docker-compose.prod.yml exec app php artisan migrate --force
+
+# ¿El monitor ve un backup reciente y sano?
+docker compose -f docker-compose.prod.yml exec app php artisan backup:monitor
+
+# ¿Y el resto de checks? (BackupsCheck sale en esta lista)
+curl -s -H "X-Secret-Token: $HEALTH_SECRET_TOKEN" https://tu-dominio.com/health/json | jq .
+```
+
+Por último, borra los restos: `rm -rf restore restore.zip` en el host y
+`/tmp/restore*` en el contenedor. Un dump sin cifrar en `/tmp` es exactamente el
+agujero que el zip cifrado venía a tapar.
+
+### Troubleshooting del restore
+
+| Síntoma | Causa |
+|---------|-------|
+| `unzip: need PK compat. v5.1` | Info-ZIP no descifra AES-256. Usa PHP o `7z` (paso 2). |
+| `extractTo` devuelve `false` | `BACKUP_ARCHIVE_PASSWORD` no coincide con la del día del backup. |
+| `ERROR 1064 ... near '\-'` al importar | No quitaste la línea del *sandbox mode* (paso 3). |
+| `The dump process failed` en `backup:run` | Falta `mariadb-dump` en la imagen, o el dump no puede negociar TLS: revisa `BACKUP_DUMP_EXTRA_OPTION`. |
+| `Driver [s3] is not supported` al arrancar | `BACKUP_DISKS` incluye `s3` sin `league/flysystem-aws-s3-v3` instalado. |
 
 ---
 
@@ -366,6 +941,10 @@ docker compose -f docker-compose.prod.yml exec app php artisan route:cache
 docker compose -f docker-compose.prod.yml restart queue scheduler
 ```
 
+> `restart queue scheduler` hace falta aquí y sólo aquí. En un despliegue normal
+> el entrypoint del contenedor `app` ya corre `queue:restart`, y los workers se
+> reciclan solos entre job y job.
+
 ### Jobs fallidos
 
 ```bash
@@ -382,10 +961,14 @@ docker compose -f docker-compose.prod.yml logs -f app
 
 ### CSP bloquea recursos externos
 
-El header CSP se inyecta en `docker/nginx/nginx.conf` Y puede ser sobrescrito por el Nginx del host. Si tras editar el primero no se refleja, revisa el server block del host. Después de cambiar `nginx.conf` interno:
+La CSP la emite la aplicación (`config/security.php` → `SecurityHeaders`), no
+Nginx. Si un recurso se bloquea, añade su origen a la directiva que toque en
+ese config y vuelve a cachear (ver «Cabeceras de seguridad y CSP»). Si en la
+respuesta salen **dos** cabeceras `Content-Security-Policy`, hay una colada en
+el Nginx del host: quítala, porque el navegador aplica la intersección.
 
 ```bash
-docker compose -f docker-compose.prod.yml restart nginx
+docker compose -f docker-compose.prod.yml exec app php artisan config:cache
 curl -sI http://127.0.0.1:8081/login | grep -i content-security-policy
 ```
 

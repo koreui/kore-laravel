@@ -29,14 +29,17 @@ no verifica nada.
 
 | Capa | Presupuesto | Medido | Qué corre |
 |------|-------------|--------|-----------|
-| **pre-commit** | ~2 s | **0,4 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
-| **pre-push** | ~30 s | **2,5 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
-| **`composer ci`** | ~90 s | **6 s** | `pint --test` (0,3) + `phpstan` (0,6 con caché, 2,0 en frío) + `composer arch` (0,2) + `rector --dry-run` (2,4) + `pest` (4,5, secuencial) |
+| **pre-commit** | ~2 s | **0,7 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
+| **pre-push** | ~30 s | **3 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
+| **`composer ci`** | ~90 s | **10 s** | `pint --test` (0,5) + `phpstan` (0,7 con caché, 2,0 en frío) + `composer arch` (0,2) + `rector --dry-run` (2,8) + `pest` (6,1, secuencial) |
 | **CI (GitHub)** | ~3 min | — | `composer ci` en matriz 8.3 / 8.4 + `composer audit` + `npm ci && npm run build` + E2E |
 
-Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v1.2.0 y
-232 tests Pest. La suite E2E —45 tests en 12 archivos— va aparte y tarda 14 s
-en local.
+Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v1.3.0 y
+277 tests Pest. La suite E2E —45 tests en 12 archivos— va aparte y tarda 13 s
+en local. Los tests que migran de verdad (`MigrationsAreReversibleTest`,
+`CleanInstallTest`) y los que arrancan la aplicación con otro entorno
+(`BackupTest`, `ProductionConfigTest`) son los que explican el segundo y medio
+de más respecto a la v1.2.0.
 
 > Nota de entorno: `composer test` limpia la config cacheada antes de correr
 > Pest a propósito. Con un `bootstrap/cache/config.php` viejo, `PulseAccessTest`
@@ -346,14 +349,15 @@ $ composer ci
 ✓ Larastan nivel 8 + PHPat + disallowed-calls: 0 errors
 ✓ kore:arch:check: sin violaciones
 ✓ Rector: nothing to refactor
-✓ Pest: 232 passed (524 assertions)
+✓ Pest: 277 passed (687 assertions)
 ```
 
-Reparto de los 232 tests: 21 arch (`tests/Arch`), 41 del módulo Auth, 48 del
-módulo Users, 3 de Tenancy y 119 en `tests/Feature` (health, scheduler, Sentry,
-Pulse, Pennant, mass assignment, landing, traducciones, `kore:arch:check` y los
-hooks). Aparte, la suite E2E de Playwright (`npm run e2e`): 45 tests en 12
-archivos —11 de spec más `auth.setup.ts`, que hace el login por rol—.
+Reparto de los 277 tests: 21 arch (`tests/Arch`), 41 del módulo Auth, 48 del
+módulo Users, 3 de Tenancy y 164 en `tests/Feature` (health, scheduler, Sentry,
+Pulse, Pennant, mass assignment, landing, traducciones, `kore:arch:check`, los
+hooks y, desde la v1.3.0, backup, cabeceras de seguridad, configuración de
+producción, logging, migraciones reversibles e instalación limpia). Aparte, la
+suite E2E de Playwright (`npm run e2e`): 45 tests en 12 archivos —11 de spec más `auth.setup.ts`, que hace el login por rol—.
 
 Actualiza esta cifra cuando cambie (R41). Un número inventado en los docs es
 peor que no ponerlo: la auditoría de septiembre de 2026 encontró aquí «15 tests»

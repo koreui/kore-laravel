@@ -43,7 +43,7 @@ Es **la fuente de verdad** del proyecto y el doc que más le importa a un agente
 
 Cuatro cosas que hay que saber antes de tocar código:
 
-1. **Las reglas están numeradas `R1..R45` y se citan por número.** En un review,
+1. **Las reglas están numeradas `R1..R48` y se citan por número.** En un review,
    en un mensaje de commit, en un comentario del código o al pedirle algo a la
    AI, «esto rompe R24» es una frase completa. Cada regla lleva su enunciado,
    quién la verifica y con qué comando, la severidad, la válvula que admite, por

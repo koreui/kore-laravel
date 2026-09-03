@@ -3,7 +3,13 @@
     "name": "kore/kore-laravel",
     "type": "project",
     "description": "Production-ready Laravel 12 boilerplate with Livewire 4, Tailwind v4, koreUi and AI-friendly tooling.",
-    "keywords": ["laravel", "livewire", "tailwind", "kore-ui", "boilerplate"],
+    "keywords": [
+        "laravel",
+        "livewire",
+        "tailwind",
+        "kore-ui",
+        "boilerplate"
+    ],
     "license": "MIT",
     "require": {
         "php": "^8.3",
@@ -18,6 +24,7 @@
         "livewire/livewire": "^4.0",
         "sentry/sentry-laravel": "^4.25",
         "spatie/laravel-activitylog": "^5.0",
+        "spatie/laravel-backup": "^10.3",
         "spatie/laravel-data": "^4.22",
         "spatie/laravel-health": "^1.39",
         "spatie/laravel-one-time-passwords": "^1.1",
@@ -130,6 +137,7 @@
     "extra": {
         "laravel": {
             "dont-discover": [
+                "spatie/laravel-backup",
                 "stancl/tenancy"
             ]
         }

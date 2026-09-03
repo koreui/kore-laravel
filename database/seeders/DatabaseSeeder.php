@@ -19,10 +19,16 @@ class DatabaseSeeder extends Seeder
     {
         $this->call(ModulesSeeder::class);
 
-        $admin = User::factory()->create([
-            'name' => 'Admin',
-            'email' => 'admin@example.com',
-        ]);
+        // Idempotente a propósito: `db:seed` se corre a mano en producción y a
+        // veces dos veces (un deploy repetido, un `--seed` sobre una base ya
+        // sembrada). Con `User::factory()->create()` a secas, la segunda vez
+        // reventaba con una violación de la clave única de `email`.
+        // `ModulesSeeder` ya usa updateOrCreate/firstOrCreate.
+        $admin = User::query()->firstWhere('email', 'admin@example.com')
+            ?? User::factory()->create([
+                'name' => 'Admin',
+                'email' => 'admin@example.com',
+            ]);
 
         $admin->assignRole(Role::ADMIN);
         $admin->syncPermissions(Permission::all());

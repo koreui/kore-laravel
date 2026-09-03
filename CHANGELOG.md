@@ -10,6 +10,293 @@ desde el upstream (`git remote add kore https://github.com/koreui/kore-laravel`)
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-03
+
+«Producción completa». El stack Docker de la v1.2.0 tenía volúmenes persistentes
+de MySQL y `storage/` y ninguna copia de ninguno; las cabeceras de seguridad
+vivían sólo en el Nginx del contenedor; `APP_DEBUG=true` en producción
+arrancaba sin rechistar; los `down()` de las migraciones existían pero nadie los
+había ejecutado; y los logs de un contenedor iban a un archivo que `docker
+compose logs` no ve. Esta release cierra los cinco huecos, cada uno con su test.
+
+Sin cambios de comportamiento para el usuario final: la suite E2E —45 tests en
+12 archivos— pasa sin tocar una línea de vista. La suite Pest pasa de 232 a
+**277** tests y el catálogo de `R1..R45` a `R1..R48`, con **40** reglas con
+verificador automático (eran 37).
+
+### Añadido
+
+- **Backups con `spatie/laravel-backup` (10.3) detrás del toggle
+  `BACKUP_ENABLED`** (default `false`). El provider del paquete está en
+  `extra.laravel.dont-discover` —igual que stancl/tenancy— y lo registra
+  `app/Providers/BackupServiceProvider.php` sólo cuando el toggle está
+  encendido: apagado no existe ni `backup:run`, ni el check de `/health`, ni las
+  entradas del scheduler (R10). Era el hueco de ops más grande de la auditoría
+  del 2026-09-02.
+- **La tríada programada** en `routes/console.php`, dentro de un `if` sobre
+  `config('kore-app.backup.enabled')`: `backup:clean` a las 01:00, `backup:run`
+  a las 02:00 (`withoutOverlapping`, porque un dump grande puede pasarse de la
+  hora) y `backup:monitor` a las 03:00. Se limpia antes de hacer el backup del
+  día para que quepa. Todas `onOneServer()`.
+- **`config/backup.php` publicado y adaptado.** El nombre del backup y la lista
+  de discos se calculan **una sola vez** al principio del archivo (`$name`,
+  `$disks` desde `BACKUP_DISKS`) y se reutilizan en `backup.destination.disks` y
+  en `monitor_backups`: es lo que garantiza que el monitor vigile el destino
+  real y no uno paralelo que se desincroniza. El origen deja fuera `base_path()`
+  —el código vive en git— y se queda con `storage/app/public` y
+  `storage/app/private`, excluyendo la carpeta de los propios backups para que
+  cada zip no se lleve dentro todos los anteriores.
+- **Zip cifrado con AES-256** vía `BACKUP_ARCHIVE_PASSWORD`. Sin contraseña el
+  zip va en claro, y el doc de despliegue lo marca como obligatorio en
+  producción (`openssl rand -base64 32`, guardada fuera del servidor).
+- **`BackupsCheck` de spatie/laravel-health** en `/health` y `/health/json`,
+  registrado desde `BackupServiceProvider` —no desde `HealthServiceProvider`—
+  porque `Health::checks()` acumula (`array_merge`) en vez de sustituir: así el
+  check vive pegado al toggle que lo enciende. Vigila el primer disco de
+  `BACKUP_DISKS` y la carpeta `BACKUP_NAME` (la carpeta, no un glob: con
+  `onDisk()` el check hace `listContents()` y un patrón no listaría nada).
+- **`tests/Feature/BackupTest.php`** (16 tests): con el toggle apagado, ni
+  provider, ni comandos, ni scheduler, ni check; con el toggle encendido, los
+  cuatro comandos, las tres tareas programadas, el check registrado y —lo que
+  pedía la auditoría— **que el monitor vigila el mismo destino** (`disks` y
+  `name` idénticos, y `BACKUP_DISKS=local,s3` produciendo `['local','s3']` en los
+  dos sitios). Dos tests corren `backup:run --only-files` contra un disco falso y
+  abren el zip con `ZipArchive::statIndex()` para comprobar que con contraseña
+  `encryption_method` **no** es `EM_NONE`, y sin ella sí lo es.
+- **`config/security.php` + `App\Http\Middleware\SecurityHeaders`** — las
+  cabeceras de seguridad las emite ahora la **aplicación**, en el grupo `web`,
+  no el `docker/nginx/nginx.conf`. Cinco cabeceras fijas (`X-Frame-Options`,
+  `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`,
+  `Cross-Origin-Opener-Policy`), HSTS **sólo sobre HTTPS** —en HTTP el navegador
+  la ignora por spec y en local sólo dejaría el dominio clavado en https durante
+  un año— y una CSP completa. El middleware **no pisa** una cabecera que la
+  respuesta ya traiga, así que un controller puede anular una puntualmente (una
+  página pensada para ir dentro de un iframe ajeno). Hasta ahora, cualquier
+  despliegue fuera de ese Docker salía sin ninguna cabecera y nada lo decía
+  (R46).
+- **CSP con estreno en modo informe.** `CSP_REPORT_ONLY=true` por defecto emite
+  `Content-Security-Policy-Report-Only`, y `CSP_REPORT_URI` manda las
+  violaciones a un recolector (Sentry lo ofrece hecho). Nunca se emiten las dos
+  cabeceras a la vez. La receta de despliegue —report-only, revisar informes,
+  `CSP_REPORT_ONLY=false`— está en `docs/ops/deployment.md`. Las directivas
+  salen del config, así que **un origen nuevo se añade en PHP, no en el
+  Nginx**: el cambio viaja en el mismo commit que el código que lo necesita y lo
+  cubre un test. `fonts.bunny.net` es el único origen externo real de los
+  layouts, y es el único que aparece.
+- **`AppServiceProvider::refuseToBootWithDebugInProduction()`** — con
+  `APP_ENV=production` y `APP_DEBUG=true`, la aplicación lanza `RuntimeException`
+  durante el boot y **no levanta** (R47). La pantalla de error de Laravel en
+  modo debug vuelca el `.env` entero —`APP_KEY`, credenciales de base de datos,
+  tokens— a quien provoque cualquier excepción, y no da ninguna otra señal hasta
+  que alguien ve el volcado.
+- **`tests/Feature/MigrationsAreReversibleTest.php`** (2 tests) — R29 exigía un
+  `down()` en toda migración, pero el check es textual: comprueba que el método
+  existe, no que funcione. Este test hace el ciclo completo `migrate:fresh` →
+  `migrate:reset` → `migrate` sobre las 12 migraciones del proyecto, verifica
+  que tras el `reset` no queda **ninguna** tabla salvo `migrations`, y que al
+  volver a migrar no queda ninguna pendiente. Un segundo test aísla el caso
+  frágil —el único `dropColumn()` del boilerplate, el de las columnas 2FA de
+  `users`— con un `migrate:rollback --step=N` y comprueba que las columnas
+  desaparecen con la tabla todavía en pie. Los `down()` escritos a mano en la
+  v1.2.0 para las migraciones publicadas de vendor se ejecutan aquí por primera
+  vez: todos pasaron.
+- **`tests/Feature/CleanInstallTest.php`** (3 tests) — reproduce la instalación
+  que hacen `composer setup` y el entrypoint de Docker, con los seeders reales y
+  sin fakes: `migrate:fresh --seed` deja `admin@example.com` con el rol `admin`
+  y todos los permisos y las tablas `modules`/`roles`/`permissions` sembradas;
+  `db:seed` dos veces seguidas es idempotente; y `E2eSeeder` levanta sus cuatro
+  cuentas con su rol y sus permisos directos sobre una base vacía.
+- **`tests/Feature/LoggingTest.php`** (5 tests) — blinda la receta de logging de
+  producción: que el canal `stderr` escribe en `php://stderr`, que
+  `LOG_STDERR_FORMATTER` con un nombre de clase de Monolog llega al handler como
+  `JsonFormatter`, que sin la variable Laravel deja el `LineFormatter` (el fallo
+  silencioso que deja al agregador sin JSON), que `LOG_LEVEL` llega al handler y
+  que `LOG_STACK=stderr` construye un stack de un solo handler.
+- **`tests/Feature/SecurityHeadersTest.php`** (14 tests: las cabeceras fijas
+  como dataset generado del propio `config/security.php`, report-only vs
+  bloqueo, CSP apagada, `report-uri` al final de la política, HSTS sobre https /
+  no sobre http / con el toggle apagado, respeto a una cabecera que la respuesta
+  ya trae, y `/health/json` intacto) y **`ProductionConfigTest`** (3 tests sobre
+  el guard de `APP_DEBUG`, uno de ellos arrancando la aplicación de verdad en
+  producción). `PublicPagesTest` suma el caso del `robots.txt`.
+- **`withEnvironment()` en `tests/Pest.php`**: arranca la aplicación con otras
+  variables de entorno y la restaura al terminar. `Env::getRepository()->set()`
+  a secas —el patrón que usaba `TwoFactorToggleTest`— no sirve cuando la
+  variable existe en el `.env` del desarrollador: el repositorio de Dotenv es
+  inmutable y la recarga del `.env` la vuelve a pisar en el siguiente
+  `refreshApplication()`. El helper la saca del repositorio y la escribe como
+  «definida desde fuera» (`$_ENV`, `$_SERVER`, `putenv`), que es lo único que
+  Dotenv respeta. Lo usan `BackupTest`, `ProductionConfigTest` y
+  `TwoFactorToggleTest`, y da el mismo resultado con `.env`, sin él o con la
+  variable dentro (comprobado en los tres escenarios).
+- **`docker/php/www.conf`** — pool `www` de PHP-FPM dimensionado para un VPS
+  pequeño: `pm = dynamic` con `max_children = 20` (RAM para PHP / ~40 MB por
+  worker), `max_requests = 500` para cortar fugas de memoria,
+  `request_terminate_timeout = 60s`, `clear_env = no` (los workers heredan el
+  `env_file`), `catch_workers_output = yes` para que los errores de PHP salgan
+  por stderr del contenedor, `expose_php = Off`, y `ping.path = /ping` +
+  `pm.status_path = /status`. El `Dockerfile` lo copia como
+  `/usr/local/etc/php-fpm.d/zzz-kore.conf`: la imagen `php:8.4-fpm-alpine`
+  incluye ese directorio en orden alfabético y trae ya `www.conf` y
+  `zz-docker.conf`, así que el prefijo `zzz-` es lo que hace que nuestras
+  directivas ganen.
+- **Rotación de logs en `docker-compose.prod.yml`** — ancla YAML `x-logging`
+  (`json-file`, `max-size: 10m`, `max-file: 5`) aplicada a los **seis**
+  servicios. Sin ella el driver `json-file` no rota nada y el log de un
+  contenedor crece hasta llenar el disco del VPS.
+- **Healthcheck del servicio `nginx`** — `wget -qO- http://127.0.0.1/up`, que
+  recorre Nginx → FastCGI → PHP-FPM → Laravel (`/up` es la ruta de salud de
+  `bootstrap/app.php`). `nginx:alpine` ya trae el `wget` de busybox.
+- **`php artisan about`** muestra `Backup` (enabled/disabled y si el zip va
+  cifrado o no).
+- **Tres reglas nuevas en el catálogo**: R46 (las cabeceras de seguridad las
+  emite la aplicación), R47 (`APP_DEBUG=true` no arranca en producción) y R48
+  (producción hace copias de seguridad cifradas y monitorizadas). Las tres las
+  verifica Pest. R29 gana un segundo verificador (`MigrationsAreReversibleTest`)
+  y §4 · Datos una nota sobre `CleanInstallTest`.
+- **Docs**: en `deployment.md`, secciones «Logs», «Healthchecks», «PHP-FPM»,
+  «Cabeceras de seguridad y CSP», «Backups» y una **receta de restore completa**
+  (extraer el zip AES con `ZipArchive` o `7z` —`unzip` no lo descifra—, quitar
+  la línea de *sandbox mode* de `mariadb-dump` 11.4+, importar, devolver
+  `storage/app`, verificar); en `observability.md`, «Backups vigilados» y la
+  receta de logs a stderr; fila nueva en `toggles.md`; bloques nuevos en
+  `.env.example`.
+
+### Cambiado
+
+- **`config/kore-app.php`** pasa de siete a ocho claves con `backup.enabled`.
+  Los docs que citaban «siete» (`toggles.md`, `CLAUDE.md`, `AGENTS.md`) dicen
+  ocho (R41). Las variables de cabeceras (`SECURITY_HSTS`, `CSP_ENABLED`,
+  `CSP_REPORT_ONLY`, `CSP_REPORT_URI`) **no** entran en `kore-app`: no son
+  toggles de capacidades sino la configuración de un middleware.
+- **`config/database.php`**: la conexión `mysql` gana un bloque `dump`
+  (`use_single_transaction`, `timeout`, `add_extra_option`) que lee
+  `Spatie\Backup\Tasks\Backup\DbDumperFactory`. `add_extra_option` sale de
+  `BACKUP_DUMP_EXTRA_OPTION`, con `--skip-ssl` por defecto: la red interna de
+  `docker-compose.prod.yml` va sin TLS y el cliente mariadb 11.x lo exige.
+- **`Dockerfile`**: la imagen de runtime instala `mysql-client` (trae
+  `mariadb-dump`; sin él `backup:run` fallaba con «The dump process failed» y
+  guardaba sólo los archivos) y `fcgi` (trae `cgi-fcgi`, para el healthcheck),
+  y copia `docker/php/www.conf`.
+- **Healthcheck del servicio `app`**: de `php -r "echo 'OK';"` —que sólo
+  demuestra que el binario de PHP existe— a un ping FastCGI real contra
+  `127.0.0.1:9000` (`SCRIPT_NAME=/ping … cgi-fcgi -bind -connect 127.0.0.1:9000
+  | grep -q pong`). Importa porque `queue`, `scheduler` y `nginx` arrancan con
+  `depends_on: condition: service_healthy`: con FPM caído, el check viejo los
+  dejaba salir contra una app muerta.
+- **`docker/entrypoint.sh`**: la rama `php-fpm` corre `php artisan queue:restart`
+  después de los `*:cache`. Deja una marca en la caché (Redis en producción) que
+  los workers miran entre job y job: terminan el que tienen entre manos y salen
+  limpiamente, sin que un `docker restart` les corte la ejecución por la mitad.
+  Con `|| true`, porque en el primer arranque la caché puede no estar lista.
+  **No sustituye a recrear el contenedor `queue`** en un despliegue de código
+  nuevo: el worker reaparece con la imagen con la que fue creado.
+- **`bootstrap/app.php`**: `$middleware->web(append: [SecurityHeaders::class])`.
+  Va en el grupo `web` y no global porque las cabeceras protegen lo que
+  interpreta un navegador; `/health/json` y las rutas de API devuelven JSON.
+- **`docker/nginx/nginx.conf`**: se retiran las líneas `add_header
+  Content-Security-Policy …` y `add_header Strict-Transport-Security …` (HSTS la
+  emite la app sólo sobre HTTPS, y así `SECURITY_HSTS=false` la apaga de verdad;
+  el Nginx interno recibe HTTP plano del proxy). Dos CSP simultáneas no se suman: el navegador
+  aplica las dos y gana la intersección, así que la del Nginx haría imposible
+  observar en report-only lo que la de la app va a bloquear. Las demás cabeceras
+  **se quedan** como defensa en profundidad: Nginx sirve `/build/`, fuentes e
+  imágenes sin pasar por PHP. `X-XSS-Protection` sigue sólo ahí (obsoleta; la
+  aplicación no la emite).
+- **`public/robots.txt`**: pasa de `Disallow:` (permitir todo) a esconder
+  `/pulse`, `/health` y `/users`. No es un control de acceso —los tres están
+  detrás de sesión, rol o token— sino dejar de publicar el mapa de los paneles
+  operativos en el índice de un buscador.
+- **`.env.example`**: `LOG_STDERR_FORMATTER` (comentada: presente y vacía
+  rompería el canal, ver abajo) y el bloque con la receta de
+  logging de producción (`LOG_STACK=stderr`, `JsonFormatter`,
+  `LOG_LEVEL=warning`), más los bloques de cabeceras y de backup.
+- **`docs/ops/deployment.md`**: `APP_DEBUG=false` documentado como
+  **obligatorio** en los valores de producción, porque ahora la aplicación se
+  niega a arrancar sin él; los valores de logging; y el apartado de despliegue
+  explica qué cubre y qué no cubre el `queue:restart` del entrypoint.
+- **`docs/architecture/rules.md`**, `CLAUDE.md`, `AGENTS.md`, `README.md`,
+  `docs/README.md`, `working-with-ai.md`, `overview.md`: el rango pasa a
+  `R1..R48`; las reglas de oro ganan el punto 14 (R46 · R47 · R48).
+- **`docs/quality/pipeline.md`** y la tabla de capas de `rules.md`: cifras al
+  día (277 tests; `composer ci` 10 s, pre-push 3 s, pre-commit 0,7 s).
+
+### Corregido
+
+- **`config/logging.php` y `config/backup.php`**: `formatter` y `notifications.mail.to`
+  usan `env('X') ?: <default>` en vez del segundo argumento de `env()`. Con la
+  clave presente pero vacía en el `.env` (`X=`), `env()` devuelve `''`, no
+  `null`: el `LogManager` intentaba resolver la clase `''` y degradaba en
+  silencio al emergency logger de `storage/logs/laravel.log`, y las
+  notificaciones de backup se enviaban a una dirección vacía. Lo destapó la
+  revisión cruzada de la release sobre un `.env` copiado de `.env.example`.
+- **`database/seeders/DatabaseSeeder.php` no era idempotente**: `db:seed` dos
+  veces seguidas reventaba con `UNIQUE constraint failed: users.email` al
+  intentar crear otra vez `admin@example.com`. Pasa a buscar primero al admin
+  existente y crearlo sólo si no está. Lo destapó `CleanInstallTest`.
+- **`TwoFactorToggleTest > it drops the two-factor routes…` fallaba en cuanto
+  el `.env` local definía `AUTH_2FA_ENABLED`** (es decir, tras el `composer
+  setup` documentado); en CI pasaba porque allí no hay `.env`. Es el mismo
+  mecanismo del punto `withEnvironment()` de arriba; el test lo usa ahora.
+
+### Migración desde 1.2.0
+
+Nada de esto rompe una aplicación en marcha. Para traerlo a un derivado:
+
+1. **Backup.** `composer require spatie/laravel-backup:^10.3` y añade
+   `"spatie/laravel-backup"` a `extra.laravel.dont-discover` de `composer.json`
+   (si te lo saltas, los comandos `backup:*` existen siempre y el toggle no
+   toggle nada). Copia `config/backup.php`,
+   `app/Providers/BackupServiceProvider.php` (regístralo en
+   `bootstrap/providers.php` después de `HealthServiceProvider`), el bloque
+   `backup` de `config/kore-app.php`, el bloque `if` de `routes/console.php`, el
+   bloque `dump` de la conexión `mysql` en `config/database.php` y
+   `tests/Feature/BackupTest.php`. En el `Dockerfile`, `mysql-client` (o
+   `default-mysql-client` si tu imagen es Debian). Variables nuevas:
+   `BACKUP_ENABLED`, `BACKUP_DISKS`, `BACKUP_ARCHIVE_PASSWORD`,
+   `BACKUP_NOTIFICATION_MAIL` y las opcionales `BACKUP_NAME`,
+   `BACKUP_MAX_AGE_DAYS`, `BACKUP_DUMP_EXTRA_OPTION`. En producción **genera la
+   contraseña del archivo**. Para S3, `composer require
+   league/flysystem-aws-s3-v3` y deja `local` como primer disco: es el que
+   `BackupsCheck` abre al arrancar. **Ensaya un restore en staging** con la
+   receta de `deployment.md` antes de necesitarlo.
+2. **Cabeceras.** Copia `config/security.php` y
+   `app/Http/Middleware/SecurityHeaders.php`, añade
+   `$middleware->web(append: [SecurityHeaders::class]);` en `bootstrap/app.php`
+   y **quita la CSP de tu servidor web** (`add_header Content-Security-Policy`
+   en Nginx, `Header set` en Apache): si la dejas, el navegador aplica la
+   intersección y el modo report-only deja de informar de lo que pasaría. Las
+   demás cabeceras pueden quedar duplicadas con el mismo valor. Revisa
+   `csp.directives`: si tu aplicación carga scripts, tipografías o imágenes de
+   otro origen, añádelos **antes** de pasar a bloqueo. Variables nuevas:
+   `SECURITY_HSTS`, `CSP_ENABLED`, `CSP_REPORT_ONLY`, `CSP_REPORT_URI`. Y
+   `public/robots.txt`.
+3. **`APP_DEBUG`.** Si tu `.env` de producción tiene `APP_DEBUG=true`, **la
+   aplicación ya no arrancará**. Es intencionado; ponlo en `false` y vuelve a
+   cachear la config.
+4. **Docker.** Copia `docker/php/www.conf` (ajusta `pm.max_children` a tu VPS) y
+   las dos líneas del `Dockerfile` (`fcgi` en el `apk add` y el `COPY … 
+   zzz-kore.conf`; el nombre tiene que ordenarse después de `zz-docker.conf`).
+   En `docker-compose.prod.yml`, el ancla `x-logging`, un `logging:
+   *default-logging` por servicio, el healthcheck de `nginx` y el de `app`
+   (valida con `docker compose -f docker-compose.prod.yml config --quiet`). En
+   `docker/entrypoint.sh`, el `queue:restart` después de los `*:cache`
+   (`sh -n docker/entrypoint.sh`). En el `.env` de producción,
+   `LOG_STACK=stderr`, `LOG_STDERR_FORMATTER=Monolog\Formatter\JsonFormatter`,
+   `LOG_LEVEL=warning`.
+5. **Tests.** Copia `MigrationsAreReversibleTest`, `CleanInstallTest`,
+   `LoggingTest`, `SecurityHeadersTest` y `ProductionConfigTest`, y los helpers
+   `releaseRefreshDatabaseTransaction()`, `withEnvironment()` y
+   `writeRawEnvVariable()` de `tests/Pest.php`. Si tu proyecto añadió módulos,
+   revisa `MIGRATION_SMOKE_TABLES` (una tabla por origen) y los conteos de
+   `CleanInstallTest` (`Module::count()` y `SpatieRole::count()` esperan 3 y 3).
+   Si tu `DatabaseSeeder` sigue creando el admin con `User::factory()->create()`,
+   aplícale el mismo arreglo o el test de idempotencia fallará, que es justo lo
+   que tiene que hacer.
+6. **Catálogo.** Añade R46, R47 y R48 a tu `rules.md` (o `composer arch`
+   fallará por R40 al ver citadas reglas que no existen), y actualiza `R1..R45`
+   → `R1..R48` donde lo cites.
+
 ## [1.2.0] - 2026-09-03
 
 «Disciplina verificable». Las reglas del boilerplate eran prosa en `CLAUDE.md` y
@@ -133,6 +420,13 @@ Sin cambios de comportamiento para el usuario final: la suite E2E —45 tests en
 
 ### Corregido
 
+- **`config/logging.php` y `config/backup.php`**: `formatter` y `notifications.mail.to`
+  usan `env('X') ?: <default>` en vez del segundo argumento de `env()`. Con la
+  clave presente pero vacía en el `.env` (`X=`), `env()` devuelve `''`, no
+  `null`: el `LogManager` intentaba resolver la clase `''` y degradaba en
+  silencio al emergency logger de `storage/logs/laravel.log`, y las
+  notificaciones de backup se enviaban a una dirección vacía. Lo destapó la
+  revisión cruzada de la release sobre un `.env` copiado de `.env.example`.
 - `git push` moría con `No arguments expected for "git-hooks:pre-push"
   command, got "origin"`: el script que instala `igorsgm/laravel-git-hooks`
   reenvía los argumentos de git (`remote`, `url`) y su comando no los declara.
@@ -434,6 +728,13 @@ scaffold, cifras inventadas en los docs).
 
 ### Corregido
 
+- **`config/logging.php` y `config/backup.php`**: `formatter` y `notifications.mail.to`
+  usan `env('X') ?: <default>` en vez del segundo argumento de `env()`. Con la
+  clave presente pero vacía en el `.env` (`X=`), `env()` devuelve `''`, no
+  `null`: el `LogManager` intentaba resolver la clase `''` y degradaba en
+  silencio al emergency logger de `storage/logs/laravel.log`, y las
+  notificaciones de backup se enviaban a una dirección vacía. Lo destapó la
+  revisión cruzada de la release sobre un `.env` copiado de `.env.example`.
 - Borrar un usuario desde la acción de fila de la tabla no hacía nada: koreUi
   2.2 arma el diálogo de `RowAction::confirm()` en el cliente pero no autoriza
   el método en `$koreConfirmable`, así que el listener lo descartaba.
@@ -469,7 +770,8 @@ scaffold, cifras inventadas en los docs).
   el paquete cambiara. Republicarlas es un `vendor:publish` cuando de verdad
   haya que personalizarlas.
 
-[Unreleased]: https://github.com/koreui/kore-laravel/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/koreui/kore-laravel/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/koreui/kore-laravel/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/koreui/kore-laravel/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/koreui/kore-laravel/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/koreui/kore-laravel/releases/tag/v1.0.0

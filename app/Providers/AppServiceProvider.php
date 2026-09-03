@@ -17,6 +17,7 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Override;
+use RuntimeException;
 
 final class AppServiceProvider extends ServiceProvider
 {
@@ -28,6 +29,7 @@ final class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->refuseToBootWithDebugInProduction();
         $this->registerCoreCommands();
         $this->configureCommands();
         $this->configureModels();
@@ -35,6 +37,35 @@ final class AppServiceProvider extends ServiceProvider
         $this->configureUrl();
         $this->configureDate();
         $this->configureAbout();
+    }
+
+    /**
+     * Producción con `APP_DEBUG=true` no arranca.
+     *
+     * La pantalla de error de Laravel en modo debug vuelca el `.env` **entero**
+     * —APP_KEY, credenciales de base de datos, tokens de terceros— junto al
+     * stack trace, a quien provoque cualquier excepción. Un `.env` mal copiado
+     * es un error de un carácter y no da ninguna señal hasta que alguien ve el
+     * volcado, así que la señal la damos aquí: la aplicación se niega a
+     * levantar en vez de exponerse en silencio.
+     *
+     * @throws RuntimeException
+     */
+    private function refuseToBootWithDebugInProduction(): void
+    {
+        if (! $this->app->isProduction()) {
+            return;
+        }
+
+        if (! (bool) config('app.debug')) {
+            return;
+        }
+
+        throw new RuntimeException(
+            'APP_DEBUG=true en producción expone variables de entorno, stack traces y '
+            .'credenciales en cada error; ponlo en false y vuelve a cachear la config '
+            .'(php artisan config:cache).'
+        );
     }
 
     /**
@@ -137,6 +168,9 @@ final class AppServiceProvider extends ServiceProvider
             '2FA' => fn (): string => $state(config('kore-app.auth.two_factor')),
             'Magic links' => fn (): string => $state(config('kore-app.auth.magic_links')),
             'Social login' => fn (): string => $state(config('kore-app.auth.social_login')),
+            'Backup' => fn (): string => config('kore-app.backup.enabled')
+                ? 'enabled'.(config('backup.backup.password') ? ' (zip cifrado)' : ' (zip SIN cifrar)')
+                : 'disabled',
             'Pulse' => fn (): string => $state(config('pulse.enabled')),
             'Sentry' => fn (): string => config('sentry.dsn') ? 'DSN configurado' : 'sin DSN',
         ]);

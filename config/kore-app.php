@@ -29,6 +29,13 @@ return [
         'enabled' => (bool) env('TENANCY_ENABLED', false),
     ],
 
+    // Backups (spatie/laravel-backup). Opt-in como tenancy: el provider del
+    // paquete está en `dont-discover` y sólo lo registra BackupServiceProvider
+    // cuando esto es true. Producción lo enciende en su .env.
+    'backup' => [
+        'enabled' => (bool) env('BACKUP_ENABLED', false),
+    ],
+
     'socialite' => [
         'google' => (bool) env('SOCIAL_GOOGLE', false),
         'github' => (bool) env('SOCIAL_GITHUB', false),

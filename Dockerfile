@@ -41,7 +41,15 @@ FROM php:8.4-fpm-alpine
 ARG GIT_SHA=unknown
 ENV SENTRY_RELEASE=$GIT_SHA
 
-# System libraries necesarias para extensiones PHP estándar
+# System libraries necesarias para extensiones PHP estándar.
+#
+# fcgi trae `cgi-fcgi`, el cliente FastCGI que usa el healthcheck del servicio
+# `app` para pedirle /ping al propio PHP-FPM (docker-compose.prod.yml).
+#
+# mysql-client trae `mariadb-dump`, el binario que spatie/db-dumper invoca para
+# `backup:run` (con BACKUP_ENABLED=true). Sin él el backup de la base de datos
+# falla en runtime con "The dump process failed"; los archivos sí se copiarían,
+# que es la mitad inútil del backup.
 RUN apk add --no-cache \
     libpng-dev \
     libjpeg-turbo-dev \
@@ -49,7 +57,9 @@ RUN apk add --no-cache \
     libzip-dev \
     icu-dev \
     oniguruma-dev \
-    su-exec
+    mysql-client \
+    su-exec \
+    fcgi
 
 # PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
@@ -96,6 +106,9 @@ RUN mkdir -p \
 # PHP configuration
 COPY docker/php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+# Pool de PHP-FPM. Va como zzz-* para incluirse DESPUÉS de www.conf y
+# zz-docker.conf, que trae la imagen oficial.
+COPY docker/php/www.conf /usr/local/etc/php-fpm.d/zzz-kore.conf
 
 # Entrypoint
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh

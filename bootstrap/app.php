@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -23,6 +24,13 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
         ]);
+
+        // Las cabeceras de seguridad las emite la aplicación (config/security.php),
+        // no sólo el Nginx del contenedor: así viajan con el código y funcionan
+        // en cualquier hosting. Van en el grupo `web` porque protegen lo que un
+        // navegador interpreta —HTML, CSS, JS, iframes—; `/health/json` y las
+        // rutas de API devuelven JSON a un cliente que no tiene CSP ni frames.
+        $middleware->web(append: [SecurityHeaders::class]);
 
         // El grupo `api` del esqueleto de Laravel 12 no trae throttle. El
         // limiter `api` se define en AuthModuleServiceProvider.

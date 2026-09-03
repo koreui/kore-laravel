@@ -10,7 +10,7 @@ El desarrollador trabaja en español. Comunícate en español.
 
 Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta `docs/`:
 
-- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **catálogo R1–R45**: cada regla con su enforcement, su válvula y su cicatriz
+- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **catálogo R1–R48**: cada regla con su enforcement, su válvula y su cicatriz
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) — stack y patrón modular monolith
 - [`docs/architecture/module-pattern.md`](docs/architecture/module-pattern.md) — cómo se construye un módulo (lista cerrada de carpetas)
 - [`docs/architecture/toggles.md`](docs/architecture/toggles.md) — `config/kore-app.php`
@@ -37,7 +37,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - Tests: Pest 3 (con arch tests en `tests/Arch/ArchitectureTest.php`)
 - E2E: Playwright standalone (TypeScript) en `tests/e2e/`, entorno aislado con `.env.e2e`
 - Calidad: Pint + Larastan nivel 8 + PHPat + `spaze/phpstan-disallowed-calls` + `kore:arch:check` + Rector
-- Observabilidad: Sentry · Laravel Pulse · spatie/laravel-health · spatie/laravel-activitylog
+- Observabilidad: Sentry · Laravel Pulse · spatie/laravel-health · spatie/laravel-activitylog · spatie/laravel-backup (toggle)
 - AI: Laravel Boost MCP + skills propios en `.claude/skills/` (module-scaffold, kore-action-create, kore-livewire-create, kore-e2e-test)
 
 ## Arquitectura — Modular Monolith + Action Pattern
@@ -85,7 +85,7 @@ app/
 
 ### Reglas de oro (resumen — el catálogo completo es [`docs/architecture/rules.md`](docs/architecture/rules.md))
 
-Las reglas están numeradas `R1..R45` para poder citarlas en un review, en un
+Las reglas están numeradas `R1..R48` para poder citarlas en un review, en un
 commit o en un comentario. Aquí va el resumen; el detalle —enforcement,
 severidad, por qué existe y la cicatriz que la originó— está en el catálogo.
 
@@ -102,6 +102,7 @@ severidad, por qué existe y la cicatriz que la originó— está en el catálog
 11. **R33 · R34** — español es el idioma fuente y la traducción va en el `en.json` del módulo; nunca interpoles dentro de `__()`.
 12. **R35 · R36 · R40 · R42** — un test Pest por Action / componente / ruta; todo módulo con UI aporta smoke + happy path + autorización; el doc se actualiza en el mismo commit; toda release entra en el CHANGELOG.
 13. **Factories dentro del módulo**: `App\Modules\{X}\Models\{Y}` resuelve a `App\Modules\{X}\Database\Factories\{Y}Factory` (lo registra `AppServiceProvider::configureFactories()`).
+14. **R46 · R47 · R48** — las cabeceras de seguridad (CSP incluida) las emite la app desde `config/security.php`, no el hosting; `APP_DEBUG=true` en producción no arranca; y con `BACKUP_ENABLED=true` el backup va cifrado y el monitor vigila el mismo destino al que se escribe.
 
 ### Válvulas de escape
 
@@ -141,12 +142,13 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | ----------------------- | ---------------- | ----------------------------------- |
 | `API_ENABLED`           | `true`           | Sanctum + rutas API                 |
 | `TENANCY_ENABLED`       | `false`          | Módulo Tenancy (stancl/tenancy)     |
+| `BACKUP_ENABLED`        | `false`          | spatie/laravel-backup (run+clean+monitor, zip cifrado, `BackupsCheck`) |
 | `AUTH_2FA_ENABLED`      | `true`           | 2FA vía Fortify                     |
 | `AUTH_MAGIC_LINKS`      | `true`           | spatie/laravel-one-time-passwords   |
 | `AUTH_SOCIAL_LOGIN`     | `false`          | Socialite                           |
 | `SOCIAL_GOOGLE/GITHUB`  | `false`          | Proveedor específico                |
 
-Esas siete claves son **todas** las de `config/kore-app.php`. Regla: un toggle
+Esas ocho claves son **todas** las de `config/kore-app.php`. Regla: un toggle
 sólo existe si alguien lo lee. Reverb, Octane y Scout no son toggles sino
 módulos opcionales que se instalan bajo demanda; el modo `single-db`/`multi-db`
 de tenancy se elige en `config/tenancy.php` al correr `kore:tenancy:enable`.

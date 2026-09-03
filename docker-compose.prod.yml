@@ -1,5 +1,12 @@
 name: kore-laravel
 
+# ── Logging: json-file con rotación; sin esto los logs crecen sin límite ─────
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 # ── Docker Secrets (contenido de archivos en ./secrets/) ──────────────────────
 secrets:
   db_root_password:
@@ -33,6 +40,7 @@ services:
     image: kore-laravel-app:latest
     user: root  # Necesario para inicializar el volumen assets_data; entrypoint baja a www-data con su-exec
     restart: unless-stopped
+    logging: *default-logging
     networks:
       - kore_net
     volumes:
@@ -44,8 +52,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # Pide /ping al propio PHP-FPM por FastCGI (ping.path en
+    # docker/php/www.conf). `php -r "echo 'OK';"` sólo comprobaba que el binario
+    # de PHP existe: con FPM caído o sin workers libres seguía diciendo healthy,
+    # y queue/scheduler arrancaban contra una app muerta.
     healthcheck:
-      test: ["CMD-SHELL", "php -r \"echo 'OK';\" || exit 1"]
+      test: ["CMD-SHELL", "SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -56,6 +68,7 @@ services:
     image: kore-laravel-app:latest
     command: ["queue"]
     restart: unless-stopped
+    logging: *default-logging
     networks:
       - kore_net
     volumes:
@@ -70,6 +83,7 @@ services:
     image: kore-laravel-app:latest
     command: ["scheduler"]
     restart: unless-stopped
+    logging: *default-logging
     networks:
       - kore_net
     volumes:
@@ -83,6 +97,7 @@ services:
   nginx:
     image: nginx:alpine
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "127.0.0.1:8081:80"
     networks:
@@ -95,11 +110,22 @@ services:
     depends_on:
       app:
         condition: service_healthy
+    # Recorre la cadena entera: Nginx → FastCGI → PHP-FPM → Laravel. `/up` es la
+    # ruta de salud que registra bootstrap/app.php, así que este check se pone
+    # en rojo tanto si cae Nginx como si cae la app. `wget` es el de busybox,
+    # que nginx:alpine ya trae.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/up >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   # ── MySQL 8.4: sin puertos expuestos al host ────────────────────────────────
   db:
     image: mysql:8.4
     restart: unless-stopped
+    logging: *default-logging
     command: --mysql-native-password=ON
     networks:
       - kore_net
@@ -127,6 +153,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    logging: *default-logging
     networks:
       - kore_net
     command: >

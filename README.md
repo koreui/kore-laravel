@@ -51,7 +51,7 @@ Para desactivarlo, `TENANCY_ENABLED=false` en `.env` y todo el módulo deja de b
 
 Reglas vivas y resúmenes en `CLAUDE.md` / `AGENTS.md`. Detalles en [`docs/`](docs/README.md):
 
-- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **las 45 reglas del boilerplate** (`R1..R45`), cada una con su verificador, su severidad y la cicatriz que la originó
+- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **las 48 reglas del boilerplate** (`R1..R48`), cada una con su verificador, su severidad y la cicatriz que la originó
 - [`docs/architecture/`](docs/architecture/) — overview, module-pattern, toggles, authorization
 - [`docs/modules/`](docs/modules/) — auth, tenancy, users
 - [`docs/ops/`](docs/ops/) — deployment, observability

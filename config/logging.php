@@ -103,7 +103,10 @@ return [
             'handler_with' => [
                 'stream' => 'php://stderr',
             ],
-            'formatter' => env('LOG_STDERR_FORMATTER'),
+            // `?: null`: con la variable presente pero vacía env() devuelve '' y el
+            // LogManager intentaría resolver la clase '' (y degradaría en silencio
+            // al emergency logger). Vacía o ausente = LineFormatter.
+            'formatter' => env('LOG_STDERR_FORMATTER') ?: null,
             'processors' => [PsrLogMessageProcessor::class],
         ],
 

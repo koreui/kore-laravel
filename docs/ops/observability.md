@@ -1,6 +1,6 @@
 # Observabilidad
 
-**TL;DR**: cuatro herramientas instaladas listas para enchufar en producción: **Sentry** (errores), **Pulse** (performance interno), **spatie/laravel-health** (health checks `/health`), **spatie/laravel-activitylog** (audit log opt-in por modelo).
+**TL;DR**: cinco herramientas instaladas listas para enchufar en producción: **Sentry** (errores), **Pulse** (performance interno), **spatie/laravel-health** (health checks `/health`), **spatie/laravel-activitylog** (audit log opt-in por modelo) y **spatie/laravel-backup** (copias cifradas y vigiladas, toggle `BACKUP_ENABLED`).
 
 ## Resumen
 
@@ -10,6 +10,7 @@
 | Laravel Pulse              | `/pulse`                | `PULSE_ENABLED=true` (default `false`)           | `auth` + gate `viewPulse` → sólo superadmin    |
 | spatie/laravel-health      | `/health`, `/health/json` | siempre (`HealthServiceProvider`)              | HTML: `auth` + gate `viewHealth`; JSON: token   |
 | spatie/laravel-activitylog | —                       | trait `LogsActivity` por modelo                  | ya activo en `User` y `Role`                   |
+| spatie/laravel-backup      | `/health` (`BackupsCheck`) | `BACKUP_ENABLED=true` (default `false`)     | avisos por correo a `BACKUP_NOTIFICATION_MAIL`  |
 
 ## 1. Sentry
 
@@ -221,7 +222,51 @@ que el comando funciona tal cual. Para cambiarlo, o `--days=N` en el schedule, o
 publica el config con `php artisan vendor:publish --tag=activitylog-config` y
 edítalo.
 
-## 5. Scheduler
+## 5. Backups vigilados (spatie/laravel-backup)
+
+Los backups tienen **dos vigilantes**, y no son redundantes: uno empuja, el otro
+espera a que le pregunten.
+
+**`backup:monitor`** (03:00, `routes/console.php`) recorre
+`config('backup.monitor_backups')` y comprueba, para cada disco de destino, que
+el último backup no supere `BACKUP_MAX_AGE_DAYS` días (`MaximumAgeInDays`,
+1 por defecto) ni el conjunto los 5000 MB (`MaximumStorageInMegabytes`). Si algo
+falla dispara `UnhealthyBackupWasFound` y sale un correo a
+`BACKUP_NOTIFICATION_MAIL` (o a `MAIL_FROM_ADDRESS`). Por el mismo canal salen
+los avisos de `backup:run` y `backup:clean`, en éxito y en fallo — el catálogo
+completo está en `config/backup.php` → `notifications.notifications`. Para dejar
+sólo los fallos, borra de ahí las tres notificaciones `...WasSuccessful`.
+
+La lista de discos que vigila el monitor **es literalmente la misma variable
+PHP** que la de destino: las dos salen de `$disks` en `config/backup.php`. Es la
+única forma de que no se desincronicen —el caso clásico es mandar los zips a S3
+y dejar el monitor mirando `local`, donde ya no llega nada—, y
+`tests/Feature/BackupTest.php` lo comprueba comparando las dos claves.
+
+**`BackupsCheck`** (spatie/laravel-health, registrado por
+`app/Providers/BackupServiceProvider.php` cuando `BACKUP_ENABLED=true`) pone lo
+mismo en `/health` y `/health/json`, que es donde mira un monitor externo. Abre
+el **primer** disco de `BACKUP_DISKS`, lista la carpeta `BACKUP_NAME` y falla si
+no hay ningún backup o si el más reciente tiene más de un día. Con el toggle
+apagado el check no se registra y `/health` no menciona backups.
+
+> El check se registra desde `BackupServiceProvider` y no desde
+> `HealthServiceProvider` porque `Health::checks()` **acumula** (hace
+> `array_merge`, no sustituye): así el check vive pegado al toggle que lo
+> enciende y no hay que leer `kore-app.backup.enabled` desde dos sitios.
+
+Comprobación manual:
+
+```bash
+php artisan backup:list      # qué hay, dónde, de cuándo y cuánto pesa
+php artisan backup:monitor   # el veredicto del monitor, sin esperar a las 03:00
+curl -s -H "X-Secret-Token: $HEALTH_SECRET_TOKEN" https://tu-dominio.com/health/json | jq '.checkResults[] | select(.name == "Backups")'
+```
+
+El detalle de configuración, retención y la receta de restore están en
+[`deployment.md`](deployment.md#backups-spatielaravel-backup).
+
+## 6. Scheduler
 
 `routes/console.php` concentra todas las tareas programadas:
 
@@ -233,6 +278,9 @@ edítalo.
 | `queue:prune-failed --hours=168`       | diario     | limpia jobs fallidos de más de 7 días          |
 | `activitylog:clean`                    | diario     | purga el audit log                             |
 | `sanctum:prune-expired --hours=24`     | diario     | sólo si `API_ENABLED=true`                     |
+| `backup:clean`                         | 01:00      | sólo si `BACKUP_ENABLED=true`: retención        |
+| `backup:run`                           | 02:00      | sólo si `BACKUP_ENABLED=true`: dump + zip cifrado |
+| `backup:monitor`                       | 03:00      | sólo si `BACKUP_ENABLED=true`: edad y tamaño    |
 
 `model:prune` está comentado a propósito: hoy ningún modelo usa `Prunable`.
 
@@ -244,38 +292,34 @@ php artisan schedule:list
 
 ## Logs estructurados
 
-Para JSON logs en producción, edita `config/logging.php`:
-
-```php
-'production' => [
-    'driver'   => 'stack',
-    'channels' => ['stderr_json'],
-],
-'stderr_json' => [
-    'driver'    => 'monolog',
-    'handler'   => Monolog\Handler\StreamHandler::class,
-    'with'      => ['stream' => 'php://stderr'],
-    'formatter' => Monolog\Formatter\JsonFormatter::class,
-],
-```
-
-Y en `.env` de producción:
+`config/logging.php` ya trae el canal `stderr` (driver `monolog`,
+`StreamHandler` sobre `php://stderr`) y acepta un formatter por variable de
+entorno. En producción no hace falta editar el config: basta con el `.env`:
 
 ```env
-LOG_CHANNEL=production
-LOG_LEVEL=error
+LOG_CHANNEL=stack
+LOG_STACK=stderr            # o `stderr,sentry`
+LOG_STDERR_FORMATTER=Monolog\Formatter\JsonFormatter
+LOG_LEVEL=warning
 ```
+
+Docker recoge stderr y lo rota (`x-logging` de `docker-compose.prod.yml`, 10 MB
+× 5 por contenedor). `tests/Feature/LoggingTest.php` comprueba que esas
+variables construyen el logger esperado. Detalle en
+[`deployment.md`](deployment.md#logs).
 
 ## Tests
 
-La observabilidad tiene tres suites propias en `tests/Feature/`, 21 tests en
-total (`./vendor/bin/pest tests/Feature/HealthTest.php tests/Feature/PulseAccessTest.php tests/Feature/SentryIntegrationTest.php`):
+La observabilidad tiene cinco suites propias en `tests/Feature/`, 42 tests en
+total (`./vendor/bin/pest tests/Feature/HealthTest.php tests/Feature/PulseAccessTest.php tests/Feature/SentryIntegrationTest.php tests/Feature/BackupTest.php tests/Feature/LoggingTest.php`):
 
 | Archivo | Qué cubre | Tests |
 |---------|-----------|-------|
 | `HealthTest` | los dos endpoints, el gate `viewHealth`, el token de `/health/json` y los checks registrados | 12 |
 | `PulseAccessTest` | el gate `viewPulse` (sólo superadmin) y que las rutas existan con el toggle apagado | 5 |
 | `SentryIntegrationTest` | que `Integration::handles()` esté enganchado y el canal de log `sentry` declarado | 4 |
+| `BackupTest` | el toggle `BACKUP_ENABLED` en las dos posiciones, las tres tareas programadas, que el monitor y el `BackupsCheck` vigilan el destino real y que el zip sale cifrado | 16 |
+| `LoggingTest` | que la receta de `.env` de producción construye el canal `stderr` con `JsonFormatter` y el nivel esperado | 5 |
 
 `PulseAccessTest` renderiza el dashboard de Pulse, que arrastra su bundle JS: por
 eso `phpunit.xml` fija `memory_limit=512M`. Con el 128M de algunas instalaciones
@@ -287,3 +331,4 @@ de PHP la suite se cae por memoria, no por el test.
 - Pulse: https://laravel.com/docs/12.x/pulse
 - spatie/laravel-health: https://spatie.be/docs/laravel-health/v1/introduction
 - spatie/laravel-activitylog: https://spatie.be/docs/laravel-activitylog/
+- spatie/laravel-backup: https://spatie.be/docs/laravel-backup/v10/introduction

@@ -8,13 +8,14 @@
 |------------------------|---------------|-----------------------------------------------------|--------------|
 | `API_ENABLED`          | `true`        | Sanctum stateful middleware + rutas API (`/api/*`)  | `AuthModuleServiceProvider`, `routes/console.php` |
 | `TENANCY_ENABLED`      | `false`       | Módulo Tenancy completo (stancl/tenancy)            | `TenancyModuleServiceProvider` |
+| `BACKUP_ENABLED`       | `false`       | spatie/laravel-backup: comandos `backup:*`, las 3 tareas del scheduler y el `BackupsCheck` de `/health` | `BackupServiceProvider`, `routes/console.php` |
 | `AUTH_2FA_ENABLED`     | `true`        | Fortify `twoFactorAuthentication` (rutas + pantalla)| `FortifyServiceProvider::register()` |
 | `AUTH_MAGIC_LINKS`     | `true`        | OTP via spatie/laravel-one-time-passwords           | `Auth/Routes/web.php`, `login.blade.php` |
 | `AUTH_SOCIAL_LOGIN`    | `false`       | Socialite (con sub-toggles por proveedor)           | `Auth/Routes/web.php`, `login.blade.php` |
 | `SOCIAL_GOOGLE`        | `false`       | proveedor Google de Socialite                       | `SocialiteController`, `login.blade.php` |
 | `SOCIAL_GITHUB`        | `false`       | proveedor GitHub de Socialite                       | `SocialiteController`, `login.blade.php` |
 
-Estas siete son **todas** las claves de `config/kore-app.php`. La columna
+Estas ocho son **todas** las claves de `config/kore-app.php`. La columna
 "quién lo lee" no es decorativa: es la regla. Un toggle que nadie lee es una
 mentira en la documentación, y por eso en la v1.0.0 se borraron
 `REVERB_ENABLED`, `OCTANE_ENABLED`/`OCTANE_SERVER`, `SCOUT_ENABLED`/`SCOUT_DRIVER`,
@@ -38,7 +39,7 @@ uno, se cae solo. Ver [`rules.md`](rules.md) → R11.
 | Modo de tenancy (`single-db` / `multi-db`) | Se decide al ejecutar `php artisan kore:tenancy:enable`, en `config/tenancy.php` (bootstrappers de stancl). Nunca fue una variable de entorno funcional. |
 | Sentry | `SENTRY_LARAVEL_DSN`. Sin DSN el SDK es no-op; no hay booleano aparte. |
 | Pulse | `PULSE_ENABLED`, que lee `config/pulse.php` (del paquete), no `kore-app`. |
-| Health | Siempre activo. Rutas en `HealthServiceProvider`; `/health/json` pide `HEALTH_SECRET_TOKEN`. |
+| Health | Siempre activo. Rutas en `HealthServiceProvider`; `/health/json` pide `HEALTH_SECRET_TOKEN`. El `BackupsCheck` es la excepción: sólo se registra con `BACKUP_ENABLED=true`. |
 
 ## Patrón en código
 

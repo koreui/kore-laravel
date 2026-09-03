@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Modules\Auth\Providers\FortifyServiceProvider;
-use Illuminate\Support\Env;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
@@ -31,15 +30,9 @@ it('does not read AUTH_2FA_ENABLED from env in the fortify config', function ():
 });
 
 it('drops the two-factor routes when the app boots with the toggle off', function (): void {
-    Env::getRepository()->set('AUTH_2FA_ENABLED', 'false');
-
-    try {
-        $this->refreshApplication();
-
+    withEnvironment(['AUTH_2FA_ENABLED' => 'false'], function (): void {
         expect(config('kore-app.auth.two_factor'))->toBeFalse()
             ->and(Features::enabled(Features::twoFactorAuthentication()))->toBeFalse()
             ->and(Route::has('two-factor.login'))->toBeFalse();
-    } finally {
-        Env::getRepository()->clear('AUTH_2FA_ENABLED');
-    }
+    });
 });

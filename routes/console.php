@@ -63,6 +63,27 @@ if ((bool) config('kore-app.api.enabled')) {
         ->onOneServer();
 }
 
+// Backups (spatie/laravel-backup): sólo con BACKUP_ENABLED=true, porque con el
+// toggle apagado los comandos ni siquiera están registrados. El orden importa:
+// primero se limpia lo viejo (para que quepa el nuevo), después se hace el
+// backup del día y por último se comprueba que existe y no es demasiado
+// antiguo. `backup:run` va sin solapamiento porque un dump grande puede
+// pasarse de la hora.
+if ((bool) config('kore-app.backup.enabled')) {
+    Schedule::command('backup:clean')
+        ->dailyAt('01:00')
+        ->onOneServer();
+
+    Schedule::command('backup:run')
+        ->dailyAt('02:00')
+        ->withoutOverlapping()
+        ->onOneServer();
+
+    Schedule::command('backup:monitor')
+        ->dailyAt('03:00')
+        ->onOneServer();
+}
+
 // `model:prune` se deja fuera a propósito: hoy ningún modelo del boilerplate
 // usa el trait Prunable / MassPrunable, y el comando aborta si no encuentra
 // ninguno. Descoméntalo cuando añadas el primero.

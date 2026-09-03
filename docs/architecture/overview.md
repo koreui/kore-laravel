@@ -77,7 +77,7 @@ la cicatriz real que la originó. Este resumen sólo da el titular.
 | [R35](rules.md) | un test Pest por Action, componente Livewire y ruta |
 
 Ver detalle en:
-- [`rules.md`](rules.md) — **el catálogo completo `R1..R45`** (fuente de verdad)
+- [`rules.md`](rules.md) — **el catálogo completo `R1..R48`** (fuente de verdad)
 - [`module-pattern.md`](module-pattern.md) — cómo se construye un módulo
 - [`toggles.md`](toggles.md) — `config/kore-app.php`
 - [`../quality/pipeline.md`](../quality/pipeline.md) — pipeline que hace cumplir esto

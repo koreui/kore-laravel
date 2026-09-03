@@ -1,4 +1,4 @@
-# Reglas de arquitectura (R1–R45)
+# Reglas de arquitectura (R1–R48)
 
 **TL;DR**: las reglas del boilerplate son numeradas, citables (`R5`) y cada una
 dice quién la verifica y con qué comando. Lo que se puede verificar, falla el
@@ -515,22 +515,80 @@ un enumerador de usuarios.
 `/livewire/update`, que es por donde viaja la llamada real. Cerrado en la
 v1.0.0 con 5 envíos / 5 min por email + IP y respuesta genérica.
 
+### R46 · Las cabeceras de seguridad las emite la aplicación
+`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`,
+`Permissions-Policy`, `Cross-Origin-Opener-Policy`, HSTS y la CSP salen de
+`config/security.php` a través de `App\Http\Middleware\SecurityHeaders`, no del
+servidor web. Un origen nuevo se añade a ese config, nunca al `nginx.conf`, y
+la CSP se estrena en `report-only`.
+> Enforcement: tests (`SecurityHeadersTest`) · `composer test` · **Error**
+> Escape: `arch-accepted`
+
+**Por qué.** Una cabecera que pone el hosting no viaja con el código: no está en
+el diff, no la ve el review, no la cubre ningún test y desaparece entera el día
+que el despliegue cambia de sitio. Puesta en la aplicación es un artefacto más
+—se prueba, se versiona y funciona igual en Docker, en Forge, en Laravel Cloud
+o en un `artisan serve`—, y la política queda en un solo archivo donde se puede
+leer entera de una vez. El servidor puede seguir emitiéndolas como defensa en
+profundidad para los estáticos que sirve sin pasar por PHP, pero la fuente de
+verdad es el config.
+
+**Cicatriz.** Hasta la v1.2.0 las cabeceras vivían **sólo** en
+`docker/nginx/nginx.conf`, dentro del `server` block del contenedor. Cualquier
+despliegue fuera de ese Docker —el que hace un derivado del boilerplate en un
+hosting compartido, o el `artisan serve` de una demo— salía a producción sin
+`X-Frame-Options`, sin `X-Content-Type-Options` y sin CSP, y nada lo decía. En
+la v1.3.0 la CSP se retiró del Nginx (dos CSP simultáneas se intersecan, y la
+más restrictiva gana en silencio) y pasó a `config/security.php`.
+
+### R47 · `APP_DEBUG=true` no arranca en producción
+`AppServiceProvider::refuseToBootWithDebugInProduction()` lanza `RuntimeException`
+si `app()->isProduction()` y `config('app.debug')` es `true`. La aplicación no
+levanta.
+> Enforcement: tests (`ProductionConfigTest`) · `composer test` · **Error**
+> Escape: ninguna
+
+Relacionada: R17, que es la otra mitad de lo mismo —el `.env` sólo se lee desde
+`config/`, y aquí se comprueba que lo que se leyó no es una bomba.
+
+**Por qué.** Con `APP_DEBUG=true`, la pantalla de error de Laravel vuelca el
+`.env` **entero** junto al stack trace: `APP_KEY`, credenciales de base de
+datos, tokens de terceros, el secreto de `/health/json`. No hace falta un
+atacante: basta una excepción cualquiera y alguien mirando. Y no hay ninguna
+señal de que esté pasando —la aplicación funciona perfectamente— hasta que se ve
+el volcado. Un fallo tan barato de cometer (un `.env` copiado de local, un
+`config:cache` que no se rehízo) y tan caro de detectar sólo se puede atajar
+haciéndolo ruidoso: si la aplicación no arranca, el despliegue se para y alguien
+lo lee.
+
+**Cicatriz.** Sin cicatriz todavía. La regla es preventiva a propósito: la
+cicatriz de ésta es una filtración de credenciales, y no es de las que se
+esperan a tener.
+
 ---
 
 ## §4 · Datos
 
 ### R29 · Toda migración define `down()`
-Incluidas las publicadas por un paquete.
-> Enforcement: `kore:arch:check` · `composer arch` · **Error**
+Incluidas las publicadas por un paquete. Y ese `down()` se ejecuta: deja la
+base como estaba antes del `up()`.
+> Enforcement: `kore:arch:check` (que el método exista) · `composer arch` · **Error** · + Pest (`tests/Feature/MigrationsAreReversibleTest.php`, que el método funcione) · `composer test` · **Error**
 > Escape: `arch-accepted` (una migración de datos irreversible es una decisión legítima; se escribe)
 
 **Por qué.** Una migración sin `down()` convierte cualquier rollback en un dump
-manual a las tres de la mañana, y hace imposible el test de «migrar, revertir,
-volver a migrar».
+manual a las tres de la mañana. Pero **un `down()` que existe y no funciona es
+peor que ninguno**: el que falta lo ves en el `git grep`, el que está roto lo
+descubres a mitad del rollback, con la mitad de las tablas ya caídas y sin
+camino de vuelta. Por eso la regla tiene dos verificadores y no uno: el textual
+sólo demuestra que alguien escribió el método.
 
-**Cicatriz.** Descubierta por esta misma regla al escribirla (v1.2.0): tres
-migraciones publicadas de vendor —`one_time_passwords`, `activity_log` y las
-tablas de `spatie/laravel-health`— no definían `down()`. Se les añadió.
+**Cicatriz.** Doble. Al escribir la regla (v1.2.0), tres migraciones publicadas
+de vendor —`one_time_passwords`, `activity_log` y las tablas de
+`spatie/laravel-health`— no definían `down()`; se les añadió. Pero ese `down()`
+escrito a mano no lo corrió nadie hasta la v1.3.0, cuando
+`MigrationsAreReversibleTest` hizo el ciclo completo `migrate:fresh` →
+`migrate:reset` → `migrate` por primera vez. Esa vez salieron todos vivos; la
+regla se queda porque el que no se ejecuta es el que se pudre.
 
 ### R30 · Sin Eloquent en Blade
 Nada de `::query()`, `::where(`, `::count(`, `::all(`, `::find(` ni
@@ -549,6 +607,47 @@ sólo se ven en producción.
 **Cicatriz.** `dashboard.blade.php` hacía `User::count()`, `Permission::count()`
 y `Module::where(...)->count()` dentro de un bloque `@php`. En la v1.1.0 el
 dashboard pasó a ser un componente Livewire con `DashboardStatData`.
+
+### R48 · Producción hace copias de seguridad cifradas y monitorizadas
+Con `BACKUP_ENABLED=true`, el scheduler corre `backup:clean`, `backup:run` y
+`backup:monitor` a diario, el zip va cifrado con `BACKUP_ARCHIVE_PASSWORD` y el
+monitor —y el check `BackupsCheck` de `/health`— vigilan **exactamente** los
+discos a los que se escribe (`BACKUP_DISKS`), no una lista aparte.
+> Enforcement: tests (`BackupTest`) · `composer test` · **Error** · que producción encienda el toggle y ponga la contraseña: **Manual**
+> Escape: `arch-accepted`
+
+Relacionada: R10 y R11 (es un toggle más, con su provider que no registra nada
+apagado y su lector real).
+
+**Por qué.** Un backup que nadie vigila no existe: se descubre que lleva meses
+fallando el día que hace falta. Y un zip sin cifrar en un bucket es la tabla de
+usuarios en claro fuera del servidor. Por eso el destino y el monitor salen de
+la misma variable, y por eso el test comprueba que el archivo generado está
+cifrado de verdad, no que la opción esté puesta.
+
+**Cicatriz.** Sin cicatriz todavía. La auditoría de septiembre de 2026 encontró
+un stack Docker con volúmenes persistentes de MySQL y `storage/` y ninguna copia
+programada de ninguno de los dos.
+
+### Nota · La instalación limpia es un test, no un procedimiento
+
+`tests/Feature/CleanInstallTest.php` reproduce lo que hacen `composer setup` y
+el entrypoint de Docker: `migrate:fresh --seed` con los seeders reales, sin
+fakes. Comprueba tres cosas que ningún test de módulo ve porque todos parten de
+una base ya sembrada:
+
+1. que `DatabaseSeeder` deja un `admin@example.com` con el rol `admin` y **todos**
+   los permisos registrados, y que `ModulesSeeder` siembra sus módulos, roles y
+   permisos;
+2. que sembrar dos veces es idempotente —`db:seed` se corre a mano en producción
+   y a veces se repite—;
+3. que `E2eSeeder` levanta sus cuatro cuentas sobre una base vacía, que es la
+   precondición de toda la suite de Playwright.
+
+Va aquí y no en §6 · Tests porque lo que verifica no es una convención de tests
+sino una propiedad de los datos: el estado inicial del sistema. Un boilerplate
+cuyo `db:seed` revienta la segunda vez no es reutilizable (lo hacía hasta la
+v1.3.0), y eso no lo veía ninguna regla.
 
 ---
 
@@ -849,14 +948,14 @@ con `--no-verify`, y entonces no verifica nada.
 
 | Capa | Presupuesto | Medido | Qué corre |
 |------|-------------|--------|-----------|
-| **pre-commit** | ~2 s | **0,4 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
-| **pre-push** | ~30 s | **2,5 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
-| **`composer ci`** | ~90 s | **6 s** | `pint --test` (0,3) + `phpstan` (0,6 con caché, 2,0 en frío) + `composer arch` (0,2) + `rector --dry-run` (2,4) + `pest` (4,5, secuencial) |
+| **pre-commit** | ~2 s | **0,7 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
+| **pre-push** | ~30 s | **3 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
+| **`composer ci`** | ~90 s | **10 s** | `pint --test` (0,5) + `phpstan` (0,7 con caché, 2,0 en frío) + `composer arch` (0,2) + `rector --dry-run` (2,8) + `pest` (6,1, secuencial) |
 | **CI (GitHub)** | ~3 min | — | `composer ci` en matriz 8.3 / 8.4 + `composer audit` + `npm ci && npm run build` + E2E (45 tests en 12 archivos) |
 
 Medido en un MacBook (Apple Silicon, PHP 8.4) sobre el repositorio a fecha de
-la v1.2.0, con 232 tests Pest y una suite E2E de 45 tests en 12 archivos
-(14 s aparte). Las tres primeras capas caben holgadamente en su
+la v1.3.0, con 277 tests Pest y una suite E2E de 45 tests en 12 archivos
+(13 s aparte). Las tres primeras capas caben holgadamente en su
 presupuesto: el margen es para que un proyecto derivado pueda crecer sin tener
 que rediseñar el pipeline.
 
@@ -875,9 +974,9 @@ se re-registran a mano con `php artisan git-hooks:register`.
 | **Larastan nivel 8** | `composer analyse` | R15 |
 | **`kore:arch:check`** | `composer arch` | R11, R23, R24, R29, R30, R37, R38, R40, R44, R45 |
 | **Pint** | `composer lint` | R13, R16 |
-| **Tests Pest** | `composer test` | R10, R12, R26, R27, R28, R33, R34 |
+| **Tests Pest** | `composer test` | R10, R12, R26, R27, R28, R29, R33, R34, R46, R47, R48 |
 | **E2E Playwright** | `npm run e2e` | *ninguna* — ver abajo |
-| **Revisión humana** | code review | R2, R4, R9, R10, R12, R14, R16, R25, R28, R31, R32, R35, R36, R39, R40, R41, R42, R43, R44 |
+| **Revisión humana** | code review | R2, R4, R9, R10, R12, R14, R16, R25, R28, R31, R32, R35, R36, R39, R40, R41, R42, R43, R44, R48 |
 
 **Por qué la fila de `npm run e2e` está vacía.** Es la única, y es a propósito.
 La suite E2E es el **objeto** de R36, no su verificador: correrla comprueba que
@@ -889,17 +988,20 @@ sí se pueden verificar sobre el código de los E2E —R37 (`data-testid`) y R38
 arrancar un navegador.
 
 Varias reglas aparecen en más de una fila: casi ninguna se verifica entera con
-una sola herramienta. R2, por ejemplo, tiene el sufijo `Action` vigilado por
+una sola herramienta. R29 es desde la v1.3.0 el ejemplo más claro de por qué una
+regla necesita dos verificadores: `kore:arch:check` lee el archivo y ve el
+`down()`, y `MigrationsAreReversibleTest` lo ejecuta. Lo primero es gramática;
+lo segundo, semántica. R2, por ejemplo, tiene el sufijo `Action` vigilado por
 Pest arch y la semántica del nombre (`{Domain}{Object}{Verb}`) en revisión
 humana; R14 tiene el `final` verificado en Actions, Data, Events, Rules,
 Policies y Providers, y a ojo en el resto.
 
-De las 45 reglas, **37 tienen al menos un verificador automático** que falla el
+De las 48 reglas, **40 tienen al menos un verificador automático** que falla el
 build (entero o en parte) y **8 son íntegramente manuales**: R31, R32, R35, R36,
 R39, R41, R42 y R43. Ninguna regla está sin clasificar: si dice **Manual**, es
 porque hoy no hay forma barata de verificarla, no porque nadie lo haya mirado.
 
-El reparto es 37/8 y no 36/9 porque **R34** (sin interpolación dentro de `__()`)
+El reparto es 40/8 y no 39/9 porque **R34** (sin interpolación dentro de `__()`)
 resultó estar verificada sin que nadie lo hubiera comprobado: el extractor de
 `TranslationsTest` captura el literal tal cual, así que una clave interpolada
 aparece como «sin traducir» y el test falla. Es la lección de R41 aplicada a
