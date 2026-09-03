@@ -82,6 +82,11 @@ function releaseRefreshDatabaseTransaction(): void
  * anterior y se vuelve a arrancar la aplicación para que el test siguiente no
  * herede nada.
  *
+ * Cada arranque repite el `withoutVite()` de `Tests\TestCase::setUp()`: la
+ * aplicación nueva no pasa por `setUp()`, y sin él cualquier vista con `@vite`
+ * busca `public/build/manifest.json`, que en CI no existe (en local sí, y por
+ * eso el fallo sólo se veía allí).
+ *
  * @param array<string, string> $variables
  */
 function withEnvironment(array $variables, Closure $callback): void
@@ -95,6 +100,7 @@ function withEnvironment(array $variables, Closure $callback): void
 
     try {
         test()->refreshApplication();
+        test()->withoutVite();
 
         $callback();
     } finally {
@@ -103,6 +109,7 @@ function withEnvironment(array $variables, Closure $callback): void
         }
 
         test()->refreshApplication();
+        test()->withoutVite();
     }
 }
 

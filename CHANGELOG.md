@@ -10,6 +10,14 @@ desde el upstream (`git remote add kore https://github.com/koreui/kore-laravel`)
 
 ## [Unreleased]
 
+### Corregido
+
+- **`withEnvironment()` repite `withoutVite()` tras cada `refreshApplication()`.**
+  La aplicación reconstruida no pasa por `TestCase::setUp()`, así que perdía el
+  `withoutVite()` y toda vista con `@vite` buscaba `public/build/manifest.json`.
+  En local existe y `DocsPagesTest` pasaba; en CI no, y daba 500. Era el último
+  rojo del workflow `ci.yml`.
+
 ## [1.4.1] - 2026-09-03
 
 ### Corregido
