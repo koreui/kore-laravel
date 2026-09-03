@@ -48,6 +48,7 @@ Hub central de documentación. Las reglas vivas y resúmenes operativos están e
 ### Auditorías
 
 - [`audit/2026-09-02-auditoria-y-roadmap.md`](audit/2026-09-02-auditoria-y-roadmap.md) — auditoría de septiembre de 2026 y roadmap por versiones
+- [`audit/2026-09-03-cantera-notarium-asper.md`](audit/2026-09-03-cantera-notarium-asper.md) — qué de Notarium y asper-server merece subir al boilerplate: convergencias, reglas que cambian y propuesta v2.1 → v2.4
 
 Fuera de `docs/` vive también [`CHANGELOG.md`](../CHANGELOG.md): qué cambió en cada versión y qué aplicar al actualizar un proyecto derivado.
 
