@@ -21,9 +21,9 @@ return RectorConfig::configure()
         __DIR__.'/app/Modules/*/Database/Migrations',
         __DIR__.'/database/migrations',
     ])
-    ->withPhpSets(php83: true)
+    ->withPhpSets(php84: true)
     ->withSets([
-        LevelSetList::UP_TO_PHP_83,
+        LevelSetList::UP_TO_PHP_84,
         SetList::CODE_QUALITY,
         SetList::DEAD_CODE,
         SetList::EARLY_RETURN,

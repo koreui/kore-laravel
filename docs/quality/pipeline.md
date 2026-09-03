@@ -182,7 +182,7 @@ viola cada check y otro que lo cumple).
 
 Sets aplicados:
 
-- `LevelSetList::UP_TO_PHP_83` — modernización PHP 8.3
+- `LevelSetList::UP_TO_PHP_84` — modernización PHP 8.4
 - `SetList::CODE_QUALITY` — calidad general
 - `SetList::DEAD_CODE` — código muerto
 - `SetList::EARLY_RETURN` — early returns

@@ -22,7 +22,7 @@ use App\Modules\Docs\Support\MarkdownRenderer;
  */
 function rewriteFrom(string $document, string $target): string
 {
-    return (new DocLinkExtension($document))->rewrite($target);
+    return new DocLinkExtension($document)->rewrite($target);
 }
 
 it('rewrites a link to a sibling document', function (): void {

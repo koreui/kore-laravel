@@ -165,13 +165,7 @@ final class ListTogglesTool extends Tool
     {
         $key = mb_strtolower($key);
 
-        foreach (self::SECRET_HINTS as $hint) {
-            if (str_contains($key, $hint)) {
-                return true;
-            }
-        }
-
-        return false;
+        return array_any(self::SECRET_HINTS, fn (string $hint): bool => str_contains($key, $hint));
     }
 
     /**

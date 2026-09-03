@@ -10,6 +10,18 @@ desde el upstream (`git remote add kore https://github.com/koreui/kore-laravel`)
 
 ## [Unreleased]
 
+### Cambiado
+
+- **Rector al set de PHP 8.4** (`withPhpSets(php84: true)` +
+  `LevelSetList::UP_TO_PHP_84`): el mínimo real desde la v1.4.1 era 8.4 y el
+  set seguía en 8.3. Aplicado: `array_any()` en dos bucles de `ArchCheckCommand`
+  y `ListTogglesTool`, y `new X` sin paréntesis donde no hay argumentos.
+- **GitHub Actions al día** (`actions/checkout` 7, `actions/cache` 6,
+  `actions/setup-node` 7, `actions/upload-artifact` 7) y **`@types/node` 26**,
+  **`concurrently` 10**. Los PRs de Dependabot llevaban abiertos desde la
+  v1.0.0 con el CI en rojo; con el CI verde (v1.4.1) se fusionan los que pasan
+  y el resto se aplica a mano en un solo commit.
+
 ## [2.0.0] - 2026-09-03
 
 «Laravel 13 + Pest 5». Primer *major* del boilerplate: sube el framework, el

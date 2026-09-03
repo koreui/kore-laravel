@@ -138,6 +138,16 @@ Ficha: Laravel 13, PHP ^8.5, Livewire 4, TallStackUI 4, PostgreSQL, PHPUnit 13 (
 
 ## 3. Roadmap propuesto (versionado)
 
+> **Estado a 2026-09-03: roadmap completo.** v1.0.0, v1.1.0, v1.2.0, v1.3.0,
+> v1.4.0, v1.4.1 y v2.0.0 están publicadas con tag y GitHub Release. Cada una
+> tiene su entrada en [`CHANGELOG.md`](../../CHANGELOG.md) con nota de
+> migración para derivados; los dos desvíos deliberados respecto a lo escrito
+> aquí (release-please sustituido por un workflow que lee el CHANGELOG, y los
+> atributos `#[Middleware]`/`#[Authorize]` de Laravel 13 no adoptados) están
+> justificados en `docs/quality/pipeline.md` y `docs/architecture/authorization.md`.
+> El resto de este documento se conserva tal cual, como registro de lo que se
+> decidió y por qué.
+
 La idea es que cada release cierre un tema y que un proyecto derivado pueda seguir el CHANGELOG para saber qué aplicar. Semver: `1.0.0` marca "lo que hay hoy, corregido"; los majors se reservan para Laravel 13 / Pest 5.
 
 ### v1.0.0 — Cerrar la brecha promesa/realidad (1 semana)

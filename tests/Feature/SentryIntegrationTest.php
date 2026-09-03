@@ -18,16 +18,16 @@ it('keeps the sentry channel out of the default stack', function (): void {
 it('registers the sentry reportable callback on the exception handler', function (): void {
     $handler = resolve(ExceptionHandler::class);
 
-    $reportCallbacks = (new ReflectionObject($handler))
+    $reportCallbacks = new ReflectionObject($handler)
         ->getProperty('reportCallbacks')
         ->getValue($handler);
 
     $files = array_map(function (object $reportable): string {
-        $callback = (new ReflectionObject($reportable))
+        $callback = new ReflectionObject($reportable)
             ->getProperty('callback')
             ->getValue($reportable);
 
-        return (new ReflectionFunction($callback))->getFileName() ?: '';
+        return new ReflectionFunction($callback)->getFileName() ?: '';
     }, $reportCallbacks);
 
     $fromSentry = array_filter($files, fn (string $file): bool => str_contains($file, 'sentry-laravel'));

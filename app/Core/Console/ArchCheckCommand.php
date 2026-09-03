@@ -293,13 +293,7 @@ final class ArchCheckCommand extends Command
             return false;
         }
 
-        foreach ($matches[1] as $kind) {
-            if ($this->valveFormIsAllowed($rule, (string) $kind)) {
-                return true;
-            }
-        }
-
-        return false;
+        return array_any($matches[1], fn ($kind): bool => $this->valveFormIsAllowed($rule, (string) $kind));
     }
 
     /**
@@ -1017,13 +1011,7 @@ final class ArchCheckCommand extends Command
             return true;
         }
 
-        foreach ($this->scope as $path) {
-            if (str_starts_with($path, $this->root.'/.agents/skills') || str_starts_with($path, $this->root.'/.claude/skills')) {
-                return true;
-            }
-        }
-
-        return false;
+        return array_any($this->scope, fn (string $path): bool => str_starts_with($path, $this->root.'/.agents/skills') || str_starts_with($path, $this->root.'/.claude/skills'));
     }
 
     /*
