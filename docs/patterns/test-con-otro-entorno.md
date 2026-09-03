@@ -65,12 +65,45 @@ Lo que hace, en orden:
 3. `test()->refreshApplication()`: la aplicación arranca de nuevo, esta vez
    leyendo el valor nuevo.
 4. Ejecuta el callback.
-5. En un `finally`, restaura los valores anteriores y **vuelve a arrancar**. El
-   `finally` no es cosmético: sin él, un fallo dentro del callback dejaría la
-   variable puesta para todos los tests siguientes del mismo proceso.
+5. Reengancha la base de datos del test (`reattachInMemoryDatabase()`, abajo).
+6. En un `finally`, restaura los valores anteriores, **vuelve a arrancar** y
+   vuelve a reenganchar. El `finally` no es cosmético: sin él, un fallo dentro
+   del callback dejaría la variable puesta para todos los tests siguientes del
+   mismo proceso.
 
 Por eso el test da el mismo resultado tenga el desarrollador la variable en su
 `.env` o no, que es la propiedad que se buscaba.
+
+### La trampa que falta: `:memory:` **es** la conexión
+
+`phpunit.xml` fuerza `DB_DATABASE=:memory:`, y con SQLite en memoria la base de
+datos no es un archivo al que reconectarse: **vive dentro del PDO**. Cada
+`refreshApplication()` abre uno nuevo, y con él una base vacía —sin las tablas
+que migró `RefreshDatabase` ni las filas que creó el test—. Cualquier consulta
+dentro del `withEnvironment()` moría en `no such table: users`, y el test que
+sólo miraba rutas o config no se enteraba.
+
+`RefreshDatabase` ya tiene resuelto el mismo problema entre test y test: guarda
+el PDO original en `RefreshDatabaseState::$inMemoryConnections` y se lo devuelve
+a la conexión en `restoreInMemoryDatabase()`. `reattachInMemoryDatabase()`
+(`tests/Pest.php`) hace exactamente eso, aplicado cuando quien rearranca la
+aplicación es el propio test:
+
+```php
+function reattachInMemoryDatabase(): void
+{
+    foreach (RefreshDatabaseState::$inMemoryConnections as $name => $pdo) {
+        DB::connection($name)->setPdo($pdo);
+    }
+}
+```
+
+Se llama dos veces, una por arranque: si sólo se llamara dentro, el test volvería
+del `withEnvironment()` a una base vacía y las aserciones posteriores fallarían.
+
+No hace nada cuando la base no es en memoria (un derivado sobre MySQL, o SQLite
+en archivo): ahí la conexión nueva encuentra los mismos datos, y el array está
+vacío.
 
 ### Cuándo **no** usarlo
 
@@ -101,7 +134,8 @@ function withBackupEnabled(Closure $callback, array $env = []): void
 
 ## Dónde está en el código
 
-- `tests/Pest.php` — `withEnvironment()` y `writeRawEnvVariable()`, con el
+- `tests/Pest.php` — `withEnvironment()`, `reattachInMemoryDatabase()` y
+  `writeRawEnvVariable()`, con el
   porqué del `clear()` escrito en el docblock (incluida la razón por la que el
   borrado copia `$_ENV` en una variable local en vez de hacer `unset($_ENV[…])`:
   el `EnvVariableToEnvHelperRector` de rector-laravel reescribe cualquier lectura
@@ -122,6 +156,7 @@ function withBackupEnabled(Closure $callback, array $env = []): void
 | 1 | `TwoFactorToggleTest` | v1.0.0 → arreglado en v1.3.0 | Nació con `Env::getRepository()->set()` y era verde en CI y rojo en local en cuanto el `.env` definía `AUTH_2FA_ENABLED`. Es la aparición que enseñó el modo de fallo. |
 | 2 | `BackupTest` | v1.3.0 | El caso de volumen: 16 tests que necesitan la aplicación arrancada con el toggle encendido para ver el provider del paquete, sus comandos, sus tareas del scheduler y su check de `/health`. Aportó el envoltorio con nombre (`withBackupEnabled()`). |
 | 3 | `ProductionConfigTest` | v1.3.0 | El caso en que lo que se prueba es que la aplicación **no** arranque (R47, `APP_DEBUG=true` en producción). Confirmó que el `finally` tiene que restaurar también cuando el arranque lanza. |
+| 4 | `ApiDocsTest` | v2.2.0 | El primero que necesita **datos** dentro del bloque: el gate `viewApiDocs` exige un superadmin de verdad, y con `:memory:` la aplicación rearrancada abría una base vacía. Aportó `reattachInMemoryDatabase()`, que arregla el helper para los tres anteriores también. |
 
 Las tres convergieron en la v1.3.0 en el mismo helper de `tests/Pest.php`, que
 es lo que lo convirtió en patrón y no en tres soluciones parecidas.

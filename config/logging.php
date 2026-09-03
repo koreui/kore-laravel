@@ -68,6 +68,24 @@ return [
         ],
 
         /*
+         * Auditoría de la API (`App\Core\Http\Api\Middleware\ApiAuditLogger`,
+         * alias `api.audit`): una línea estructurada por petición con método,
+         * ruta, usuario, status y milisegundos. Nunca el cuerpo.
+         *
+         * Es un stack y no un `single` con archivo propio para que un
+         * despliegue pueda separarlo o mandarlo a un agregador sin tocar
+         * código: `LOG_API_STACK=daily` lo saca de `laravel.log`,
+         * `LOG_API_STACK=stderr` lo manda al colector del contenedor. Por
+         * defecto va donde va todo lo demás, que es lo correcto para un
+         * boilerplate: un archivo más que nadie mira no es observabilidad.
+         */
+        'api' => [
+            'driver' => 'stack',
+            'channels' => explode(',', (string) env('LOG_API_STACK', 'single')),
+            'ignore_exceptions' => false,
+        ],
+
+        /*
          * Buzón de la suite E2E.
          *
          * Con `MAIL_MAILER=log` cada correo se escribe entero en un canal de

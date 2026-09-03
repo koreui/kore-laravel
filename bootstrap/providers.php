@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 return [
     App\Providers\AppServiceProvider::class,
+    App\Providers\ApiDocsServiceProvider::class,
     App\Providers\HealthServiceProvider::class,
     App\Providers\BackupServiceProvider::class,
     App\Modules\Auth\Providers\AuthModuleServiceProvider::class,

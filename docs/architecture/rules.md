@@ -1,4 +1,4 @@
-# Reglas de arquitectura (R1–R53)
+# Reglas de arquitectura (R1–R54)
 
 **TL;DR**: las reglas del boilerplate son numeradas, citables (`R5`) y cada una
 dice quién la verifica y con qué comando. Lo que se puede verificar, falla el
@@ -329,6 +329,56 @@ sino moverla fuera de `config/`, al `register()` del provider:
 `FortifyServiceProvider::configureTwoFactorFeature()` añade o quita la feature
 `twoFactorAuthentication` según el toggle, y corre antes del `boot()` en el que
 Fortify publica sus rutas. v1.0.0.
+
+### R54 · Toda respuesta de la API pasa por el contrato de Core
+Los controllers de `App\Modules\*\Http\Controllers\Api` extienden
+`App\Core\Http\Api\Controllers\ApiController`; sus resources
+(`Http\Resources\Api`) extienden `BaseApiResource`; sus form requests
+(`Http\Requests\Api`) extienden `BaseApiRequest`; y **ningún** error de
+`api/*` se rinde a mano: lo traduce `ApiExceptionRenderer`. El éxito viaja como
+`{ data, meta? }` y el fallo como `{ error: { code, message, details? } }`.
+> Enforcement: Pest arch (`tests/Arch/ArchitectureTest.php`, los tres `toExtend` por glob) · `./vendor/bin/pest tests/Arch` · **Error** · + Pest (`tests/Feature/Api/ApiExceptionRendererTest.php`, un caso por código canónico) · `composer test` · **Error**
+> Escape: `arch-accepted` (ver §Válvulas)
+
+Relacionada: R8 —un DTO es la forma de un dato *dentro* de la aplicación y un
+resource la forma con la que **sale**— y R28, que pone el rate limit sobre estos
+mismos endpoints.
+
+**Por qué.** Un contrato de API no se documenta: se hereda. En cuanto cada
+endpoint decide su propio sobre, el cliente necesita saber de qué endpoint viene
+cada respuesta para saber cómo leerla, y eso no se arregla con un doc — se
+arregla el día que alguien reescribe los treinta endpoints a la vez, que es un
+día que no llega. Heredarlo de una clase base hace que la decisión se tome una
+vez, que el arch test la mantenga, y que un endpoint nuevo salga bien por
+defecto en vez de por disciplina.
+
+El envelope de error, además, es lo que hace que la API sea **operable**: un
+`code` canónico (`throttled`, `validation_failed`, `conflict`) es lo que un
+cliente puede programar; un status HTTP a secas no distingue «tu token caducó»
+de «este recurso ya no existe», y un mensaje en prosa cambia el día que alguien
+mejora la redacción. Y el mensaje lo pone el contrato y no la excepción a
+propósito: el de un `ModelNotFoundException` lleva dentro el FQCN del modelo y
+el id buscado, y el de una `AuthorizationException` viene en inglés desde el
+Gate.
+
+**Cicatriz.** Triple, y las tres versiones de la misma.
+
+En **Notarium**, `app/Http/Exceptions/ApiExceptionRenderer.php`,
+`app/Http/Requests/Api/V1/BaseApiRequest.php` y
+`app/Http/Resources/Api/V1/BaseApiResource.php` inventaron el contrato entero
+—envelope, códigos, `details`, paginación por cursor— y lo inventaron bien. En
+**asper-server**, que salió del mismo boilerplate, no existe ninguno de los
+tres: su API responde con la forma que cada controller decida. Dos hijos del
+mismo padre, la misma necesidad, y una sola de las dos soluciones; la otra
+todavía no ha aparecido, y cuando aparezca será distinta.
+
+Y en el propio boilerplate, hasta la v2.1.0, la única ruta de API era
+`GET /api/user` devolviendo `fn (Request $request) => $request->user()`: el
+modelo Eloquent a pelo, serializado con todos los atributos que tuviera la tabla
+el día del `git pull` —los `#[Hidden]` del modelo eran lo único entre la API y
+el `two_factor_secret`— y sin sobre, así que el primer endpoint que hubiera
+devuelto una colección habría tenido que inventarse otro formato. Se cerró en la
+v2.2.0 con `App\Core\Http\Api` y `UserMeResource`.
 
 ---
 
@@ -1221,13 +1271,13 @@ con `--no-verify`, y entonces no verifica nada.
 | **pre-commit** | ~2 s | **0,7 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
 | **commit-msg** | ~1 s | **0,3 s** | `ConventionalCommitMsgHook` — el asunto sigue Conventional Commits (R43) |
 | **pre-push** | ~30 s | **5 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
-| **`composer ci`** | ~90 s | **16 s** | `pint --test` (0,2 con caché, 2,6 en frío) + `phpstan` (0,8 con caché, 2,3 en frío) + `composer arch` (0,2) + `rector --dry-run` (3,2 con caché) + `pest` (11,2, secuencial) |
+| **`composer ci`** | ~90 s | **18 s** | `pint --test` (0,2 con caché, 2,6 en frío) + `phpstan` (0,8 con caché, 2,3 en frío) + `composer arch` (0,2) + `rector --dry-run` (3,2 con caché) + `pest` (14,8, secuencial) |
 | **CI (GitHub)** | ~3 min | — | `composer ci` en matriz PHP 8.4 / 8.5 + `composer audit` + `npm ci && npm run build` + E2E (163 tests en 18 archivos) |
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + GitHub Release (R42) |
 
 Medido en un MacBook (Apple Silicon, PHP 8.4) sobre el repositorio a fecha de
-la v2.1.0, con 511 tests Pest y una suite E2E de 163 tests en 18 archivos
-(19 s aparte). Las cuatro primeras capas caben holgadamente en su
+la v2.2.0, con 570 tests Pest y una suite E2E de 163 tests en 18 archivos
+(31 s aparte). Las cuatro primeras capas caben holgadamente en su
 presupuesto: el margen es para que un proyecto derivado pueda crecer sin tener
 que rediseñar el pipeline.
 
@@ -1245,13 +1295,13 @@ se re-registran a mano con `php artisan git-hooks:register`.
 
 | Herramienta | Comando | Reglas |
 |-------------|---------|--------|
-| **Pest arch** (`tests/Arch/ArchitectureTest.php`) | `./vendor/bin/pest tests/Arch` | R1, R2, R3, R5, R6, R7, R8, R9, R13, R14, R17, R18, R25 |
+| **Pest arch** (`tests/Arch/ArchitectureTest.php`) | `./vendor/bin/pest tests/Arch` | R1, R2, R3, R5, R6, R7, R8, R9, R13, R14, R17, R18, R25, R54 |
 | **PHPat** (`tests/Arch/PhpatArchitecture.php`) | `composer analyse` | R1, R4, R5, R6, R7, R8, R19 |
 | **disallowed-calls** (`phpstan-disallowed.neon`) | `composer analyse` | R17, R18, R19, R20, R21, R22, R27 |
 | **Larastan nivel 8** | `composer analyse` | R15 |
 | **`kore:arch:check`** | `composer arch` | R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50, R52 |
 | **Pint** | `composer lint` | R13, R16 |
-| **Tests Pest** | `composer test` | R10, R12, R26, R27, R28, R29, R33, R34, R46, R47, R48, R51 |
+| **Tests Pest** | `composer test` | R10, R12, R26, R27, R28, R29, R33, R34, R46, R47, R48, R51, R54 |
 | **Hooks de git** (`config/git-hooks.php`) | `git commit` | R43 |
 | **GitHub Actions** (`.github/workflows/release.yml`) | `git push --tags` | R42 |
 | **E2E Playwright** | `npm run e2e` | *ninguna* — ver abajo |
@@ -1275,10 +1325,16 @@ Pest arch y la semántica del nombre (`{Domain}{Object}{Verb}`) en revisión
 humana; R14 tiene el `final` verificado en Actions, Data, Events, Rules,
 Policies y Providers, y a ojo en el resto.
 
-De las 53 reglas, **46 tienen al menos un verificador automático** que falla el
+De las 54 reglas, **47 tienen al menos un verificador automático** que falla el
 build (entero o en parte) y **7 son íntegramente manuales**: R31, R32, R35, R36,
 R39, R41 y R53. Ninguna regla está sin clasificar: si dice **Manual**, es porque
 hoy no hay forma barata de verificarla, no porque nadie lo haya mirado.
+
+La de la v2.2.0 entra en la primera columna: **R54** la verifican los tres
+`toExtend` de `tests/Arch/ArchitectureTest.php` —tolerantes a que un namespace
+esté vacío, porque hoy sólo hay un endpoint— y `ApiExceptionRendererTest`, con
+un caso por código canónico. Lo que ninguna de las dos ve es si el `code` que
+eligió un endpoint es el correcto; eso sigue siendo review.
 
 Las tres de la v2.1.0 se reparten 2/1: **R51** la verifica `HarnessGuardTest` y
 **R52** el `kore:arch:check`, mientras que **R53** se queda manual —con su

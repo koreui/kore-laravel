@@ -9,11 +9,14 @@ use App\Core\Console\ArchCheckCommand;
 use App\Core\Console\ChangelogSectionCommand;
 use App\Core\Console\Hooks\PrePushCommand;
 use Carbon\CarbonImmutable;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Console\AboutCommand;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -33,6 +36,7 @@ final class AppServiceProvider extends ServiceProvider
     {
         $this->refuseToBootWithDebugInProduction();
         $this->registerCoreCommands();
+        $this->configureApiRateLimiters();
         $this->configureCommands();
         $this->configureModels();
         $this->configureFactories();
@@ -89,6 +93,49 @@ final class AppServiceProvider extends ServiceProvider
                 PrePushCommand::class,
             ]);
         }
+    }
+
+    /**
+     * Los tres limiters nombrados de la API, con sus cifras en
+     * `config/kore-api.php` (R28).
+     *
+     *   `api`         · el del grupo `api` (`throttleApi()` en bootstrap/app.php).
+     *                   Por usuario autenticado, o por IP si no lo hay.
+     *   `api-auth`    · login, registro, magic link, refresco de token. **Por
+     *                   IP**, a propósito: quien fuerza credenciales todavía no
+     *                   tiene usuario, así que limitar por usuario no limita
+     *                   nada.
+     *   `api-uploads` · subidas de archivo, por usuario. Son caras en CPU, en
+     *                   memoria y en disco, y su límite razonable no tiene nada
+     *                   que ver con el de una lectura.
+     *
+     * Se registran **siempre**, también con `API_ENABLED=false`: el toggle
+     * decide si se cargan las rutas, no si existe el limiter. Y sin
+     * `RateLimiter::for('api')`, el `throttle:api` del grupo degradaría a
+     * `maxAttempts = (int) 'api' = 0` y bloquearía todas las peticiones —
+     * Laravel (12 y 13) no trae ninguno de fábrica.
+     *
+     * Viven aquí y no en `AuthModuleServiceProvider` desde la v2.2.0: son parte
+     * del contrato de la API (`App\Core\Http\Api`), que ningún módulo posee.
+     * `api-uploads` no tiene nada que ver con la autenticación.
+     */
+    private function configureApiRateLimiters(): void
+    {
+        /** @var array<string, int> $limiters */
+        $limiters = (array) config('kore-api.limiters', []);
+
+        $byUserOrIp = static fn (int $perMinute): callable => static fn (Request $request): Limit => Limit::perMinute($perMinute)
+            ->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip()));
+
+        RateLimiter::for('api', $byUserOrIp((int) ($limiters['api'] ?? 60)));
+
+        RateLimiter::for('api-uploads', $byUserOrIp((int) ($limiters['api-uploads'] ?? 30)));
+
+        RateLimiter::for(
+            'api-auth',
+            static fn (Request $request): Limit => Limit::perMinute((int) ($limiters['api-auth'] ?? 5))
+                ->by((string) $request->ip()),
+        );
     }
 
     private function configureCommands(): void
@@ -169,6 +216,7 @@ final class AppServiceProvider extends ServiceProvider
             'Boilerplate' => 'kore-laravel',
             'Tenancy' => fn (): string => $state(config('kore-app.tenancy.enabled')),
             'API' => fn (): string => $state(config('kore-app.api.enabled')),
+            'API docs' => fn (): string => $state(config('kore-api.docs.enabled')),
             '2FA' => fn (): string => $state(config('kore-app.auth.two_factor')),
             'Passkeys' => fn (): string => $state(config('kore-app.auth.passkeys')),
             'Magic links' => fn (): string => $state(config('kore-app.auth.magic_links')),

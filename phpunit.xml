@@ -64,6 +64,14 @@
         -->
         <env name="DOCS_ENABLED" value="false" force="true"/>
         <!--
+            La documentación OpenAPI va apagada por defecto, por lo mismo que el
+            visor de /docs: .env.example invita a encenderla en local y sin este
+            force los tests que comprueban el caso "toggle apagado" fallarían
+            sólo en la máquina de quien la tiene puesta. ApiDocsTest la enciende
+            con withEnvironment() (tests/Pest.php).
+        -->
+        <env name="API_DOCS" value="false" force="true"/>
+        <!--
             El harness E2E va apagado por defecto en la suite, por lo mismo que
             el visor de docs: si el desarrollador tuviera E2E_HARNESS=true en su
             .env, los tests del caso "toggle apagado" fallarían sólo en su

@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Core\Http\Api\Exceptions\ApiExceptionRenderer;
+use App\Core\Http\Api\Middleware\ApiAuditLogger;
+use App\Core\Http\Api\Middleware\ApiCacheableResponse;
+use App\Core\Http\Api\Middleware\ForceJsonResponse;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -25,6 +29,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
+            // Contrato de la API (App\Core\Http\Api). Ver docs/guides/api.md.
+            'api.json' => ForceJsonResponse::class,
+            'api.cache' => ApiCacheableResponse::class,
+            'api.audit' => ApiAuditLogger::class,
         ]);
 
         // Las cabeceras de seguridad las emite la aplicación (config/security.php),
@@ -34,8 +42,30 @@ return Application::configure(basePath: dirname(__DIR__))
         // rutas de API devuelven JSON a un cliente que no tiene CSP ni frames.
         $middleware->web(append: [SecurityHeaders::class]);
 
-        // El grupo `api` del esqueleto de Laravel no trae throttle. El
-        // limiter `api` se define en AuthModuleServiceProvider.
+        /*
+         * Dos de los tres middleware de la API van en el grupo, y van
+         * PREPEND —por delante del throttle—, no append:
+         *
+         *   - `api.json` fuerza el `Accept` antes de que nada pueda fallar, así
+         *     que también el error que se rinde dentro del propio throttle sale
+         *     en JSON.
+         *   - `api.audit` es el más externo de los dos por la misma razón al
+         *     revés: detrás del throttle, el 429 —la petición que más interesa
+         *     auditar— se rendiría sin dejar línea de log.
+         *
+         * `api.cache` no está aquí: se pone endpoint a endpoint
+         * (`->middleware('api.cache:3600')`), porque cachear lo que cambia en
+         * cada petición es pagar un sha1() para nada.
+         *
+         * El grupo `api` del esqueleto de Laravel no trae throttle. Los tres
+         * limiters (`api`, `api-auth`, `api-uploads`) se definen en
+         * AppServiceProvider a partir de config/kore-api.php.
+         */
+        $middleware->api(prepend: [
+            ForceJsonResponse::class,
+            ApiAuditLogger::class,
+        ]);
+
         $middleware->throttleApi();
 
         // La app corre detrás del Nginx del contenedor (docker/nginx/nginx.conf),
@@ -54,6 +84,29 @@ return Application::configure(basePath: dirname(__DIR__))
         // Sin esto el SDK de Sentry NO recibe las excepciones no capturadas.
         // Es no-op cuando SENTRY_LARAVEL_DSN está vacío.
         Integration::handles($exceptions);
+
+        /*
+         * La API responde JSON aunque el cliente no mande `Accept:
+         * application/json`. Mira la URL y no la cabecera a propósito: es lo
+         * único que sigue siendo cierto cuando la petición revienta antes de
+         * llegar al middleware `api.json` (una ruta inexistente, un throttle,
+         * un JSON mal formado). Sin esto, un error de validación llega al
+         * cliente móvil como un 302 opaco hacia una pantalla de login.
+         */
+        $exceptions->shouldRenderJsonWhen(
+            fn (Request $request): bool => $request->is('api/*') || $request->expectsJson(),
+        );
+
+        /*
+         * Todo `Throwable` de una petición `api/*` sale con el envelope de
+         * error del contrato: `{ error: { code, message, details? } }`. Fuera de
+         * `api/*` el renderer devuelve null y Laravel sigue como siempre (el
+         * callback del 419 de abajo, y su render por defecto).
+         *
+         * Ver App\Core\Http\Api\Exceptions\ApiExceptionRenderer, R54 y
+         * docs/guides/api.md.
+         */
+        $exceptions->render(new ApiExceptionRenderer);
 
         /*
          * Un 419 en el escritorio casi nunca es un ataque: es la sesión que

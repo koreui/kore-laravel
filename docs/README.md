@@ -6,7 +6,7 @@ Hub central de documentación. Las reglas vivas y resúmenes operativos están e
 
 ### Arquitectura
 
-- [`architecture/rules.md`](architecture/rules.md) — **catálogo R1–R53**: cada regla con su enforcement, su válvula de escape y la cicatriz que la originó
+- [`architecture/rules.md`](architecture/rules.md) — **catálogo R1–R54**: cada regla con su enforcement, su válvula de escape y la cicatriz que la originó
 - [`architecture/overview.md`](architecture/overview.md) — stack, capas y decisiones
 - [`architecture/module-pattern.md`](architecture/module-pattern.md) — cómo se construye un módulo (y qué carpetas puede tener)
 - [`architecture/toggles.md`](architecture/toggles.md) — `config/kore-app.php`
@@ -22,6 +22,7 @@ Hub central de documentación. Las reglas vivas y resúmenes operativos están e
 
 ### Guías
 
+- [`guides/api.md`](guides/api.md) — API REST: el contrato de `App\Core\Http\Api`, cómo se añade un endpoint, middleware, limiters y Scramble
 - [`guides/crud.md`](guides/crud.md) — patrón CRUD: Form Object + Data + Actions + Events + KoreDataTable
 - [`guides/i18n.md`](guides/i18n.md) — español como idioma fuente, inglés por módulo en JSON
 

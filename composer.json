@@ -13,6 +13,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.4",
+        "dedoc/scramble": "^0.13",
         "kore-ui/kore-ui": "^2.3.1",
         "laravel/fortify": "^1.39",
         "laravel/framework": "^13.0",

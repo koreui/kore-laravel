@@ -6,7 +6,7 @@
 
 | Variable               | Default       | Activa                                              | Quién lo lee |
 |------------------------|---------------|-----------------------------------------------------|--------------|
-| `API_ENABLED`          | `true`        | Sanctum stateful middleware + rutas API (`/api/*`)  | `AuthModuleServiceProvider`, `routes/console.php` |
+| `API_ENABLED`          | `true`        | Sanctum stateful middleware + rutas API (`/api/v1/*`)  | `AuthModuleServiceProvider`, `ApiDocsServiceProvider`, `routes/console.php` |
 | `TENANCY_ENABLED`      | `false`       | Módulo Tenancy completo (stancl/tenancy)            | `TenancyModuleServiceProvider` |
 | `BACKUP_ENABLED`       | `false`       | spatie/laravel-backup: comandos `backup:*`, las 3 tareas del scheduler y el `BackupsCheck` de `/health` | `BackupServiceProvider`, `routes/console.php` |
 | `DOCS_ENABLED`         | `false`       | Visor de `docs/` en `/docs` (módulo Docs). Pensado para local; producción lo deja apagado | `DocsModuleServiceProvider` |
@@ -40,6 +40,8 @@ uno, se cae solo. Ver [`rules.md`](rules.md) → R11.
 | Octane / FrankenPHP | Módulo opcional. `composer require laravel/octane`. |
 | Scout + Meilisearch | Módulo opcional. `composer require laravel/scout`. |
 | Modo de tenancy (`single-db` / `multi-db`) | Se decide al ejecutar `php artisan kore:tenancy:enable`, en `config/tenancy.php` (bootstrappers de stancl). Nunca fue una variable de entorno funcional. |
+| Documentación OpenAPI (`API_DOCS`) | **Sí es un toggle, pero no vive aquí**: es un parámetro del contrato de la API, así que está en `config/kore-api.php` (`kore-api.docs.enabled`) junto a la versión, la paginación y los limiters. Lo lee `ApiDocsServiceProvider`, apaga las rutas de Scramble en su `register()` y por defecto es `false`. Ver [`../guides/api.md`](../guides/api.md). |
+| Versión, paginación y limiters de la API | `config/kore-api.php`. No son booleanos: son las cifras del contrato. |
 | Sentry | `SENTRY_LARAVEL_DSN`. Sin DSN el SDK es no-op; no hay booleano aparte. |
 | Pulse | `PULSE_ENABLED`, que lee `config/pulse.php` (del paquete), no `kore-app`. |
 | Health | Siempre activo. Rutas en `HealthServiceProvider`; `/health/json` pide `HEALTH_SECRET_TOKEN`. El `BackupsCheck` es la excepción: sólo se registra con `BACKUP_ENABLED=true`. |
@@ -72,6 +74,19 @@ if ((bool) config('kore-app.api.enabled')) {
     $this->loadRoutesFrom("{$base}/Routes/api.php");
 }
 ```
+
+## `config/kore-api.php` no es `config/kore-app.php`
+
+`kore-app` responde «¿qué capacidades del boilerplate están encendidas?»;
+`kore-api` responde «¿cómo se comporta la API cuando lo está?». Por eso el
+toggle sigue siendo uno solo (`API_ENABLED`) y las cifras del contrato —versión,
+paginación, limiters, documentación— viven en su propio archivo: un derivado que
+quiera 200 filas por página o un `api-auth` más estricto no tiene que tocar la
+lista de toggles.
+
+El check R11 sólo mira `kore-app`, a propósito: `kore-api` no declara
+capacidades, declara parámetros, y un parámetro sin lector no miente sobre lo
+que la aplicación hace. Ver [`../guides/api.md`](../guides/api.md).
 
 ## Reglas
 

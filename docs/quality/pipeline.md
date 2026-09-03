@@ -40,12 +40,11 @@ no verifica nada.
 | **CI (GitHub)** | ~3 min | — | `composer ci` en matriz PHP 8.4 / 8.5 + `composer audit` + `npm ci && npm run build` + E2E |
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + `softprops/action-gh-release` |
 
-Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v2.1.0 y
-511 tests Pest. La suite E2E —163 tests en 18 archivos— va aparte y tarda
-19 s en local. Los 56 tests nuevos de la v2.1.0 (los traits de `Core\Concerns`,
-el handler del 419, el `--dry-run`, los monitores de Sentry, el check de R52 y
-los arch tests de R3 y R5) son los que explican el tiempo de más de `pest`
-respecto a la v1.4.0.
+Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v2.2.0 y
+570 tests Pest. La suite E2E —163 tests en 18 archivos— va aparte y tarda
+31 s en local. Los 59 tests nuevos de la v2.2.0 son los del contrato de la API
+(`tests/Feature/Api`, 51), los cuatro de R54 en `ArchitectureTest` y los cuatro
+que ganó `ApiTokenTest` al pasar el endpoint de usuario por el envelope.
 
 > Nota de entorno: `composer test` limpia la config cacheada antes de correr
 > Pest a propósito. Con un `bootstrap/cache/config.php` viejo, `PulseAccessTest`
@@ -236,7 +235,7 @@ ignora. Lo consume PHPStan.
 |-------|-------------|
 | preset `php()` | buenas prácticas base de PHP |
 | preset `security()` | sin `md5`, `sha1`, `eval`, `extract`, `mt_rand`... |
-| preset `laravel()` | convenciones del framework, **ignorando `App\Modules`, `App\Core\Enums` y `App\Core\Console`** |
+| preset `laravel()` | convenciones del framework, **ignorando `App\Modules`, `App\Core\Enums`, `App\Core\Console` y `App\Core\Http\Api`** |
 | R13 | `declare(strict_types=1)` en todo `App` |
 | R17 · R18 | sin `dd`, `dump`, `var_dump`, `ray` ni `env()` dentro de `App` |
 | R1 · R2 | `App\Modules\*\Actions` son `final`, con sufijo `Action` y extienden `App\Core\Actions\Action` |
@@ -249,6 +248,7 @@ ignora. Lo consume PHPStan.
 | R9 | `App\Modules\*\Providers` son `final` y con sufijo `ServiceProvider` |
 | R14 | `App\Modules\*\Rules` son `final` e implementan `ValidationRule` |
 | R25 | `App\Modules\*\Policies` son `final` y con sufijo `Policy` |
+| R54 | los `Http/Controllers/Api`, `Http/Resources/Api` y `Http/Requests/Api` de cada módulo extienden `ApiController`, `BaseApiResource` y `BaseApiRequest`; y las cinco piezas del contrato existen |
 
 Los namespaces usan comodín (`App\Modules\*\Actions`), así que un módulo nuevo
 queda cubierto sin tocar el archivo.
@@ -264,7 +264,16 @@ Excepciones documentadas en el propio archivo:
   debajo.
 - `App\Core\Enums` y `App\Core\Console` quedan fuera del preset por lo mismo: el
   enum compartido y los comandos transversales viven en Core, no en `App\Enums`
-  ni en `App\Console\Commands`.
+  ni en `App\Console\Commands`. `App\Core\Http\Api` se sumó en la v2.2.0: el
+  contrato de la API son un `ApiController` abstracto y un `BaseApiRequest` que
+  extiende `FormRequest`, y el preset los quiere en `App\Http\Controllers` y
+  `App\Http\Requests`. Que los módulos los hereden es justo lo que verifica R54.
+- Los tres checks de **R54** van como `test()` con glob y no como
+  `arch()->expect(...)->toExtend(...)`: hoy dos de los tres namespaces están
+  vacíos —el boilerplate publica un solo endpoint— y `arch()` sobre un namespace
+  sin clases falla por «no existe», que no es lo que la regla dice. El glob es
+  tolerante y se tensa solo cuando un módulo crea su primera clase. Misma
+  decisión que con `Enums/` y `Http/Resources/` en la v2.1.0.
 - Desde la v1.1 **no hay excepciones en la regla de Actions**: los stubs que
   publica Fortify viven en `App\Modules\Auth\Fortify`, porque son adaptadores del
   paquete y no casos de uso del boilerplate.
@@ -407,17 +416,19 @@ $ composer ci
 ✓ Larastan nivel 8 + PHPat + disallowed-calls: 0 errors
 ✓ kore:arch:check: sin violaciones
 ✓ Rector: nothing to refactor
-✓ Pest: 511 passed (1243 assertions)
+✓ Pest: 570 passed (1461 assertions)
 ```
 
-Reparto de los 511 tests: 34 arch (`tests/Arch`: 23 en `ArchitectureTest` y 11
-en `PhpatArchitectureTest`), 76 del módulo Auth, 48 del módulo Users, 3 de
-Tenancy, 43 del módulo Docs, 29 del módulo E2E y 278 en `tests/Feature` (health,
+Reparto de los 570 tests: 38 arch (`tests/Arch`: 27 en `ArchitectureTest` y 11
+en `PhpatArchitectureTest`), 80 del módulo Auth, 48 del módulo Users, 3 de
+Tenancy, 43 del módulo Docs, 29 del módulo E2E y 329 en `tests/Feature` (health,
 scheduler, Sentry, Pulse, Pennant, mass assignment, landing, traducciones,
 backup, cabeceras de seguridad, configuración de producción, logging,
 migraciones reversibles, instalación limpia, el MCP `kore`, `kore:arch:check`
 con sus 94 casos, los hooks, `kore:agents:sync`, `kore:changelog:section`, el
-419 y `HasPublicUuid`). Aparte, la suite E2E de Playwright (`npm run e2e`): 163
+419, `HasPublicUuid` y los 51 de `tests/Feature/Api` —el contrato de la API:
+renderer de errores, middleware, limiters, paginación por cursor, `EnumResource`
+y la documentación de Scramble). Aparte, la suite E2E de Playwright (`npm run e2e`): 163
 tests en 18 archivos —17 de spec más `auth.setup.ts`, que hace el login por
 rol—, 104 de ellos generados desde `tests/e2e/fixtures/access-map.ts`.
 

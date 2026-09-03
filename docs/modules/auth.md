@@ -23,6 +23,9 @@ app/Modules/Auth/
 ├── Providers/
 │   ├── AuthModuleServiceProvider.php
 │   └── FortifyServiceProvider.php
+├── Http/
+│   ├── Controllers/Api/V1/UserController.php     # GET /api/v1/user
+│   └── Resources/Api/V1/UserMeResource.php       # { id, name, email, roles, permissions }
 ├── Resources/views/
 │   ├── layouts/auth.blade.php
 │   ├── livewire/                # dashboard, passkeys
@@ -30,7 +33,7 @@ app/Modules/Auth/
 │                                  two-factor-challenge, confirm-password, magic-link
 ├── Routes/
 │   ├── web.php                  # magic-link, socialite, /dashboard, /user/passkeys
-│   └── api.php                  # /api/user (sólo si API_ENABLED)
+│   └── api.php                  # /api/v1/user (sólo si API_ENABLED)
 ├── Support/AuthorizationCatalog.php   # implementación del contrato de Core
 └── Tests/Feature/               # Login, Register, PasswordReset, ApiToken, Dashboard, ...
 ```
@@ -109,7 +112,7 @@ desde un comando o un job, y se testea sin tocar HTTP
 | GET   | `/auth/{provider}/callback`| `socialite.callback`   | `AUTH_SOCIAL_LOGIN=true` |
 | GET   | `/dashboard`               | `dashboard`            | requiere `auth + verified` |
 | GET   | `/user/passkeys`           | `passkeys.index`       | `AUTH_PASSKEYS=true` (+ `auth + verified + password.confirm`) |
-| GET   | `/api/user`                | `api.user`             | `API_ENABLED=true`      |
+| GET   | `/api/v1/user`             | `api.v1.user.me`       | `API_ENABLED=true` (+ `auth:sanctum`) |
 
 ### `/dashboard`
 
@@ -346,7 +349,7 @@ Automatizado:
 |--------------|--------------------------------------------------|---------------------------------|
 | `login`      | `FortifyServiceProvider::configureRateLimiting()` | 5/min por email+IP              |
 | `two-factor` | `FortifyServiceProvider::configureRateLimiting()` | 5/min por sesión de login       |
-| `api`        | `AuthModuleServiceProvider::configureApiRateLimiting()` | 60/min por usuario o IP  |
+| `api`        | `AppServiceProvider::configureApiRateLimiters()`  | 60/min por usuario o IP          |
 | magic link   | `MagicLink::sendCode()`                          | 5 envíos / 5 min por email+IP   |
 | `passkeys`   | `FortifyServiceProvider::configureRateLimiting()` | 30/min por usuario o IP         |
 
@@ -354,6 +357,12 @@ Automatizado:
 Laravel no lo trae) y configura `trustProxies`, sin el cual `$request->ip()`
 sería siempre la IP interna del contenedor y el limiter por IP no serviría de
 nada.
+
+Desde la v2.2.0 los tres limiters de la API (`api`, `api-auth`, `api-uploads`)
+se registran en `AppServiceProvider` con las cifras de `config/kore-api.php`, y
+no aquí: son parte del contrato de la API y ningún módulo es su dueño —
+`api-uploads` no tiene nada que ver con la autenticación. Ver
+[`../guides/api.md`](../guides/api.md).
 
 ## Roles y permisos (spatie)
 
@@ -392,11 +401,32 @@ $token = $user->createToken('mobile-app')->plainTextToken;
 
 ```php
 Route::middleware(['api', 'auth:sanctum'])
-    ->prefix('api')
+    ->prefix('api/'.config('kore-api.version', 'v1'))
+    ->name('api.v1.')
     ->group(function (): void {
-        Route::get('/user', fn (Request $r) => $r->user())->name('api.user');
+        Route::get('/user', [UserController::class, 'me'])->name('user.me');
     });
 ```
+
+`GET /api/v1/user` (`api.v1.user.me`) es el primer endpoint del boilerplate que
+cumple el contrato de R54 y sirve de plantilla para los siguientes: controller
+que extiende `ApiController`, respuesta por `respond()`, representación en
+`UserMeResource` y errores por `ApiExceptionRenderer`. Devuelve
+
+```json
+{ "data": { "id": 1, "name": "Ada", "email": "ada@…", "roles": ["Administrador"], "permissions": ["users.view", …] } }
+```
+
+**Cambio incompatible de la v2.2.0**: la ruta era `GET /api/user` (`api.user`) y
+devolvía el modelo Eloquent a pelo. Un derivado que la consuma tiene que mover
+el cliente a `/api/v1/user` y leer bajo `data`. Ver
+[`../guides/api.md`](../guides/api.md).
+
+**Lo que todavía no hay**: no existe `POST /api/v1/auth/login` ni ningún flujo
+de emisión de tokens por API. Hoy el token se crea desde el web con
+`$user->createToken(...)`, o se usa la sesión vía
+`EnsureFrontendRequestsAreStateful`. La autenticación por API llega en la fase
+siguiente.
 
 ## Tests
 
@@ -408,8 +438,8 @@ Route::middleware(['api', 'auth:sanctum'])
 | `RegisterTest` | página, registro exitoso, email duplicado | 3 |
 | `AuthUserRegisterActionTest` | `AuthUserRegisterAction`: crea, hashea y dispara el evento | 3 |
 | `PasswordResetTest` | página, envío de notificación de reset | 2 |
-| `ApiTokenTest` | `/api/user` con `Sanctum::actingAs` | 1 |
-| `ApiRateLimitTest` | `throttle:api` en el grupo y limiter `api` registrado | 3 |
+| `ApiTokenTest` | `/api/v1/user`: envelope, roles y permisos, lista blanca de atributos, 401 del invitado y que la ruta vieja ya no existe | 5 |
+| `ApiRateLimitTest` | `throttle:api` en el grupo, limiter `api` registrado y cabeceras en la ruta del módulo | 3 |
 | `MagicLinkTest` | envío, rate limit, anti-enumeración, login con código | 6 |
 | `AuthorizationSeederTest` | módulos, permisos y roles que siembra `ModulesSeeder` | 7 |
 | `TwoFactorToggleTest` | el toggle `AUTH_2FA_ENABLED` añade/quita la feature y sus rutas | 5 |

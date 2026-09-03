@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 use App\Core\Actions\Action;
 use App\Core\Data\Data;
+use App\Core\Http\Api\Concerns\HandlesCursorPagination;
+use App\Core\Http\Api\Controllers\ApiController;
+use App\Core\Http\Api\Exceptions\ApiExceptionRenderer;
+use App\Core\Http\Api\Requests\BaseApiRequest;
+use App\Core\Http\Api\Resources\BaseApiResource;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -56,8 +61,20 @@ arch()->preset()->security();
  * exige que sólo `App\Console\Commands` extienda `Command`, y en el layout
  * modular esa carpeta no existe — los comandos de dominio viven en su módulo
  * (`App\Modules\{X}\Console\Commands`) y los transversales en Core.
+ *
+ * `App\Core\Http\Api` es el mismo caso una vez más (v2.2.0): el contrato de la
+ * API son un `ApiController` abstracto y un `BaseApiRequest` que extiende
+ * `FormRequest`, y el preset exige que eso viva en `App\Http\Controllers` y
+ * `App\Http\Requests`. Son las clases base que **todos** los módulos heredan,
+ * así que su sitio es el kernel; que lo hereden es justo lo que verifica R54,
+ * unas líneas más abajo.
  */
-arch()->preset()->laravel()->ignoring(['App\Modules', 'App\Core\Enums', 'App\Core\Console']);
+arch()->preset()->laravel()->ignoring([
+    'App\Modules',
+    'App\Core\Enums',
+    'App\Core\Console',
+    'App\Core\Http\Api',
+]);
 
 /*
 |--------------------------------------------------------------------------
@@ -435,4 +452,119 @@ test('R3 · los Http/Resources de módulo extienden JsonResource', function (): 
         ...$offenders,
         'Http/Resources/ es la carpeta de los API Resources de Laravel, no un cajón de sastre de la capa Http. Ver R3 en docs/architecture/rules.md.',
     ]));
+});
+
+/*
+|--------------------------------------------------------------------------
+| R54 · toda respuesta de la API pasa por el contrato de Core
+|--------------------------------------------------------------------------
+|
+| Los controllers, resources y requests de la API de un módulo heredan del
+| contrato de `App\Core\Http\Api`. Sin esto, cada módulo reinventa el envelope
+| —que fue exactamente lo que pasó en Notarium y en asper— y el cliente acaba
+| con dos formas de leer un error según el endpoint.
+|
+| Van como `test()` con glob y no como `arch()->expect(...)->toExtend(...)`
+| porque hoy dos de los tres namespaces están vacíos: el boilerplate sólo
+| publica un endpoint. `arch()` sobre un namespace sin clases falla por «no
+| existe», que no es lo que la regla dice; el glob es tolerante y se tensa solo
+| cuando un módulo crea su primera clase. Es la misma decisión que se tomó con
+| `Enums/` y `Http/Resources/` en la v2.1.0.
+|
+| El barrido llega a `Api/V1/...`, tres niveles por debajo de la carpeta, que es
+| donde viven de verdad (`Http/Controllers/Api/V1/UserController.php`).
+|
+*/
+
+/**
+ * FQCN de las clases bajo `{Módulo}/{$folder}/Api`, a cualquier profundidad.
+ *
+ * @return list<class-string>
+ */
+function koreModuleApiClassesIn(string $folder): array
+{
+    $classes = [];
+    $root = dirname(__DIR__, 2).'/app';
+
+    foreach ((array) glob($root.'/Modules/*/'.$folder.'/Api', GLOB_ONLYDIR) as $directory) {
+        /** @var iterable<string, SplFileInfo> $files */
+        $files = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator((string) $directory, FilesystemIterator::SKIP_DOTS)
+        );
+
+        foreach ($files as $file) {
+            if ($file->getExtension() !== 'php') {
+                continue;
+            }
+
+            $relative = substr((string) realpath($file->getPathname()), strlen((string) realpath($root)) + 1);
+            /** @var class-string $class */
+            $class = 'App\\'.str_replace('/', '\\', substr($relative, 0, -4));
+
+            if (class_exists($class)) {
+                $classes[] = $class;
+            }
+        }
+    }
+
+    sort($classes);
+
+    return $classes;
+}
+
+// R54
+test('R54 · los controllers de la API extienden ApiController', function (): void {
+    $offenders = [];
+
+    foreach (koreModuleApiClassesIn('Http/Controllers') as $class) {
+        if (! is_subclass_of($class, ApiController::class)) {
+            $offenders[] = "{$class} no extiende ".ApiController::class;
+        }
+    }
+
+    expect($offenders)->toBe([], implode("\n", [
+        ...$offenders,
+        'Un controller de la API que no hereda el contrato construye su propio envelope, y el cliente acaba con dos formas de leer la misma API. Ver R54 en docs/architecture/rules.md.',
+    ]));
+});
+
+// R54
+test('R54 · los resources de la API extienden BaseApiResource', function (): void {
+    $offenders = [];
+
+    foreach (koreModuleApiClassesIn('Http/Resources') as $class) {
+        if (! is_subclass_of($class, BaseApiResource::class)) {
+            $offenders[] = "{$class} no extiende ".BaseApiResource::class;
+        }
+    }
+
+    expect($offenders)->toBe([], implode("\n", [
+        ...$offenders,
+        'BaseApiResource es lo que fija `$wrap = data`: un resource fuera del contrato publica su representación sin sobre. Ver R54 en docs/architecture/rules.md.',
+    ]));
+});
+
+// R54
+test('R54 · los requests de la API extienden BaseApiRequest', function (): void {
+    $offenders = [];
+
+    foreach (koreModuleApiClassesIn('Http/Requests') as $class) {
+        if (! is_subclass_of($class, BaseApiRequest::class)) {
+            $offenders[] = "{$class} no extiende ".BaseApiRequest::class;
+        }
+    }
+
+    expect($offenders)->toBe([], implode("\n", [
+        ...$offenders,
+        'Un FormRequest de la API que no hereda el contrato devuelve un redirect 302 en vez del 422 con details cuando falla la validación. Ver R54 en docs/architecture/rules.md.',
+    ]));
+});
+
+// R54
+test('R54 · el contrato de la API vive entero en App\Core\Http\Api', function (): void {
+    expect(class_exists(ApiController::class))->toBeTrue()
+        ->and(class_exists(BaseApiResource::class))->toBeTrue()
+        ->and(class_exists(BaseApiRequest::class))->toBeTrue()
+        ->and(class_exists(ApiExceptionRenderer::class))->toBeTrue()
+        ->and(trait_exists(HandlesCursorPagination::class))->toBeTrue();
 });

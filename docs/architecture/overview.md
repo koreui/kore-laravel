@@ -41,16 +41,26 @@ app/
 │   ├── Data/
 │   │   ├── Data.php               # base DTO (extiende spatie/laravel-data)
 │   │   └── Authorization/         # DTOs que cruzan la frontera Auth → Users
-│   ├── Enums/                     # valores compartidos (SystemRole)
+│   ├── Enums/                     # valores compartidos (SystemRole, ApiErrorCode)
+│   ├── Http/Api/                  # contrato de la API REST (R54, ver guides/api.md)
+│   │   ├── Concerns/              # HandlesCursorPagination
+│   │   ├── Controllers/           # ApiController (envelope { data, meta? })
+│   │   ├── Exceptions/            # ApiExceptionRenderer ({ error: { code, … } })
+│   │   ├── Middleware/            # api.json · api.cache · api.audit
+│   │   ├── Requests/              # BaseApiRequest
+│   │   └── Resources/             # BaseApiResource · EnumResource
 │   ├── Mcp/                       # MCP server propio (KoreServer + Tools/)
 │   └── Support/                   # helpers (AgentsFile)
 ├── Modules/{Domain}/              # cada feature aislada (ver module-pattern.md)
+├── Exceptions/ConflictException.php  # excepción de dominio compartida → 409
 ├── Models/User.php                # único modelo verdaderamente global
 └── Providers/
-    ├── AppServiceProvider.php     # registra también los comandos de Core
+    ├── AppServiceProvider.php     # comandos de Core + los tres limiters de la API
+    ├── ApiDocsServiceProvider.php # Scramble detrás de API_DOCS + gate viewApiDocs
     └── HealthServiceProvider.php
 bootstrap/providers.php            # registra los providers
 config/kore-app.php                # toggles (ver toggles.md)
+config/kore-api.php                # parámetros del contrato de la API (ver guides/api.md)
 ```
 
 ## Por qué esta arquitectura
@@ -82,9 +92,11 @@ la cicatriz real que la originó. Este resumen sólo da el titular.
 | [R15](rules.md) | type hints completos (params, returns, propiedades) |
 | [R16](rules.md) | `CarbonImmutable` por defecto (forzado en `AppServiceProvider`) |
 | [R35](rules.md) | un test Pest por Action, componente Livewire y ruta |
+| [R54](rules.md) | toda respuesta de la API pasa por el contrato de `App\Core\Http\Api`: `{ data, meta? }` en éxito, `{ error: { code, … } }` en fallo |
 
 Ver detalle en:
-- [`rules.md`](rules.md) — **el catálogo completo `R1..R53`** (fuente de verdad)
+- [`rules.md`](rules.md) — **el catálogo completo `R1..R54`** (fuente de verdad)
 - [`module-pattern.md`](module-pattern.md) — cómo se construye un módulo
 - [`toggles.md`](toggles.md) — `config/kore-app.php`
+- [`../guides/api.md`](../guides/api.md) — el contrato de la API REST
 - [`../quality/pipeline.md`](../quality/pipeline.md) — pipeline que hace cumplir esto

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Env;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -101,6 +102,7 @@ function withEnvironment(array $variables, Closure $callback): void
     try {
         test()->refreshApplication();
         test()->withoutVite();
+        reattachInMemoryDatabase();
 
         $callback();
     } finally {
@@ -110,6 +112,33 @@ function withEnvironment(array $variables, Closure $callback): void
 
         test()->refreshApplication();
         test()->withoutVite();
+        reattachInMemoryDatabase();
+    }
+}
+
+/**
+ * Devuelve a la aplicación recién arrancada la base de datos del test.
+ *
+ * Con `DB_DATABASE=:memory:` (lo que fuerza phpunit.xml) la base **es** la
+ * conexión: cada `refreshApplication()` abre un PDO nuevo y por tanto una base
+ * vacía, sin las tablas que migró `RefreshDatabase` ni las filas que creó el
+ * test. Un `withEnvironment()` que arranca la aplicación dos veces dejaba así
+ * cualquier consulta en «no such table: users».
+ *
+ * `RefreshDatabase` guarda el PDO original en
+ * `RefreshDatabaseState::$inMemoryConnections` y se lo devuelve a la conexión
+ * entre test y test (`restoreInMemoryDatabase()`); esto es lo mismo, aplicado
+ * cuando quien rearranca la aplicación es el propio test.
+ *
+ * No hace nada cuando la base no es en memoria (un derivado sobre MySQL, o
+ * SQLite en archivo): ahí la conexión nueva encuentra los mismos datos.
+ *
+ * Ver `docs/patterns/test-con-otro-entorno.md`.
+ */
+function reattachInMemoryDatabase(): void
+{
+    foreach (RefreshDatabaseState::$inMemoryConnections as $name => $pdo) {
+        DB::connection($name)->setPdo($pdo);
     }
 }
 
