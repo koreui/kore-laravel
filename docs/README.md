@@ -21,7 +21,8 @@ docs/
 │   ├── deployment.md          Docker en VPS (PHP-FPM + Nginx + MySQL + Redis)
 │   └── observability.md       Sentry + Pulse + Health + ActivityLog
 ├── quality/           # pipeline de calidad
-│   └── pipeline.md            Pint + Larastan + Rector + Pest + hooks + CI
+│   ├── pipeline.md            Pint + Larastan + Rector + Pest + hooks + CI
+│   └── e2e.md                 Playwright: suite E2E, entorno aislado y convenciones
 └── ai/                # capa AI-friendly
     └── working-with-ai.md     Laravel Boost + CLAUDE/AGENTS + skills propios
 ```

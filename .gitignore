@@ -22,3 +22,11 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# E2E (Playwright)
+/database/e2e.sqlite*
+/tests/e2e/.auth
+/tests/e2e/report
+/tests/e2e/results
+/playwright-report
+/test-results

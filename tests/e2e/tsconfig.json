@@ -1,0 +1,17 @@
+{
+    "//": "Sólo para el DX del editor sobre tests/e2e/**. Vite no lo lee (no hace type-check) y el resto del repo no tiene TypeScript.",
+    "compilerOptions": {
+        "target": "ES2022",
+        "lib": ["ES2022", "DOM"],
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "types": ["node"],
+        "strict": true,
+        "noUncheckedIndexedAccess": false,
+        "esModuleInterop": true,
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "noEmit": true
+    },
+    "include": ["**/*.ts", "../../playwright.config.ts"]
+}
