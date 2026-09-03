@@ -26,6 +26,7 @@ final class UsersModuleServiceProvider extends ServiceProvider
         $base = __DIR__.'/..';
 
         $this->loadRoutesFrom("{$base}/Routes/web.php");
+        $this->loadJsonTranslationsFrom("{$base}/Resources/lang");
         $this->loadViewsFrom("{$base}/Resources/views", 'users');
         Blade::anonymousComponentPath("{$base}/Resources/views", 'users');
 

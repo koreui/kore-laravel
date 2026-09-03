@@ -80,6 +80,7 @@ final class AuthModuleServiceProvider extends ServiceProvider
         }
 
         $this->loadMigrationsFrom("{$base}/Database/Migrations");
+        $this->loadJsonTranslationsFrom("{$base}/Resources/lang");
         $this->loadViewsFrom("{$base}/Resources/views", 'auth');
         Blade::anonymousComponentPath("{$base}/Resources/views", 'auth');
     }

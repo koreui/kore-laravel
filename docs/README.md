@@ -16,7 +16,8 @@ docs/
 │   ├── tenancy.md             stancl/tenancy + activación opt-in
 │   └── users.md               módulo Users (primer CRUD del boilerplate)
 ├── guides/            # guías reutilizables
-│   └── crud.md                patrón CRUD: Form Object + FormComponent + KoreDataTable
+│   ├── crud.md                patrón CRUD: Form Object + FormComponent + KoreDataTable
+│   └── i18n.md                español como idioma fuente, inglés por módulo en JSON
 ├── ops/               # operación y producción
 │   ├── deployment.md          Docker en VPS (PHP-FPM + Nginx + MySQL + Redis)
 │   └── observability.md       Sentry + Pulse + Health + ActivityLog
