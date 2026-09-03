@@ -2,6 +2,8 @@
 
 **TL;DR**: Pint formatea, Larastan nivel 8 analiza, Rector refactoriza, Pest 3 testea, igorsgm/laravel-git-hooks corre Pint en pre-commit, GitHub Actions corre todo en cada PR. El comando único es `composer ci`.
 
+Los tests end-to-end en navegador van aparte, con Playwright y su propio workflow: ver [`e2e.md`](e2e.md).
+
 ## Comandos
 
 ```bash
