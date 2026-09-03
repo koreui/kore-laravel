@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Auth\Providers;
 
-use App\Modules\Auth\Actions\Fortify\CreateNewUser;
-use App\Modules\Auth\Actions\Fortify\ResetUserPassword;
-use App\Modules\Auth\Actions\Fortify\UpdateUserPassword;
-use App\Modules\Auth\Actions\Fortify\UpdateUserProfileInformation;
+use App\Modules\Auth\Fortify\CreateNewUser;
+use App\Modules\Auth\Fortify\ResetUserPassword;
+use App\Modules\Auth\Fortify\UpdateUserPassword;
+use App\Modules\Auth\Fortify\UpdateUserProfileInformation;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;

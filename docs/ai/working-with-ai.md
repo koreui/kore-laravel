@@ -89,7 +89,7 @@ Se actualizan con `php artisan boost:install --skills`.
 ## Cómo hacer cambios efectivos con la AI
 
 1. **Carga contexto correcto**: pídele leer `CLAUDE.md` y el doc de área (`docs/modules/auth.md`, etc.). Nunca asumas que ya lo leyó.
-2. **Apunta a archivos por path absoluto**: `app/Modules/Auth/Actions/Fortify/CreateNewUser.php:23`.
+2. **Apunta a archivos por path absoluto**: `app/Modules/Auth/Fortify/CreateNewUser.php:23`.
 3. **Pide ejecutar `composer ci`** antes de cerrar el cambio.
 4. **No aceptes "lo apliqué"** sin ver el diff. Lee el código.
 5. **Si la AI inventa una API**: hazle correr `search-docs` con los términos exactos.

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Users\Policies;
 
+use App\Core\Enums\SystemRole;
 use App\Models\User;
-use App\Modules\Auth\Models\Role;
 
 /**
  * Policy del módulo Users.
@@ -37,7 +37,7 @@ final class UserPolicy
      */
     public function update(User $user, User $target): bool
     {
-        if ($target->hasRole(Role::SUPERADMIN) && ! $user->hasRole(Role::SUPERADMIN)) {
+        if ($target->hasRole(SystemRole::Superadmin->value) && ! $user->hasRole(SystemRole::Superadmin->value)) {
             return false;
         }
 
@@ -54,7 +54,7 @@ final class UserPolicy
             return false;
         }
 
-        if ($target->hasRole(Role::SUPERADMIN)) {
+        if ($target->hasRole(SystemRole::Superadmin->value)) {
             return false;
         }
 

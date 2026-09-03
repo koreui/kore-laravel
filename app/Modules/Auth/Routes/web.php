@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Auth\Http\Controllers\SocialiteController;
+use App\Modules\Auth\Http\Livewire\Dashboard;
 use App\Modules\Auth\Http\Livewire\MagicLink;
 use Illuminate\Support\Facades\Route;
 
@@ -35,5 +36,5 @@ Route::middleware('web')->group(function (): void {
 });
 
 Route::middleware(['web', 'auth', 'verified'])->group(function (): void {
-    Route::view('/dashboard', 'auth::pages.dashboard')->name('dashboard');
+    Route::get('/dashboard', Dashboard::class)->name('dashboard');
 });

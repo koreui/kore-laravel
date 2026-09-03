@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Auth\Models;
 
+use App\Core\Enums\SystemRole;
+use App\Modules\Auth\Database\Factories\RoleFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 use Spatie\Permission\Models\Role as SpatieRole;
@@ -14,24 +17,32 @@ use Spatie\Permission\Models\Role as SpatieRole;
  * @property string $name
  * @property string $guard_name
  *
+ * Los valores viven en {@see SystemRole} (`app/Core/Enums/`), que es lo que
+ * pueden mirar los demás módulos sin importar `App\Modules\Auth\*` (regla 3
+ * de CLAUDE.md). Las constantes se mantienen como alias porque son la API
+ * histórica del boilerplate y las usan seeders, tests y proyectos derivados.
+ *
  * Convención del boilerplate:
  * - SUPERADMIN: bypass total via Gate::before; sólo se asigna por consola
  *   y los usuarios con este rol están ocultos del listado UI.
  * - ADMIN: rol completo para el primer admin; tiene todos los permisos.
  * - USER: rol mínimo asignable a usuarios estándar.
  *
- * Para agregar más roles: añade la constante, súmala a allRoles() y crea
- * la lógica de syncPermissions correspondiente en ModulesSeeder.
+ * Para agregar más roles: añade el case a {@see SystemRole} y crea la lógica
+ * de syncPermissions correspondiente en ModulesSeeder.
  */
 final class Role extends SpatieRole
 {
+    /** @use HasFactory<RoleFactory> */
+    use HasFactory;
+
     use LogsActivity;
 
-    public const string SUPERADMIN = 'superadmin';
+    public const string SUPERADMIN = SystemRole::Superadmin->value;
 
-    public const string ADMIN = 'Administrador';
+    public const string ADMIN = SystemRole::Admin->value;
 
-    public const string USER = 'Usuario';
+    public const string USER = SystemRole::User->value;
 
     /**
      * Roles seleccionables desde la UI. SUPERADMIN se excluye a propósito.
@@ -40,10 +51,10 @@ final class Role extends SpatieRole
      */
     public static function allRoles(): array
     {
-        return [
-            ['value' => self::ADMIN, 'label' => 'Administrador'],
-            ['value' => self::USER, 'label' => 'Usuario'],
-        ];
+        return array_map(
+            fn (SystemRole $role): array => ['value' => $role->value, 'label' => $role->label()],
+            SystemRole::assignable(),
+        );
     }
 
     /** @return array<int, string> */

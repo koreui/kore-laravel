@@ -1,22 +1,43 @@
 # Patrón CRUD del boilerplate
 
-**TL;DR**: cada CRUD se compone de 5 piezas — Form Object (`Livewire\Form`), FormComponent (Livewire), Table (`KoreDataTable`), Controller (devuelve blades), rutas con `permission:` middleware. Estructura idéntica para cada módulo. El módulo Users es el ejemplo de referencia.
+**TL;DR**: cada CRUD se compone de Form Object (validación) + DTO + Actions
+(escritura) + Events + FormComponent (Livewire) + Table (`KoreDataTable`) +
+Controller + rutas con `permission:` middleware. Estructura idéntica para cada
+módulo. El módulo Users es el ejemplo de referencia y todo el código de esta
+guía existe de verdad en `app/Modules/Users/`.
 
-## Las 5 piezas
+## Las piezas
 
 ```
 app/Modules/{Modulo}/
-├── Forms/{Modelo}Form.php                        # 1. Form Object
+├── Actions/                                      # 3. escritura (1 caso de uso = 1 clase)
+│   ├── {Modelo}CreateAction.php
+│   ├── {Modelo}UpdateAction.php
+│   └── {Modelo}DeleteAction.php
+├── Data/{Modelo}Data.php                         # 2. DTO de entrada de las Actions
+├── Events/{Modelo}{Created|Updated|Deleted}.php  # 4. canal hacia otros módulos
+├── Forms/{Modelo}Form.php                        # 1. Form Object (validación + toData)
 ├── Http/
-│   ├── Controllers/{Modulo}Controller.php        # 4. Controller
+│   ├── Controllers/{Modulo}Controller.php        # 7. Controller
 │   └── Livewire/
-│       ├── FormComponent.php                     # 2. Wraps Form Object
-│       └── Table{Modelos}.php                    # 3. KoreDataTable
+│       ├── FormComponent.php                     # 5. autoriza → valida → DTO → Action
+│       └── Table{Modelos}.php                    # 6. KoreDataTable
+├── Rules/                                        # reglas de validación propias
 ├── Resources/views/
 │   ├── pages/                                    # blades index/create/edit
 │   └── livewire/form-component.blade.php
-└── Routes/web.php                                # 5. Rutas con permission middleware
+└── Routes/web.php                                # 8. rutas con permission middleware
 ```
+
+El reparto de responsabilidades, en una línea:
+
+| Pieza          | Hace                                    | NO hace                          |
+|----------------|-----------------------------------------|----------------------------------|
+| Form Object    | valida y empaqueta                      | no persiste                      |
+| DTO (`Data`)   | transporta datos ya validados           | no valida, no tiene lógica       |
+| Action         | escribe y dispara el evento             | no autoriza, no lee `auth()`     |
+| Event          | avisa a otros módulos                   | —                                |
+| FormComponent  | autoriza, orquesta, feedback y redirect | no escribe                       |
 
 ---
 
@@ -30,146 +51,202 @@ Vive en `app/Modules/{Modulo}/Forms/{Modelo}Form.php`. Extiende `Livewire\Form`.
   `/livewire/update` y sobrescribir cualquier registro.
 - Tiene una propiedad pública por cada campo del modelo.
 - Implementa `rules(): array` (devuelve un array, **no** uses `#[Validate]`).
-- Implementa `store(): Model` que resuelve el modelo (`findOrFail($this->id)` si
-  hay id, `new Model` si no), hace `fill(...)->save()` y lo devuelve.
-- Si hay relaciones / pivots, gestionarlos al final de `store()` con el modelo recién creado/actualizado.
-
-> **Por qué no `updateOrCreate(['id' => $this->id], [...])`**: la app ya no hace
-> `Model::unguard()` global, y ese patrón mass-asigna la clave `id` al crear, así
-> que revienta con `MassAssignmentException` en cualquier modelo con `$fillable`.
-> Además era el vector de la escalada de privilegios que arregló la v1.0.0.
+- Implementa `toData(): {Modelo}Data`, que empaqueta el estado en el DTO.
+- **No persiste nada.** Escribir es trabajo de las Actions.
 
 ```php
-<?php
-
-declare(strict_types=1);
-
-namespace App\Modules\{Modulo}\Forms;
-
-use App\Modules\{Modulo}\Models\{Modelo};
-use Livewire\Attributes\Locked;
-use Livewire\Form;
-
-class {Modelo}Form extends Form
+final class UserForm extends Form
 {
     #[Locked]
     public ?int $id = null;
-    public string $nombre = '';
-    // ... resto de propiedades
+
+    public string $name = '';
+    public string $email = '';
+    public ?string $password = null;
+    public ?string $password_confirmation = null;
+    public string $role = SystemRole::User->value;
+
+    /** @var array<int, string> */
+    public array $permissions = [];
 
     public function rules(): array
     {
+        $catalog = resolve(AuthorizationCatalog::class);
+        $actor = auth()->user();
+
         return [
-            'nombre' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', Rule::unique(User::class, 'email')->ignore($this->id)],
+            'password' => [$this->id !== null ? 'nullable' : 'required', 'string', 'min:8', 'confirmed'],
+            'role' => [
+                'required',
+                Rule::in($catalog->assignableRoleNames()),
+                new GrantableRole($actor, $catalog),   // no puedes asignar más de lo que tienes
+            ],
+            'permissions' => ['array'],
+            'permissions.*' => ['string', 'exists:permissions,name', new GrantablePermission($actor)],
         ];
     }
 
-    public function store(): {Modelo}
+    public function toData(): UserData
     {
-        $model = $this->id !== null
-            ? {Modelo}::findOrFail($this->id)
-            : new {Modelo};
-
-        $model->fill(['nombre' => $this->nombre])->save();
-
-        $this->id = $model->id;
-
-        return $model;
+        return new UserData(
+            name: $this->name,
+            email: $this->email,
+            password: $this->password === '' ? null : $this->password,
+            role: $this->role,
+            permissions: array_values($this->permissions),
+        );
     }
 }
 ```
 
+> **Por qué el form no escribe**: mientras `store()` vivía aquí, el caso de uso
+> "crear un usuario" sólo existía dentro de un componente Livewire. No se podía
+> llamar desde un comando artisan, ni desde un job, ni testear sin montar el
+> componente. Ver [`../architecture/module-pattern.md`](../architecture/module-pattern.md).
+
 ---
 
-## 2. FormComponent
+## 2. DTO
 
-Vive en `app/Modules/{Modulo}/Http/Livewire/FormComponent.php`.
+`app/Modules/{Modulo}/Data/{Modelo}Data.php`, `final`, extiende
+`App\Core\Data\Data` (que es `spatie/laravel-data`). Propiedades promovidas y
+`readonly`. **Cero lógica**: es el contrato entre la capa de entrega y el caso
+de uso.
+
+```php
+final class UserData extends Data
+{
+    /** @param array<int, string> $permissions */
+    public function __construct(
+        public readonly string $name,
+        public readonly string $email,
+        public readonly ?string $password,
+        public readonly string $role,
+        public readonly array $permissions,
+    ) {}
+}
+```
+
+Un arch test vigila que todo `App\Modules\*\Data` sea `final` y extienda la base
+de Core.
+
+---
+
+## 3. Actions
+
+`app/Modules/{Modulo}/Actions/`, `final`, extienden `App\Core\Actions\Action`,
+**un único método público `handle()`**. Naming: `{Domain}{Object}{Verb}Action`;
+cuando el objeto coincide con el dominio se omite el prefijo repetido
+(`UserCreateAction` en el módulo Users, no `UsersUserCreateAction`).
+
+**Reglas**:
+- Reciben DTOs y modelos, nunca arrays sueltos ni el `Request`.
+- **Nada de `auth()` / `request()` / `session()` dentro**: la autorización la
+  hace quien llama. Así la Action sirve igual desde un job o un comando.
+- Agrupa en `DB::transaction()` sólo cuando varias escrituras tienen que caer
+  juntas (crear el usuario + sincronizar rol y permisos, por ejemplo).
+- Dispara su evento **fuera** de la transacción: un listener no debe ver datos
+  sin commitear.
+
+```php
+final class UserCreateAction extends Action
+{
+    public function handle(UserData $data): User
+    {
+        $user = DB::transaction(function () use ($data): User {
+            $user = new User;
+
+            $user->fill([
+                'name' => $data->name,
+                'email' => $data->email,
+                'password' => Hash::make((string) $data->password),
+                'email_verified_at' => now(),
+            ])->save();
+
+            $user->syncRoles([$data->role]);
+            $user->syncPermissions($data->permissions);
+
+            return $user;
+        });
+
+        event(new UserCreated($user));
+
+        return $user;
+    }
+}
+```
+
+`UserUpdateAction::handle(User $user, UserData $data): User` y
+`UserDeleteAction::handle(User $user): void` siguen el mismo molde.
+
+Skill: `.claude/skills/kore-action-create/`.
+
+---
+
+## 4. Events
+
+`app/Modules/{Modulo}/Events/`, `final readonly`, con el modelo como propiedad
+pública. Son **el canal oficial** para que otro módulo reaccione sin importar
+éste (regla 3 de CLAUDE.md).
+
+```php
+final readonly class UserCreated
+{
+    public function __construct(
+        public User $user,
+    ) {}
+}
+```
+
+El listener vive en `App\Modules\{Otro}\Listeners\` y sólo depende del evento.
+Laravel 12 los descubre solo; no hace falta registrarlos.
+
+---
+
+## 5. FormComponent
+
+`app/Modules/{Modulo}/Http/Livewire/FormComponent.php`.
 
 **Reglas**:
 - `use KoreUi\Core\Concerns\InteractsWithFeedback;` para toasts.
 - `#[Locked] public ?{Modelo} $model = null;` — el modelo para editar.
 - `public {Modelo}Form $form;` — siempre se llama `$form`.
 - `mount()` **autoriza** (`create` / `update`) y rellena el form si hay modelo.
-- `save()` **autoriza**, valida, llama a `$this->form->store()`, dispara toast y redirige.
+- `save()` hace **autorizar → validar → DTO → Action → toast → redirect**, y
+  nada más.
+- Las Actions llegan **por inyección de método**: Livewire resuelve del
+  contenedor los parámetros que no viajan en la llamada del cliente.
 - **La autorización va dentro del componente, siempre.** El middleware
   `permission:*` de las rutas no corre en `/livewire/update`; el `->hidden()` de
   un `RowAction` es sólo cosmética.
-- Datos para la vista van en **computed properties** (`#[Computed]`), nunca en propiedades públicas sueltas.
-- `#[Layout('layouts.app')]` envuelve con el layout global.
+- Datos para la vista van en **computed properties** (`#[Computed]`), nunca en
+  propiedades públicas sueltas.
 
 ```php
-<?php
-
-declare(strict_types=1);
-
-namespace App\Modules\{Modulo}\Http\Livewire;
-
-use App\Modules\{Modulo}\Forms\{Modelo}Form;
-use App\Modules\{Modulo}\Models\{Modelo};
-use KoreUi\Core\Concerns\InteractsWithFeedback;
-use Livewire\Attributes\Computed;
-use Livewire\Attributes\Layout;
-use Livewire\Attributes\Locked;
-use Livewire\Component;
-
-#[Layout('layouts.app')]
-final class FormComponent extends Component
+public function save(UserCreateAction $createUser, UserUpdateAction $updateUser): mixed
 {
-    use InteractsWithFeedback;
-
-    #[Locked]
-    public ?{Modelo} $model = null;
-
-    public {Modelo}Form $form;
-
-    public function mount(): void
-    {
-        if (! $this->model instanceof {Modelo}) {
-            $this->authorize('create', {Modelo}::class);
-
-            return;
-        }
-
+    if ($this->model instanceof User) {
         $this->authorize('update', $this->model);
-
-        $this->form->fill([
-            'id'     => $this->model->id,
-            'nombre' => $this->model->nombre,
-        ]);
+    } else {
+        $this->authorize('create', User::class);
     }
 
-    public function save(): mixed
-    {
-        // Livewire\Component ya trae AuthorizesRequests.
-        if ($this->model instanceof {Modelo}) {
-            $this->authorize('update', $this->model);
-        } else {
-            $this->authorize('create', {Modelo}::class);
-        }
+    $this->form->validate();
 
-        $this->form->validate();
-        $this->form->store();
+    $data = $this->form->toData();
 
-        $this->toast()
-            ->success(__('¡Listo!'), __('Registro guardado.'))
-            ->viaSession()
-            ->send();
+    $user = $this->model instanceof User
+        ? $updateUser->handle($this->model, $data)
+        : $createUser->handle($data);
 
-        return to_route('{modulo}.index');
-    }
+    $this->toast()
+        ->success(__('¡Listo!'), __('Usuario guardado correctamente.'))
+        ->viaSession()
+        ->send();
 
-    #[Computed]
-    public function title(): string
-    {
-        return $this->model instanceof {Modelo}
-            ? __('Editar registro')
-            : __('Crear registro');
-    }
-
-    public function render(): mixed
-    {
-        return view('{modulo}::livewire.form-component');
-    }
+    return to_route('users.index');
 }
 ```
 
@@ -201,9 +278,13 @@ final class FormComponent extends Component
 
 > **IMPORTANTE**: Los inputs de texto que usen `wire:model.live` necesitan `id` estable (ej. `id="form-nombre"`). Sin `id`, Livewire pierde el foco al re-render. Los componentes basados en clic (`select`, `toggle`, `checkbox`, `radio`, `datepicker`) NO necesitan `id`.
 
+> **Nada de Eloquent en la blade.** Lo que la vista necesite (opciones de un
+> select, cifras, catálogos) se prepara en un `#[Computed]` y viaja como array o
+> DTO. Ver `Auth\Http\Livewire\Dashboard`.
+
 ---
 
-## 3. Table — KoreDataTable
+## 6. Table — KoreDataTable
 
 `app/Modules/{Modulo}/Http/Livewire/Table{Modelos}.php` extiende `KoreUi\DataTable\KoreDataTable`.
 
@@ -214,22 +295,6 @@ final class FormComponent extends Component
 **Opcional**: `configure()`, `filters()`, `bulkActions()`.
 
 ```php
-<?php
-
-declare(strict_types=1);
-
-namespace App\Modules\{Modulo}\Http\Livewire;
-
-use App\Modules\{Modulo}\Models\{Modelo};
-use Illuminate\Database\Eloquent\Builder;
-use KoreUi\Core\Concerns\InteractsWithFeedback;
-use KoreUi\DataTable\Actions\RowAction;
-use KoreUi\DataTable\Columns\ActionColumn;
-use KoreUi\DataTable\Columns\Column;
-use KoreUi\DataTable\Columns\DateColumn;
-use KoreUi\DataTable\KoreDataTable;
-use Livewire\Attributes\On;
-
 final class Table{Modelos} extends KoreDataTable
 {
     use InteractsWithFeedback;
@@ -271,6 +336,12 @@ final class Table{Modelos} extends KoreDataTable
         ];
     }
 
+    /**
+     * Aquí la Action se resuelve a mano: cuando el diálogo de confirmación de
+     * koreUi acepta, `handleConfirmCallback()` llama `$this->{$method}(...$params)`
+     * sin pasar por el contenedor, así que un parámetro extra tipado reventaría
+     * en el navegador (y NO en el test, que sí usa el contenedor).
+     */
     public function confirmDelete(int $id): void
     {
         $model = {Modelo}::find($id);
@@ -283,7 +354,7 @@ final class Table{Modelos} extends KoreDataTable
         // de las rutas, y el ->hidden() del RowAction es sólo cosmética.
         $this->authorize('delete', $model);
 
-        $model->delete();
+        resolve({Modelo}DeleteAction::class)->handle($model);
 
         $this->toast()->success(__('¡Listo!'), __('Eliminado.'))->send();
         $this->dispatch('{modulo}-updated');
@@ -322,21 +393,11 @@ Para filtros con relaciones (whereHas, etc.) usa `->callback(fn (Builder $q, $v)
 
 ---
 
-## 4. Controller
+## 7. Controller
 
-`app/Modules/{Modulo}/Http/Controllers/{Modulo}Controller.php`. Devuelve blades que tienen el componente Livewire dentro. **Sin lógica gorda** — eso vive en el Form Object o en una Action.
+`app/Modules/{Modulo}/Http/Controllers/{Modulo}Controller.php`. Devuelve blades que tienen el componente Livewire dentro. **Sin lógica** — eso vive en las Actions.
 
 ```php
-<?php
-
-declare(strict_types=1);
-
-namespace App\Modules\{Modulo}\Http\Controllers;
-
-use App\Modules\{Modulo}\Models\{Modelo};
-use Illuminate\Contracts\View\View;
-use Illuminate\Routing\Controller;
-
 final class {Modulo}Controller extends Controller
 {
     public function index(): View
@@ -379,20 +440,18 @@ final class {Modulo}Controller extends Controller
 </x-layouts.app>
 ```
 
+> Si una pantalla es **toda ella** un componente Livewire (como `/dashboard`),
+> la ruta apunta directamente a la clase (`Route::get('/dashboard', Dashboard::class)`)
+> y el componente elige layout y título desde `render()`:
+> `view('auth::livewire.dashboard')->layout('components.layouts.app', ['title' => __('Dashboard')])`.
+
 ---
 
-## 5. Rutas
+## 8. Rutas
 
 `app/Modules/{Modulo}/Routes/web.php`:
 
 ```php
-<?php
-
-declare(strict_types=1);
-
-use App\Modules\{Modulo}\Http\Controllers\{Modulo}Controller;
-use Illuminate\Support\Facades\Route;
-
 Route::middleware(['web', 'auth', 'verified'])
     ->prefix('{modulo}')
     ->as('{modulo}.')
@@ -454,20 +513,31 @@ php artisan kore:regenerate-permissions
 
 Esto genera los 4 permisos `{slug}.{view|create|edit|delete}` y los sincroniza a los administradores. Ver [`../architecture/authorization.md`](../architecture/authorization.md).
 
+Si el formulario deja asignar roles o permisos, reutiliza
+`Users\Rules\GrantableRole` y `Users\Rules\GrantablePermission` como modelo:
+nadie debe poder conceder lo que él mismo no tiene.
+
 ---
 
 ## Tests obligatorios
 
-Crea `app/Modules/{Modulo}/Tests/Feature/{Modulo}CrudTest.php`. Mínimo:
+En `app/Modules/{Modulo}/Tests/Feature/`. Mínimo:
 
+- **Una clase por Action**: crea, actualiza con y sin password, borra, y que el
+  evento se dispara (`Event::fake()`).
 - Listado con permiso pasa, sin permiso devuelve 403.
-- Página create accesible para alguien con `{slug}.create`.
-- Crear via Livewire form: `Livewire::test(FormComponent::class)->set(...)->call('save')` redirige a index.
-- Editar: pasa el modelo, cambia un campo, llama save.
+- Crear vía Livewire: `Livewire::test(FormComponent::class)->set(...)->call('save')`
+  redirige a index.
+- Editar: pasa el modelo, cambia un campo, llama `save`.
 - Validación: campo requerido falla con `assertHasErrors`.
-- Si hay Policy con reglas de negocio (no borrarse a uno mismo, etc.), test directo sobre el policy.
+- Autorización atacando el componente directamente (como haría un cliente por
+  `/livewire/update`), no sólo por HTTP.
+- Si hay Policy con reglas de negocio (no borrarse a uno mismo, etc.), test
+  directo sobre el policy.
 
-Ver `app/Modules/Users/Tests/Feature/UsersCrudTest.php` como referencia.
+Referencia: `app/Modules/Users/Tests/Feature/` — `UserCreateActionTest`,
+`UserUpdateActionTest`, `UserDeleteActionTest`, `UsersCrudTest`,
+`UsersAuthorizationTest`, `PrivilegeEscalationTest`.
 
 ---
 

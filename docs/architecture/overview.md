@@ -29,6 +29,7 @@ app/
 │   ├── Concerns/                  # traits compartidos
 │   ├── Contracts/                 # interfaces (puentes entre módulos)
 │   ├── Data/Data.php              # base DTO (extiende spatie/laravel-data)
+│   ├── Enums/                     # valores compartidos (SystemRole)
 │   └── Support/                   # helpers
 ├── Modules/{Domain}/              # cada feature aislada (ver module-pattern.md)
 ├── Models/User.php                # único modelo verdaderamente global
@@ -54,7 +55,10 @@ config/kore-app.php                # toggles (ver toggles.md)
 
 1. **1 Action = 1 caso de uso** con método `handle(...)`. Naming `{Domain}{Object}{Verb}Action`.
 2. **Sin lógica gorda en controllers / Livewire** — pasa de 10 líneas, mover a Action.
-3. **Sin imports cruzados entre módulos**. Comunicación: Events, Contracts en `Core/Contracts/`, o Actions públicas vía interfaz.
+3. **Sin imports cruzados entre módulos** (arch test, en ambos sentidos).
+   Comunicación: Events, Contracts en `Core/Contracts/` (implementados en
+   `{Domain}/Support/`), enums compartidos en `Core/Enums/`, o Actions públicas
+   vía interfaz. `App\Core` nunca depende de `App\Modules`.
 4. **DTOs (spatie/laravel-data) en lugar de arrays** entre capas.
 5. **`declare(strict_types=1)`** obligatorio en todo PHP.
 6. **`final class`** por defecto.

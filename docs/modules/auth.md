@@ -6,23 +6,67 @@
 
 ```
 app/Modules/Auth/
-├── Actions/Fortify/             # CreateNewUser, ResetUserPassword, UpdateUserPassword,
-│                                  UpdateUserProfileInformation, PasswordValidationRules
+├── Actions/                     # casos de uso propios (AuthUserRegisterAction)
+├── Data/                        # DTOs: RegisterData, DashboardStatData
+├── Database/
+│   ├── Factories/               # ModuleFactory, RoleFactory
+│   ├── Migrations/
+│   └── Seeders/ModulesSeeder.php
+├── Fortify/                     # ADAPTADORES de Fortify: CreateNewUser, ResetUserPassword,
+│                                  UpdateUserPassword, UpdateUserProfileInformation,
+│                                  PasswordValidationRules
 ├── Http/
 │   ├── Controllers/SocialiteController.php
-│   └── Livewire/MagicLink.php
+│   └── Livewire/                # Dashboard, MagicLink
+├── Models/                      # Role, Module (+ ModulesCollection)
 ├── Providers/
 │   ├── AuthModuleServiceProvider.php
 │   └── FortifyServiceProvider.php
 ├── Resources/views/
 │   ├── layouts/auth.blade.php
+│   ├── livewire/dashboard.blade.php
 │   └── pages/                   # login, register, forgot/reset-password, verify-email,
-│                                  two-factor-challenge, confirm-password, magic-link, dashboard
+│                                  two-factor-challenge, confirm-password, magic-link
 ├── Routes/
 │   ├── web.php                  # magic-link, socialite, /dashboard
 │   └── api.php                  # /api/user (sólo si API_ENABLED)
-└── Tests/Feature/               # Login, Register, PasswordReset, ApiToken
+├── Support/AuthorizationCatalog.php   # implementación del contrato de Core
+└── Tests/Feature/               # Login, Register, PasswordReset, ApiToken, Dashboard, ...
 ```
+
+### `Fortify/` no es `Actions/`
+
+Los cinco stubs que publica Fortify (`CreateNewUser`, `ResetUserPassword`,
+`UpdateUserPassword`, `UpdateUserProfileInformation` y el trait
+`PasswordValidationRules`) son **adaptadores**: el paquete fija su nombre y la
+firma del método por contrato, así que no pueden cumplir la regla 1 de
+CLAUDE.md (sufijo `Action`, método `handle()`). Por eso viven en
+`App\Modules\Auth\Fortify\` y no en `Actions/`, que queda reservada a los casos
+de uso propios y sí está vigilada por los arch tests.
+
+El adaptador valida la entrada HTTP y **delega**:
+
+```php
+// App\Modules\Auth\Fortify\CreateNewUser
+public function create(array $input): User
+{
+    Validator::make($input, [...])->validate();
+
+    return $this->registerUser->handle(new RegisterData(
+        name: $input['name'],
+        email: $input['email'],
+        password: $input['password'],
+    ));
+}
+```
+
+`AuthUserRegisterAction` es entonces un caso de uso normal: se puede llamar
+desde un comando o un job, y se testea sin tocar HTTP
+(`Tests/Feature/AuthUserRegisterActionTest.php`).
+
+> **Migración desde v1.0.0**: si tu proyecto importaba
+> `App\Modules\Auth\Actions\Fortify\*`, cambia el namespace a
+> `App\Modules\Auth\Fortify\*`. Los nombres de clase no cambian.
 
 ## Modelo User
 
@@ -63,6 +107,20 @@ app/Modules/Auth/
 | GET   | `/auth/{provider}/callback`| `socialite.callback`   | `AUTH_SOCIAL_LOGIN=true` |
 | GET   | `/dashboard`               | `dashboard`            | requiere `auth + verified` |
 | GET   | `/api/user`                | `api.user`             | `API_ENABLED=true`      |
+
+### `/dashboard`
+
+Es un **componente Livewire de página completa**
+(`Route::get('/dashboard', Dashboard::class)`), no un `Route::view()`. Las
+cifras (usuarios, permisos, módulos activos) se calculan en
+`Auth\Http\Livewire\Dashboard::stats()` y viajan a la vista como
+`DashboardStatData`, porque en las blades no se toca Eloquent. El layout y el
+título los elige el propio `render()`:
+
+```php
+return view('auth::livewire.dashboard')
+    ->layout('components.layouts.app', ['title' => __('Dashboard')]);
+```
 
 ## Vistas y layout
 

@@ -5,16 +5,27 @@
 ## Componentes
 
 ```
+app/Core/
+├── Enums/SystemRole.php                  # los roles del sistema, visibles para todos
+├── Contracts/AuthorizationCatalog.php    # frontera: qué roles/permisos hay
+└── Data/Authorization/                   # RoleOptionData, PermissionOptionData,
+                                          # PermissionModuleData
+
 app/Modules/Auth/
 ├── Models/
-│   ├── Role.php                          # extiende Spatie + constantes
+│   ├── Role.php                          # extiende Spatie + constantes (alias del enum)
 │   ├── Module.php                        # tabla modules + accessor permissions
 │   └── Collections/ModulesCollection.php # flatPermissions(), permissionsToArray()
+├── Support/AuthorizationCatalog.php      # implementación del contrato
 ├── Database/
+│   ├── Factories/{RoleFactory, ModuleFactory}.php
 │   ├── Migrations/{create_modules_table}.php
 │   └── Seeders/ModulesSeeder.php         # source of truth
 └── Console/Commands/
     └── RegeneratePermissionsCommand.php  # `php artisan kore:regenerate-permissions`
+
+app/Modules/Users/
+└── Rules/{GrantableRole, GrantablePermission}.php   # anti-escalada de privilegios
 ```
 
 ## Formato de permisos
@@ -41,13 +52,30 @@ private function specialPermissions(): array
 
 ## Roles que vienen con el boilerplate
 
-| Constante                     | Valor en BD       | Acceso                              |
-|-------------------------------|-------------------|-------------------------------------|
-| `Role::SUPERADMIN`            | `'superadmin'`    | Bypass total via `Gate::before`. Sólo se asigna por consola; los usuarios con este rol están ocultos del listado UI. |
-| `Role::ADMIN`                 | `'Administrador'` | Todos los permisos.                 |
-| `Role::USER`                  | `'Usuario'`       | Sólo `dashboard.view` por default.  |
+Los valores viven en el enum `App\Core\Enums\SystemRole`, en **Core** y no en el
+módulo Auth: así cualquier módulo puede comparar contra un rol sin importar
+`App\Modules\Auth\*` (regla 3 de CLAUDE.md).
 
-**Usa siempre las constantes**, nunca strings literales:
+| Enum                     | Constante equivalente | Valor en BD       | Acceso                              |
+|--------------------------|-----------------------|-------------------|-------------------------------------|
+| `SystemRole::Superadmin` | `Role::SUPERADMIN`    | `'superadmin'`    | Bypass total via `Gate::before`. Sólo se asigna por consola; los usuarios con este rol están ocultos del listado UI. |
+| `SystemRole::Admin`      | `Role::ADMIN`         | `'Administrador'` | Todos los permisos.                 |
+| `SystemRole::User`       | `Role::USER`          | `'Usuario'`       | Sólo `dashboard.view` por default.  |
+
+`Role::SUPERADMIN`, `Role::ADMIN` y `Role::USER` siguen existiendo: se definen a
+partir del enum (`public const string ADMIN = SystemRole::Admin->value;`), así
+que un proyecto derivado no tiene que tocar nada. `Role::allRoles()` y
+`Role::assignableNames()` también se construyen desde el enum.
+
+**Nunca uses strings literales.** Desde otro módulo, el enum:
+
+```php
+use App\Core\Enums\SystemRole;
+
+$user->hasRole(SystemRole::Superadmin->value);
+```
+
+Dentro del módulo Auth (seeders, modelos), las constantes:
 
 ```php
 use App\Modules\Auth\Models\Role;
@@ -55,6 +83,86 @@ use App\Modules\Auth\Models\Role;
 $user->assignRole(Role::ADMIN);
 User::role(Role::USER)->get();
 ```
+
+Para añadir un rol: suma el `case` a `SystemRole`, dale su etiqueta en `label()`
+y crea su `syncPermissions` en `ModulesSeeder`.
+
+## `AuthorizationCatalog` — la frontera entre módulos
+
+`Role` y `Module` son del módulo Auth. Los demás módulos (Users, y los que
+vengan) no los importan: piden el catálogo por el contrato de Core.
+
+```php
+namespace App\Core\Contracts;
+
+interface AuthorizationCatalog
+{
+    /** @return array<int, RoleOptionData> */
+    public function assignableRoles(): array;
+
+    /** @return array<int, string> */
+    public function assignableRoleNames(): array;
+
+    /** @return array<int, PermissionModuleData> */
+    public function permissionModules(): array;
+
+    /** @return array<int, string> */
+    public function permissionsForRole(string $role): array;
+}
+```
+
+La implementación es `App\Modules\Auth\Support\AuthorizationCatalog` y se bindea
+en `AuthModuleServiceProvider::register()`:
+
+```php
+$this->app->singleton(AuthorizationCatalogContract::class, AuthorizationCatalog::class);
+```
+
+Uso típico (el formulario de usuarios):
+
+```php
+#[Computed]
+public function modules(): array
+{
+    return array_map(
+        fn (PermissionModuleData $module): array => $module->toArray(),
+        resolve(AuthorizationCatalog::class)->permissionModules(),
+    );
+}
+```
+
+Los DTOs se serializan exactamente a la estructura que ya consumían el
+`<x-kore::select>` y el Alpine de la matriz de permisos
+(`{module, permissions: [{value,label}], roles}`), así que las vistas no
+cambiaron.
+
+## Anti-escalada de privilegios
+
+Tener `users.create` + `users.edit` no puede convertirse en «tener todo»: sin
+más reglas, cualquier editor podía crear una cuenta con permisos que él no
+tiene (o con rol `Administrador`) y entrar con ella.
+
+`UserForm::rules()` añade dos reglas propias, en `app/Modules/Users/Rules/`:
+
+| Regla                 | Qué exige                                                                 |
+|-----------------------|---------------------------------------------------------------------------|
+| `GrantablePermission` | El actor sólo concede permisos que él mismo tiene.                        |
+| `GrantableRole`       | El actor sólo asigna un rol si posee **todos** los permisos de ese rol.   |
+
+Detalles de diseño:
+
+- El actor se pasa **por constructor**; dentro de la regla no se lee `auth()`.
+  Así se pueden testear y reutilizar desde consola.
+- `GrantableRole` se mide en **permisos, no en nombres de rol**: un rol nuevo
+  inventado por un proyecto derivado queda cubierto solo, y un rol sin permisos
+  se puede asignar sin ser administrador.
+- El **superadmin las salta** (su `Gate::before` ya le da todo).
+- La matriz de permisos de la vista no cambia: un editor sigue viendo todos los
+  permisos del sistema aunque no pueda concederlos; si lo intenta, la validación
+  responde con el permiso concreto en el mensaje. Ocultarlos en el cliente es
+  cosmética pendiente, no seguridad.
+
+Tests: `app/Modules/Users/Tests/Feature/PrivilegeEscalationTest.php`.
 
 ## Source of truth: `ModulesSeeder`
 
@@ -179,6 +287,27 @@ $user->hasPermissionTo('users.view');
 User::role(Role::ADMIN)->get();
 User::permission('users.view')->get();
 ```
+
+## Factories
+
+`Role` y `Module` tienen `HasFactory` y sus factories viven **dentro del
+módulo**, en `app/Modules/Auth/Database/Factories/`. Lo hace posible el resolver
+que registra `AppServiceProvider::configureFactories()`:
+
+```
+App\Modules\{Mod}\Models\{X} → App\Modules\{Mod}\Database\Factories\{X}Factory
+```
+
+El resto de modelos (`App\Models\User`) siguen en `database/factories/`.
+
+```php
+Module::factory()->create();                       // módulo activo con 4 permisos
+Module::factory()->inactive()->create();
+Role::factory()->create();                         // rol ad-hoc para un test
+Role::factory()->system(SystemRole::Admin)->create();
+```
+
+Los roles del sistema NO se crean con la factory: los siembra `ModulesSeeder`.
 
 ## Tests
 

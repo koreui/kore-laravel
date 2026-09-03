@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Auth\Models;
 
+use App\Modules\Auth\Database\Factories\ModuleFactory;
 use App\Modules\Auth\Models\Collections\ModulesCollection;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Override;
@@ -32,6 +34,9 @@ use Override;
 #[CollectedBy(ModulesCollection::class)]
 final class Module extends Model
 {
+    /** @use HasFactory<ModuleFactory> */
+    use HasFactory;
+
     use SoftDeletes;
 
     /** @var list<string> */

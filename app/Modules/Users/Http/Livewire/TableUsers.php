@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Users\Http\Livewire;
 
+use App\Core\Contracts\AuthorizationCatalog;
+use App\Core\Data\Authorization\RoleOptionData;
+use App\Core\Enums\SystemRole;
 use App\Models\User;
-use App\Modules\Auth\Models\Role;
+use App\Modules\Users\Actions\UserDeleteAction;
 use Illuminate\Database\Eloquent\Builder;
 use KoreUi\Core\Concerns\InteractsWithFeedback;
 use KoreUi\DataTable\Actions\RowAction;
@@ -46,7 +49,7 @@ final class TableUsers extends KoreDataTable
         /** @var Builder<User> $query */
         $query = User::query()
             ->with('roles')
-            ->whereDoesntHave('roles', fn (Builder $q): Builder => $q->where('name', '=', Role::SUPERADMIN));
+            ->whereDoesntHave('roles', fn (Builder $q): Builder => $q->where('name', '=', SystemRole::Superadmin->value));
 
         return $query;
     }
@@ -88,8 +91,8 @@ final class TableUsers extends KoreDataTable
             BadgeColumn::make(__('Rol'), 'id')
                 ->format(fn (mixed $value, User $row): string => (string) ($row->roles->first()?->getAttribute('name') ?? __('Sin rol')))
                 ->colors([
-                    Role::ADMIN => 'primary',
-                    Role::USER => 'secondary',
+                    SystemRole::Admin->value => 'primary',
+                    SystemRole::User->value => 'secondary',
                 ]),
 
             DateColumn::make(__('Creado'), 'created_at')->sortable(),
@@ -117,7 +120,10 @@ final class TableUsers extends KoreDataTable
     {
         return [
             SelectFilter::make(__('Rol'), 'role')
-                ->options(Role::allRoles())
+                ->options(array_map(
+                    fn (RoleOptionData $role): array => $role->toArray(),
+                    resolve(AuthorizationCatalog::class)->assignableRoles(),
+                ))
                 ->callback(fn (Builder $query, mixed $value): Builder => $query->whereHas(
                     'roles',
                     fn (Builder $q): Builder => $q->where('name', '=', $value),
@@ -129,6 +135,14 @@ final class TableUsers extends KoreDataTable
      * El `->hidden()` del RowAction es sólo cosmética: /livewire/update no pasa
      * por el middleware `permission:*` de las rutas del módulo, así que la
      * autorización real tiene que hacerse aquí.
+     *
+     * La Action se resuelve a mano y NO por inyección de método: cuando el
+     * diálogo de confirmación acepta, quien invoca es
+     * `InteractsWithFeedback::handleConfirmCallback()` de koreUi, que hace
+     * `$this->{$method}(...$params)` directo, sin pasar por el contenedor. Un
+     * parámetro extra tipado reventaría ahí con ArgumentCountError (los tests
+     * de Livewire sí usan el contenedor, así que el fallo sólo aparece en el
+     * navegador). Ver el workaround de `hydrate()` más arriba.
      */
     public function confirmDelete(int $id): void
     {
@@ -145,7 +159,7 @@ final class TableUsers extends KoreDataTable
 
         $this->authorize('delete', $user);
 
-        $user->delete();
+        resolve(UserDeleteAction::class)->handle($user);
 
         $this->toast()
             ->success(__('¡Listo!'), __('Usuario eliminado.'))

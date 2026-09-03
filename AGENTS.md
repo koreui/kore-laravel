@@ -46,22 +46,27 @@ app/
 ├── Core/                       # kernel compartido (no negocio)
 │   ├── Actions/Action.php      # base abstracta
 │   ├── Concerns/               # traits compartidos
-│   ├── Contracts/              # interfaces compartidas
+│   ├── Contracts/              # interfaces compartidas (fronteras entre módulos)
 │   ├── Data/Data.php           # base DTO (extiende spatie/laravel-data)
+│   ├── Enums/                  # valores compartidos (SystemRole)
 │   └── Support/                # helpers
 ├── Modules/{Domain}/
 │   ├── Actions/                # 1 clase = 1 caso de uso, método handle()
 │   ├── Data/                   # DTOs del módulo
+│   ├── Events/                 # lo que otros módulos pueden escuchar
+│   ├── Forms/                  # Livewire Form Objects (rules() + toData())
 │   ├── Http/
 │   │   ├── Controllers/
 │   │   ├── Livewire/
 │   │   └── Requests/
 │   ├── Models/
 │   ├── Policies/
+│   ├── Rules/                  # reglas de validación propias
+│   ├── Support/                # implementaciones de contratos de Core
 │   ├── Routes/                 # web.php, api.php cargados por su provider
 │   ├── Database/
 │   │   ├── Migrations/
-│   │   ├── Factories/
+│   │   ├── Factories/          # {X}Factory de los modelos del módulo
 │   │   └── Seeders/
 │   └── Providers/{Module}ServiceProvider.php
 ├── Models/User.php             # único modelo verdaderamente global
@@ -70,15 +75,30 @@ app/
 
 ### Reglas de oro
 
-1. **1 Action = 1 caso de uso** con método `handle(...)`. Naming: `{Domain}{Object}{Verb}Action` (`UserRegisterAction`, `OrderCancelAction`).
-2. **Sin lógica de negocio en controllers**: si pasa de 10 líneas, mover a Action.
-3. **Sin imports cruzados entre módulos**. Comunicación por Events, Contracts (en `Core/Contracts/`), o llamando Actions públicas del módulo destino vía interfaz.
+1. **1 Action = 1 caso de uso** con un único método público `handle(...)`,
+   `final`, extendiendo `App\Core\Actions\Action`. Naming:
+   `{Domain}{Object}{Verb}Action` (`AuthUserRegisterAction`, `OrderCancelAction`);
+   cuando el objeto coincide con el dominio se omite el prefijo repetido
+   (`UserCreateAction` en el módulo Users). Dentro de una Action **no** se lee
+   `auth()`, `request()` ni `session()`: autoriza quien llama, para que la
+   Action sirva igual desde un job o un comando.
+2. **Sin lógica de negocio en controllers, componentes Livewire ni Form
+   Objects**: el Form valida y empaqueta (`rules()` + `toData()`), el componente
+   hace `autorizar → validar → DTO → Action`, y la escritura vive en la Action.
+3. **Sin imports cruzados entre módulos** (hay arch test, en ambos sentidos).
+   Comunicación por Events (`{Domain}\Events\`), Contracts en `Core/Contracts/`
+   implementados en `{Domain}\Support\`, enums compartidos en `Core/Enums/`, o
+   llamando Actions públicas del módulo destino vía interfaz. `App\Core` nunca
+   depende de `App\Modules`.
 4. **DTOs en lugar de arrays asociativos** entre capas. Usar `spatie/laravel-data` extendiendo `App\Core\Data\Data`.
 5. **`declare(strict_types=1)`** en TODOS los archivos PHP creados.
 6. **`final class`** por defecto, salvo que se necesite herencia explícita.
 7. **Type hints obligatorios** en todos los parámetros, return types y propiedades.
 8. **`CarbonImmutable`** por defecto para fechas.
 9. **Tests obligatorios** con Pest para cada Action / endpoint Livewire / ruta.
+10. **Factories dentro del módulo**: `App\Modules\{X}\Models\{Y}` resuelve a
+    `App\Modules\{X}\Database\Factories\{Y}Factory` (lo registra
+    `AppServiceProvider::configureFactories()`).
 
 ## Toggles del boilerplate
 
@@ -160,7 +180,7 @@ php artisan boost:mcp               # arranca el server (lo usa la IA)
 ## NO HACER
 
 - ❌ No usar Flux UI ni componentes de otras librerías. Solo koreUi.
-- ❌ No poner lógica gorda en controllers ni en componentes Livewire (mover a Action).
+- ❌ No poner lógica gorda en controllers, componentes Livewire ni Form Objects (mover a Action).
 - ❌ No usar Eloquent en blade directamente. Pasar DTOs / arrays preparados desde el componente Livewire.
 - ❌ No tocar `app/Modules/Tenancy/` si `TENANCY_ENABLED=false`.
 - ❌ No crear `app/Services/`, `app/Repositories/` globales — todo va dentro del módulo correspondiente.

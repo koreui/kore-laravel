@@ -105,14 +105,18 @@ Las reglas de oro de `CLAUDE.md` dejaron de ser prosa y fallan el build:
 | preset `laravel()` | convenciones del framework, **ignorando `App\Modules`** |
 | Regla 5 | `declare(strict_types=1)` en todo `App` |
 | — | sin `dd`, `dump`, `var_dump`, `ray` ni `env()` dentro de `App` |
-| Regla 1 | `App\Modules\*\Actions` son `final` y con sufijo `Action` |
+| Regla 1 | `App\Modules\*\Actions` son `final`, con sufijo `Action` y extienden `App\Core\Actions\Action` |
+| Regla 3 | `App\Modules\Users` no usa `App\Modules\Auth` (y al revés), ignorando `Tests/` |
+| Regla 4 | `App\Modules\*\Data` y `App\Core\Data\Authorization` son `final` y extienden `App\Core\Data\Data` |
 | Regla 6 | `App\Modules\*\Policies` son `final` y con sufijo `Policy` |
+| — | `App\Core` no usa `App\Modules` |
+| — | `App\Core\Contracts` son interfaces |
 | — | `App\Modules\*\Providers` son `final` y con sufijo `ServiceProvider` |
 
 Los namespaces usan comodín (`App\Modules\*\Actions`), así que un módulo nuevo
 queda cubierto sin tocar el archivo.
 
-Dos excepciones documentadas en el propio archivo:
+Excepciones documentadas en el propio archivo:
 
 - El preset `laravel()` se aplica con `->ignoring('App\Modules')`. El preset
   asume el layout plano del framework (sólo `App\Http\Controllers` puede tener
@@ -120,13 +124,19 @@ Dos excepciones documentadas en el propio archivo:
   justo lo contrario de un modular monolith. Sigue vigilando `App\Core`,
   `App\Models` y `App\Providers`; las reglas equivalentes para los módulos se
   escriben a mano debajo.
-- `App\Modules\Auth\Actions\Fortify` queda fuera de la regla de Actions: son
-  los stubs que publica Fortify (`CreateNewUser`, `PasswordValidationRules`...),
-  cuyos nombres los fija el paquete. La v1.1 los revisará.
+- `App\Core\Enums` también queda fuera del preset: éste exige que sólo
+  `App\Enums` contenga enums, y en el layout modular el enum compartido vive en
+  Core.
+- Desde la v1.1 **no hay excepciones en la regla de Actions**: los stubs que
+  publica Fortify (`CreateNewUser`, `PasswordValidationRules`...) viven en
+  `App\Modules\Auth\Fortify`, porque son adaptadores del paquete y no casos de
+  uso del boilerplate.
 
-La regla "sin imports cruzados entre módulos" está **escrita y comentada** con un
-`TODO v1.1`: hoy fallaría porque Users importa `Auth\Models\{Role, Module}`.
-Activarla es borrar los comentarios cuando la v1.1 mueva esos modelos.
+La regla "sin imports cruzados entre módulos" está **activa desde la v1.1**, en
+los dos sentidos y con `Tests/` ignorado (los tests sí pueden cruzar módulos).
+La acompañan: `App\Core` no depende de `App\Modules`, los `App\Core\Contracts`
+son interfaces, y los DTOs (`App\Modules\*\Data` y `App\Core\Data\Authorization`)
+son `final` y extienden `App\Core\Data\Data`.
 
 ## Pre-commit hooks
 
@@ -175,12 +185,13 @@ $ composer ci
 ✓ Pint passed
 ✓ Larastan nivel 8: 0 errors
 ✓ Rector: nothing to refactor
-✓ Pest: 100 passed (230 assertions)
+✓ Pest: 139 passed (346 assertions)
 ```
 
-Reparto de los 100 tests: 9 arch (`tests/Arch`), 31 del módulo Auth, 26 del
+Reparto de los 139 tests: 16 arch (`tests/Arch`), 41 del módulo Auth, 48 del
 módulo Users, 3 de Tenancy y 31 en `tests/Feature` (health, scheduler, Sentry,
-Pulse, Pennant, mass assignment, landing).
+Pulse, Pennant, mass assignment, landing). Aparte, 45 specs E2E de Playwright
+(`npm run e2e`).
 
 Actualiza esta cifra cuando cambie. Un número inventado en los docs es peor que
 no ponerlo: la auditoría de septiembre de 2026 encontró aquí «15 tests» cuando
@@ -193,7 +204,7 @@ había 32.
 | Larastan nivel 8 → 9          | strict, harder, prepara baseline             |
 | Pest coverage min 80% → 90%   | test:coverage exige más cobertura            |
 | Agregar mutation testing      | `composer require --dev pestphp/pest-plugin-mutate` |
-| Activar la regla de imports cruzados | descomentar el bloque `TODO v1.1` de `tests/Arch/ArchitectureTest.php` cuando Users deje de importar `Auth\Models` |
+| Arch test de "una Action = un método público" | hoy sólo se vigila el nombre, el `final` y la clase base |
 
 Antes de subir el nivel, agrega un baseline para no romper nada existente:
 

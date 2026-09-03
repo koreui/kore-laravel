@@ -5,9 +5,14 @@ declare(strict_types=1);
 use App\Models\User;
 use App\Modules\Auth\Database\Seeders\ModulesSeeder;
 use App\Modules\Auth\Models\Role;
+use App\Modules\Users\Events\UserCreated;
+use App\Modules\Users\Events\UserDeleted;
+use App\Modules\Users\Events\UserUpdated;
+use App\Modules\Users\Forms\UserForm;
 use App\Modules\Users\Http\Livewire\FormComponent;
 use App\Modules\Users\Http\Livewire\TableUsers;
 use App\Modules\Users\Policies\UserPolicy;
+use Illuminate\Support\Facades\Event;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Permission;
 
@@ -94,6 +99,73 @@ it('hides superadmin users from the table query', function (): void {
         ->get();
 
     expect($rows->pluck('id')->all())->not->toContain($superadmin->id);
+});
+
+it('creating through the form runs the Action and dispatches UserCreated', function (): void {
+    Event::fake([UserCreated::class]);
+
+    $this->actingAs($this->admin);
+
+    Livewire::test(FormComponent::class)
+        ->set('form.name', 'Ada Lovelace')
+        ->set('form.email', 'ada@example.com')
+        ->set('form.password', 'StrongPass123!')
+        ->set('form.password_confirmation', 'StrongPass123!')
+        ->set('form.role', Role::USER)
+        ->call('save')
+        ->assertRedirect(route('users.index'));
+
+    Event::assertDispatched(UserCreated::class);
+    Event::assertNotDispatched(UserUpdated::class);
+});
+
+it('editing through the form dispatches UserUpdated', function (): void {
+    Event::fake([UserCreated::class, UserUpdated::class]);
+
+    $this->actingAs($this->admin);
+
+    Livewire::test(FormComponent::class, ['model' => $this->user])
+        ->set('form.name', 'Renamed')
+        ->call('save');
+
+    Event::assertDispatched(UserUpdated::class);
+    Event::assertNotDispatched(UserCreated::class);
+});
+
+it('deleting from the table runs the Action and dispatches UserDeleted', function (): void {
+    Event::fake([UserDeleted::class]);
+
+    Livewire::actingAs($this->admin)
+        ->test(TableUsers::class)
+        ->call('confirmDelete', $this->user->id)
+        ->assertOk();
+
+    expect(User::whereKey($this->user->id)->exists())->toBeFalse();
+    Event::assertDispatched(UserDeleted::class);
+});
+
+it('UserForm packs its state into a UserData DTO', function (): void {
+    $this->actingAs($this->admin);
+
+    $form = Livewire::test(FormComponent::class)
+        ->set('form.name', 'Ada')
+        ->set('form.email', 'ada@example.com')
+        ->set('form.password', '')
+        ->set('form.role', Role::ADMIN)
+        ->set('form.permissions', ['users.view'])
+        ->instance()
+        ->form;
+
+    expect($form)->toBeInstanceOf(UserForm::class);
+
+    $data = $form->toData();
+
+    expect($data->name)->toBe('Ada')
+        ->and($data->email)->toBe('ada@example.com')
+        // Cadena vacía == "no cambies la contraseña" para las Actions.
+        ->and($data->password)->toBeNull()
+        ->and($data->role)->toBe(Role::ADMIN)
+        ->and($data->permissions)->toBe(['users.view']);
 });
 
 it('UserForm validates role is in assignableNames', function (): void {

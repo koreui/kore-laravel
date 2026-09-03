@@ -10,6 +10,122 @@ desde el upstream (`git remote add kore https://github.com/koreui/kore-laravel`)
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-02
+
+«El boilerplate se demuestra a sí mismo». La v1.0.0 cerró la brecha entre lo que
+los docs prometían y lo que el código *hacía*; ésta la cierra en lo que el
+código *es*. El módulo Users —el CRUD de referencia— ahora cumple de verdad las
+tres reglas de oro que CLAUDE.md predicaba y que él mismo incumplía: Action
+Pattern, DTOs y cero imports cruzados entre módulos. Los arch tests que estaban
+comentados con un `TODO v1.1` pasan a fallar el build.
+
+Sin cambios visibles para el usuario final: la suite E2E (45 specs) pasa sin
+tocar un solo texto.
+
+### Seguridad
+
+- **Escalada de privilegios al asignar roles y permisos (alta).** Cualquiera con
+  `users.create` + `users.edit` podía crear una cuenta con **cualquier** rol y
+  **cualquier** permiso del sistema —incluidos los que él mismo no tenía— y
+  entrar con ella. Dos reglas nuevas en `app/Modules/Users/Rules/` lo cierran:
+  `GrantablePermission` (sólo concedes permisos que tienes) y `GrantableRole`
+  (sólo asignas un rol si posees todos sus permisos, medido en permisos y no en
+  nombres de rol, para que un rol nuevo quede cubierto solo). El superadmin las
+  salta; el actor se pasa por constructor, así que dentro de la regla no se lee
+  `auth()`. Cubierto por `PrivilegeEscalationTest`.
+  - Limitación conocida: la matriz de permisos de la vista sigue mostrando todos
+    los permisos aunque el actor no pueda concederlos. La validación los
+    rechaza nombrando el permiso; filtrarlos también en el cliente queda
+    pendiente.
+
+### Añadido
+
+- **Action Pattern real en Users**: `UserCreateAction`, `UserUpdateAction` y
+  `UserDeleteAction` (`final`, extienden `App\Core\Actions\Action`, un único
+  `handle()`), con `UserData` como DTO y los eventos `UserCreated`,
+  `UserUpdated` y `UserDeleted` (`final readonly`) como canal para otros
+  módulos. Ninguna Action lee `auth()`, `request()` ni `session()`: sirven igual
+  desde un job o un comando. Tests: una clase por Action.
+- **`App\Core\Enums\SystemRole`** (`Superadmin` / `Admin` / `User`) — el valor de
+  los roles pasa a Core, donde cualquier módulo puede mirarlo.
+- **`App\Core\Contracts\AuthorizationCatalog`** + DTOs
+  `App\Core\Data\Authorization\{RoleOptionData, PermissionOptionData,
+  PermissionModuleData}`, implementado por
+  `App\Modules\Auth\Support\AuthorizationCatalog` y bindeado en
+  `AuthModuleServiceProvider::register()`. Es la frontera que permite a Users
+  dejar de importar `Auth\Models\{Role, Module}`.
+- **`App\Modules\Auth\Actions\AuthUserRegisterAction`** + `RegisterData`: el
+  registro público también es un caso de uso, y el stub de Fortify sólo valida y
+  delega.
+- **Dashboard como componente Livewire** (`Auth\Http\Livewire\Dashboard` +
+  `DashboardStatData`). La blade hacía `User::count()`, `Permission::count()` y
+  `Module::where(...)->count()` dentro de un `@php`; ahora la ruta es
+  `Route::get('/dashboard', Dashboard::class)` y las cifras llegan como DTOs.
+  Mismo HTML, mismos textos.
+- **Factories por módulo**: `AppServiceProvider::configureFactories()` mapea
+  `App\Modules\{X}\Models\{Y}` → `App\Modules\{X}\Database\Factories\{Y}Factory`,
+  y `Role` y `Module` estrenan `HasFactory` + `RoleFactory` / `ModuleFactory`.
+  Si un modelo no tiene factory, el resolver dice dónde la buscó en vez del
+  "Class not found" de PHP.
+- **Arch tests nuevos** (16 en total, antes 9): imports cruzados entre módulos en
+  ambos sentidos (ignorando `Tests/`), `App\Core` no depende de `App\Modules`,
+  los `Core\Contracts` son interfaces, los DTOs son `final` y extienden
+  `Core\Data\Data`, y las Actions extienden `Core\Actions\Action`.
+- Tests: 100 → 139 Pest (45 E2E sin cambios).
+
+### Cambiado
+
+- **`UserForm` ya no persiste**: `store()` desaparece y en su lugar hay
+  `toData(): UserData`. `FormComponent::save()` hace
+  autorizar → validar → DTO → Action → toast → redirect, con las Actions por
+  inyección de método. `TableUsers::confirmDelete()` delega en
+  `UserDeleteAction`.
+  - Ahí sí se resuelve con `resolve(...)` y no por inyección: el diálogo de
+    confirmación de koreUi invoca el método con
+    `$this->{$method}(...$params)`, sin pasar por el contenedor. Un parámetro
+    tipado de más sólo reventaría en el navegador, no en los tests.
+- **Los stubs de Fortify se mudan** de `App\Modules\Auth\Actions\Fortify\` a
+  `App\Modules\Auth\Fortify\`: son adaptadores del paquete (el nombre y la
+  firma los fija Fortify), no casos de uso, y ensuciaban la regla de Actions con
+  una excepción permanente. Los nombres de clase no cambian.
+- `Role::SUPERADMIN`, `ADMIN` y `USER` **siguen existiendo**, pero ahora se
+  definen desde `SystemRole` (`= SystemRole::Admin->value`), igual que
+  `allRoles()` y `assignableNames()`.
+- `UserPolicy` y `TableUsers` comparan contra `SystemRole::Superadmin->value`;
+  las opciones del select de rol y la matriz de permisos salen del
+  `AuthorizationCatalog` (serializadas con `->toArray()` a la misma estructura
+  de antes, así que las vistas no cambian).
+- El preset `laravel()` de los arch tests se aplica ignorando también
+  `App\Core\Enums` (el preset exige que sólo `App\Enums` contenga enums, cosa
+  que no encaja con el layout modular).
+- Documentación al día con el código: `docs/guides/crud.md` reescrita alrededor
+  de Form + Data + Actions + Events, `docs/modules/users.md`,
+  `docs/modules/auth.md`, `docs/architecture/module-pattern.md`,
+  `docs/architecture/authorization.md` y `docs/quality/pipeline.md`. Los skills
+  (`kore-action-create`, `module-scaffold`, `kore-livewire-create`) reflejan el
+  patrón real, y su copia en `.agents/skills/` es idéntica.
+
+### Nota de migración (proyectos derivados)
+
+1. **Namespace de Fortify**: cambia `App\Modules\Auth\Actions\Fortify\*` por
+   `App\Modules\Auth\Fortify\*` (los nombres de clase son los mismos). Si
+   personalizaste `FortifyServiceProvider`, revisa sus `use`.
+2. **`UserForm::store()` ya no existe.** Si lo llamabas desde tu código, usa
+   `UserCreateAction` / `UserUpdateAction` con `UserForm::toData()`. Si añadiste
+   campos al formulario, muévelos de `store()` a la Action correspondiente y al
+   DTO.
+3. **`Role::` sigue igual**: las constantes y `allRoles()` / `assignableNames()`
+   no cambian de firma. Si comparas roles desde otro módulo, migra a
+   `SystemRole::Superadmin->value` para no romper el arch test de imports
+   cruzados.
+4. **Formularios que asignan roles o permisos**: las reglas anti-escalada
+   aplican al `UserForm`. Si tu app da de alta usuarios desde un actor con
+   permisos limitados, revisa que ese actor tenga los permisos que concede (o
+   dale el rol superadmin al proceso).
+5. **Si tenías una factory de un modelo de módulo en `database/factories/`**,
+   muévela a `app/Modules/{X}/Database/Factories/` o el resolver no la
+   encontrará.
+
 ## [1.0.0] - 2026-09-02
 
 Primera versión etiquetada. Cierra la brecha entre lo que la documentación
@@ -154,5 +270,6 @@ scaffold, cifras inventadas en los docs).
   el paquete cambiara. Republicarlas es un `vendor:publish` cuando de verdad
   haya que personalizarlas.
 
-[Unreleased]: https://github.com/koreui/kore-laravel/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/koreui/kore-laravel/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/koreui/kore-laravel/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/koreui/kore-laravel/releases/tag/v1.0.0

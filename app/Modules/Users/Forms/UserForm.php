@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Modules\Users\Forms;
 
+use App\Core\Contracts\AuthorizationCatalog;
+use App\Core\Enums\SystemRole;
 use App\Models\User;
-use App\Modules\Auth\Models\Role;
-use Illuminate\Support\Facades\Hash;
+use App\Modules\Users\Data\UserData;
+use App\Modules\Users\Rules\GrantablePermission;
+use App\Modules\Users\Rules\GrantableRole;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Locked;
 use Livewire\Form;
@@ -15,18 +18,19 @@ use Livewire\Form;
  * Livewire Form Object para crear/editar usuarios.
  *
  * Convención del boilerplate (ver docs/guides/crud.md):
- * - $id nullable distingue "crear" de "editar"
- * - rules() devuelve array (no atributos)
- * - store() resuelve el modelo, lo guarda y lo retorna
+ * - `$id` nullable distingue "crear" de "editar"
+ * - `rules()` devuelve array (no atributos)
+ * - `toData()` empaqueta el estado validado en el DTO que consumen las Actions
  *
- * Aparte del modelo, el form maneja role (string) y permissions (array)
- * que se aplican post-save via syncRoles + syncPermissions.
+ * El form NO persiste: valida y traduce. Escribir es trabajo de
+ * `UserCreateAction` / `UserUpdateAction` (regla 1 de CLAUDE.md), que así
+ * sirven igual desde un job o un comando artisan.
  *
  * SEGURIDAD: `$id` va con #[Locked]. Sin ese candado un cliente con permiso
- * `users.create` podía mandar `form.id` por /livewire/update y hacer que el
- * updateOrCreate sobrescribiera a CUALQUIER usuario (email, password, rol y
- * permisos incluidos). El candado sólo bloquea escrituras del cliente: el
- * mount() del componente sigue pudiendo asignarlo vía fill() (data_set).
+ * `users.create` podía mandar `form.id` por /livewire/update y sobrescribir a
+ * CUALQUIER usuario (email, password, rol y permisos incluidos). El candado
+ * sólo bloquea escrituras del cliente: el mount() del componente sigue
+ * pudiendo asignarlo vía fill() (data_set).
  */
 final class UserForm extends Form
 {
@@ -41,7 +45,7 @@ final class UserForm extends Form
 
     public ?string $password_confirmation = null;
 
-    public string $role = Role::USER;
+    public string $role = SystemRole::User->value;
 
     /** @var array<int, string> */
     public array $permissions = [];
@@ -49,55 +53,45 @@ final class UserForm extends Form
     /** @return array<string, array<int, mixed>> */
     public function rules(): array
     {
+        $catalog = resolve(AuthorizationCatalog::class);
+        $actor = auth()->user();
+
         return [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique(User::class, 'email')->ignore($this->id)],
             'password' => [
-                $this->id ? 'nullable' : 'required',
+                $this->id !== null ? 'nullable' : 'required',
                 'string',
                 'min:8',
                 'confirmed',
             ],
-            'role' => ['required', Rule::in(Role::assignableNames())],
+            'role' => [
+                'required',
+                Rule::in($catalog->assignableRoleNames()),
+                new GrantableRole($actor instanceof User ? $actor : null, $catalog),
+            ],
             'permissions' => ['array'],
-            'permissions.*' => ['string', 'exists:permissions,name'],
+            'permissions.*' => [
+                'string',
+                'exists:permissions,name',
+                new GrantablePermission($actor instanceof User ? $actor : null),
+            ],
         ];
     }
 
     /**
-     * El modelo se resuelve explícitamente en vez de con
-     * `updateOrCreate(['id' => $this->id], ...)`: sin `Model::unguard()` global
-     * ese patrón revienta al crear (el `id` no es mass-assignable) y además
-     * dejaba la puerta abierta a sobrescribir cualquier usuario.
+     * Estado del formulario como DTO para las Actions.
+     *
+     * Llamar SIEMPRE después de `validate()`: `UserData` no valida nada.
      */
-    public function store(): User
+    public function toData(): UserData
     {
-        $user = $this->id !== null
-            ? User::findOrFail($this->id)
-            : new User;
-
-        $attributes = [
-            'name' => $this->name,
-            'email' => $this->email,
-        ];
-
-        if ($this->password !== null && $this->password !== '') {
-            $attributes['password'] = Hash::make($this->password);
-        }
-
-        if (! $user->exists) {
-            $attributes['email_verified_at'] = now();
-        }
-
-        $user->fill($attributes)->save();
-
-        $user->syncRoles([$this->role]);
-        $user->syncPermissions($this->permissions);
-
-        $this->id = $user->id;
-        $this->password = null;
-        $this->password_confirmation = null;
-
-        return $user;
+        return new UserData(
+            name: $this->name,
+            email: $this->email,
+            password: $this->password === '' ? null : $this->password,
+            role: $this->role,
+            permissions: array_values($this->permissions),
+        );
     }
 }

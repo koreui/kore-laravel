@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Modules\Auth\Providers;
 
+use App\Core\Contracts\AuthorizationCatalog as AuthorizationCatalogContract;
 use App\Models\User;
 use App\Modules\Auth\Console\Commands\RegeneratePermissionsCommand;
+use App\Modules\Auth\Http\Livewire\Dashboard;
 use App\Modules\Auth\Http\Livewire\MagicLink;
 use App\Modules\Auth\Models\Role;
+use App\Modules\Auth\Support\AuthorizationCatalog;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Http\Request;
@@ -29,6 +32,7 @@ final class AuthModuleServiceProvider extends ServiceProvider
      * @var array<string, class-string>
      */
     private const array LIVEWIRE_COMPONENTS = [
+        'auth.dashboard' => Dashboard::class,
         'auth.magic-link' => MagicLink::class,
     ];
 
@@ -36,6 +40,10 @@ final class AuthModuleServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->register(FortifyServiceProvider::class);
+
+        // Auth es el dueño de `Role` y `Module`; los demás módulos consumen el
+        // catálogo por el contrato de Core y nunca importan estas clases.
+        $this->app->singleton(AuthorizationCatalogContract::class, AuthorizationCatalog::class);
     }
 
     public function boot(): void

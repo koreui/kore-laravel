@@ -16,7 +16,7 @@ export type CreatedUser = {
  *
  * `page` tiene que venir de una sesión con `users.create`. Los usuarios que
  * nacen por aquí quedan con `email_verified_at` puesto (lo hace
- * `UserForm::store()`), así que sirven para probar login y magic link.
+ * `UserCreateAction`), así que sirven para probar login y magic link.
  */
 export async function createUserViaUi(
     page: Page,

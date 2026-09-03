@@ -14,25 +14,32 @@ Para un módulo `{Domain}` (PascalCase), generar:
 
 ```
 app/Modules/{Domain}/
-├── Actions/                       # 1 clase = 1 caso de uso
-├── Data/                          # DTOs (extienden App\Core\Data\Data)
+├── Actions/                       # 1 clase = 1 caso de uso (handle()), extienden Core\Actions\Action
+├── Data/                          # DTOs final que extienden App\Core\Data\Data
+├── Events/                        # lo que otros módulos pueden escuchar
+├── Forms/                         # Livewire Form Objects (rules() + toData())
 ├── Http/
 │   ├── Controllers/
 │   ├── Livewire/
 │   └── Requests/
 ├── Models/
 ├── Policies/
+├── Rules/                         # reglas de validación propias
+├── Support/                       # implementaciones de contratos de Core
 ├── Routes/
 │   ├── web.php
 │   └── api.php                    # solo si el módulo expone API
 ├── Database/
 │   ├── Migrations/
-│   ├── Factories/
+│   ├── Factories/                 # {X}Factory de los modelos del módulo
 │   └── Seeders/
 ├── Resources/views/               # vistas namespaced (`{domain}::`)
 ├── Providers/{Domain}ModuleServiceProvider.php
 └── Tests/Feature/
 ```
+
+Crea sólo las carpetas que el módulo necesite; `Providers/` es la única
+obligatoria.
 
 ## Pasos
 
@@ -83,17 +90,37 @@ Route::middleware('web')->prefix('{domain}')->group(function (): void {
 ```
 
 5. **Si el módulo necesita un toggle**, agrégalo a `config/kore-app.php` y haz que el provider haga `return` temprano cuando esté apagado. Documenta el toggle en `CLAUDE.md` y `.env.example`.
-6. **Crea un test inicial** en `Tests/Feature/{Domain}ModuleTest.php` que verifique al menos que el provider se registra. El path es auto-detectado por `tests/Pest.php`.
-7. **Ejecuta** `composer dump-autoload && composer ci` para confirmar que todo queda verde.
+6. **Si el módulo tiene modelos**, añade `use HasFactory;` y crea
+   `Database/Factories/{X}Factory.php`: el resolver de
+   `AppServiceProvider::configureFactories()` ya mapea
+   `App\Modules\{Domain}\Models\{X}` → `App\Modules\{Domain}\Database\Factories\{X}Factory`.
+7. **Crea un test inicial** en `Tests/Feature/{Domain}ModuleTest.php` que verifique al menos que el provider se registra. El path es auto-detectado por `tests/Pest.php`.
+8. **Ejecuta** `composer dump-autoload && composer ci` para confirmar que todo queda verde.
 
 ## Reglas de oro (ver CLAUDE.md)
 
 - `declare(strict_types=1)` obligatorio en todo archivo PHP nuevo.
 - `final class` por default en clases sin herencia esperada.
-- Naming de Actions: `{Domain}{Object}{Verb}Action` (`OrderCancelAction`, `BillingInvoiceCreateAction`).
-- Sin imports cruzados a otros `Modules\*`. Si necesitas comunicar entre módulos: Events, Contracts en `app/Core/Contracts/`, o llamar Actions públicas vía interfaz.
+- Naming de Actions: `{Domain}{Object}{Verb}Action` (`OrderCancelAction`,
+  `BillingInvoiceCreateAction`); si el objeto coincide con el dominio, se omite
+  el prefijo repetido (`UserCreateAction` en el módulo Users). Extienden
+  `App\Core\Actions\Action` y exponen un único `handle()`.
+- La escritura vive en las Actions, no en el Form Object ni en el componente
+  Livewire: éste **autoriza → valida → DTO → Action**.
+- Sin imports cruzados a otros `Modules\*` (hay arch test). Si necesitas
+  comunicar entre módulos: Events (`{Domain}\Events\`), Contracts en
+  `app/Core/Contracts/` implementados en `{Domain}\Support\`, enums compartidos
+  en `app/Core/Enums/`, o llamar Actions públicas vía interfaz.
+- `App\Core` nunca depende de `App\Modules`.
 - Componentes UI: `<x-kore::*>` (siempre). Nunca otra librería.
 - DTOs en lugar de arrays asociativos entre capas.
+- Nada de Eloquent en las blades: prepara los datos en un `#[Computed]`.
+
+## Módulo de referencia
+
+`app/Modules/Users/` es el CRUD completo con Form + Data + Actions + Events +
+Rules + Policy + tests. Cópialo cuando dudes; la guía es
+[`docs/guides/crud.md`](../../../docs/guides/crud.md).
 
 ## Después de crear
 

@@ -1,5 +1,4 @@
-<x-layouts.app :title="__('Dashboard')">
-
+<div>
     {{-- Saludo --}}
     <div class="relative overflow-hidden rounded-2xl border border-kore-border bg-kore-surface p-8">
         <div class="absolute inset-0 -z-10">
@@ -15,25 +14,18 @@
         </p>
     </div>
 
-    {{-- Stats grid --}}
+    {{-- Stats grid. Las cifras llegan como DTOs desde el componente: nada de
+         Eloquent en la vista (ver el "NO HACER" de CLAUDE.md). --}}
     <div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        @php
-            $stats = [
-                ['label' => __('Usuarios totales'), 'value' => \App\Models\User::count(), 'icon' => 'users'],
-                ['label' => __('Permisos del sistema'), 'value' => \Spatie\Permission\Models\Permission::count(), 'icon' => 'shield-check'],
-                ['label' => __('Módulos activos'), 'value' => \App\Modules\Auth\Models\Module::where('active', true)->count(), 'icon' => 'layers'],
-            ];
-        @endphp
-
-        @foreach ($stats as $s)
+        @foreach ($this->stats as $stat)
             <div class="rounded-xl border border-kore-border bg-kore-surface p-5">
                 <div class="flex items-center justify-between">
-                    <span class="text-xs font-semibold uppercase tracking-wider text-kore-muted-fg">{{ $s['label'] }}</span>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-kore-muted-fg">{{ $stat->label }}</span>
                     <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-kore-primary/10">
-                        <x-kore::icon :name="$s['icon']" class="h-4 w-4 text-kore-primary" />
+                        <x-kore::icon :name="$stat->icon" class="h-4 w-4 text-kore-primary" />
                     </div>
                 </div>
-                <div class="mt-3 font-mono text-3xl font-bold tracking-tight">{{ $s['value'] }}</div>
+                <div class="mt-3 font-mono text-3xl font-bold tracking-tight">{{ $stat->value }}</div>
             </div>
         @endforeach
     </div>
@@ -66,5 +58,4 @@
             <x-kore::icon name="arrow-up-right" class="h-4 w-4 text-kore-muted-fg transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
         </a>
     </div>
-
-</x-layouts.app>
+</div>

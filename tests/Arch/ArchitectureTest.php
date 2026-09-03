@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Core\Actions\Action;
+use App\Core\Data\Data;
+
 /*
 |--------------------------------------------------------------------------
 | Arch tests
@@ -30,14 +33,15 @@ arch()->preset()->security();
  * El preset `laravel` asume el layout plano del framework: exige que sólo
  * `App\Http\Controllers` tenga clases con sufijo `Controller`, sólo
  * `App\Providers` con sufijo `ServiceProvider`, sólo `App\Models` extienda
- * `Model`, etc. En un modular monolith todo eso vive en `App\Modules\{X}\...`,
+ * `Model`, sólo `App\Enums` contenga enums, etc. En un modular monolith todo
+ * eso vive en `App\Modules\{X}\...` (y el kernel compartido en `App\Core\...`),
  * así que el preset completo falla por diseño, no por bugs.
  *
- * Se aplica ignorando `App\Modules`: sigue vigilando `App\Core`, `App\Models`,
- * `App\Providers` y `app/` en general, y las reglas equivalentes para los
- * módulos se escriben abajo a mano.
+ * Se aplica ignorando `App\Modules` y `App\Core\Enums`: sigue vigilando
+ * `App\Models`, `App\Providers`, el resto de `App\Core` y `app/` en general,
+ * y las reglas equivalentes para los módulos se escriben abajo a mano.
  */
-arch()->preset()->laravel()->ignoring('App\Modules');
+arch()->preset()->laravel()->ignoring(['App\Modules', 'App\Core\Enums']);
 
 /*
 |--------------------------------------------------------------------------
@@ -54,22 +58,23 @@ arch('sin helpers de debug ni env() fuera de config')
     ->not->toBeUsedIn('App');
 
 /*
- * Regla 1 · 1 Action = 1 caso de uso, `final`, sufijo `Action`.
+ * Regla 1 · 1 Action = 1 caso de uso, `final`, sufijo `Action`, extendiendo la
+ * base de Core.
  *
- * `App\Modules\Auth\Actions\Fortify` queda fuera: son los stubs que publica
- * Fortify (`CreateNewUser`, `PasswordValidationRules`...), cuyos nombres los
- * fija el paquete y a los que no podemos poner sufijo. v1.1 los revisará al
- * refactorizar Users al Action Pattern de verdad.
+ * Ya no hay excepciones: desde la v1.1 los stubs de Fortify viven en
+ * `App\Modules\Auth\Fortify` (son adaptadores del paquete, no casos de uso).
  */
 arch('regla 1 · las Actions son final')
     ->expect('App\Modules\*\Actions')
-    ->toBeFinal()
-    ->ignoring('App\Modules\Auth\Actions\Fortify');
+    ->toBeFinal();
 
 arch('regla 1 · las Actions llevan sufijo Action')
     ->expect('App\Modules\*\Actions')
-    ->toHaveSuffix('Action')
-    ->ignoring('App\Modules\Auth\Actions\Fortify');
+    ->toHaveSuffix('Action');
+
+arch('regla 1 · las Actions extienden App\Core\Actions\Action')
+    ->expect('App\Modules\*\Actions')
+    ->toExtend(Action::class);
 
 arch('regla 6 · las Policies son final y llevan sufijo Policy')
     ->expect('App\Modules\*\Policies')
@@ -82,19 +87,47 @@ arch('los Providers de módulo llevan sufijo ServiceProvider')
     ->toHaveSuffix('ServiceProvider');
 
 /*
- * TODO v1.1 · Regla 3 · sin imports cruzados entre módulos.
+ * Regla 3 · sin imports cruzados entre módulos.
  *
- * Hoy FALLA: Users importa App\Modules\Auth\Models\{Role, Module} en cinco
- * archivos. La corrección (mover Role/Module a Core o exponer un contrato en
- * App\Core\Contracts) está planificada para la v1.1 junto con el refactor de
- * Users al Action Pattern. Se deja escrita para que activarla sea borrar los
- * comentarios, no redescubrir la regla.
+ * Users habla con Auth por `App\Core\Contracts\AuthorizationCatalog` y por el
+ * enum `App\Core\Enums\SystemRole`; Auth no conoce Users en absoluto (si
+ * algún día necesita reaccionar, escucha los eventos de `Users\Events`).
  *
- * arch('regla 3 · sin imports cruzados entre módulos')
- *     ->expect('App\Modules\Users')
- *     ->not->toUse('App\Modules\Auth');
- *
- * arch('regla 3 · sin imports cruzados entre módulos (inverso)')
- *     ->expect('App\Modules\Auth')
- *     ->not->toUse('App\Modules\Users');
+ * Los tests SÍ pueden cruzar módulos: montan el mundo real (seeders, roles) y
+ * no son código de producción.
  */
+arch('regla 3 · sin imports cruzados entre módulos')
+    ->expect('App\Modules\Users')
+    ->not->toUse('App\Modules\Auth')
+    ->ignoring('App\Modules\Users\Tests');
+
+arch('regla 3 · sin imports cruzados entre módulos (inverso)')
+    ->expect('App\Modules\Auth')
+    ->not->toUse('App\Modules\Users')
+    ->ignoring('App\Modules\Auth\Tests');
+
+/*
+ * Core es el kernel compartido: lo pueden usar todos los módulos, pero él no
+ * puede depender de ninguno. En cuanto `App\Core` importe `App\Modules\X`, el
+ * contrato deja de ser una frontera y pasa a ser decoración.
+ */
+arch('Core no depende de ningún módulo')
+    ->expect('App\Core')
+    ->not->toUse('App\Modules');
+
+arch('los Contracts de Core son interfaces')
+    ->expect('App\Core\Contracts')
+    ->toBeInterfaces();
+
+/*
+ * Regla 4 · DTOs en lugar de arrays asociativos entre capas.
+ */
+arch('regla 4 · los DTOs de módulo son final y extienden App\Core\Data\Data')
+    ->expect('App\Modules\*\Data')
+    ->toBeFinal()
+    ->toExtend(Data::class);
+
+arch('regla 4 · los DTOs de Core son final y extienden App\Core\Data\Data')
+    ->expect('App\Core\Data\Authorization')
+    ->toBeFinal()
+    ->toExtend(Data::class);

@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace App\Modules\Users\Http\Livewire;
 
+use App\Core\Contracts\AuthorizationCatalog;
+use App\Core\Data\Authorization\PermissionModuleData;
+use App\Core\Data\Authorization\RoleOptionData;
+use App\Core\Enums\SystemRole;
 use App\Models\User;
-use App\Modules\Auth\Models\Module;
-use App\Modules\Auth\Models\Role;
+use App\Modules\Users\Actions\UserCreateAction;
+use App\Modules\Users\Actions\UserUpdateAction;
 use App\Modules\Users\Forms\UserForm;
 use KoreUi\Core\Concerns\InteractsWithFeedback;
 use Livewire\Attributes\Computed;
@@ -35,7 +39,7 @@ final class FormComponent extends Component
         $this->authorize('update', $this->model);
 
         $firstRole = $this->model->roles->first();
-        $roleName = $firstRole !== null ? (string) $firstRole->getAttribute('name') : Role::USER;
+        $roleName = $firstRole !== null ? (string) $firstRole->getAttribute('name') : SystemRole::User->value;
 
         $this->form->fill([
             'id' => $this->model->id,
@@ -47,11 +51,18 @@ final class FormComponent extends Component
     }
 
     /**
+     * Autoriza → valida → DTO → Action. Nada más: la escritura vive en la
+     * Action y este método sólo orquesta.
+     *
+     * Las Actions llegan por inyección de método (Livewire las resuelve del
+     * contenedor), que es lo que permite fakearlas en un test sin tocar el
+     * componente.
+     *
      * Las rutas de `users` llevan middleware `permission:*`, pero las llamadas
      * Livewire viajan por /livewire/update, donde ese middleware NO corre. Por
      * eso la autorización tiene que vivir dentro del componente.
      */
-    public function save(): mixed
+    public function save(UserCreateAction $createUser, UserUpdateAction $updateUser): mixed
     {
         if ($this->model instanceof User) {
             $this->authorize('update', $this->model);
@@ -60,7 +71,16 @@ final class FormComponent extends Component
         }
 
         $this->form->validate();
-        $this->form->store();
+
+        $data = $this->form->toData();
+
+        $user = $this->model instanceof User
+            ? $updateUser->handle($this->model, $data)
+            : $createUser->handle($data);
+
+        $this->form->id = $user->id;
+        $this->form->password = null;
+        $this->form->password_confirmation = null;
 
         $this->toast()
             ->success(__('¡Listo!'), __('Usuario guardado correctamente.'))
@@ -77,12 +97,18 @@ final class FormComponent extends Component
     }
 
     /**
-     * @return array<int, array{value: string, label: string}>
+     * Roles asignables, serializados a `{value, label}` para
+     * `<x-kore::select :options>`.
+     *
+     * @return array<int, array<string, mixed>>
      */
     #[Computed]
     public function roles(): array
     {
-        return Role::allRoles();
+        return array_map(
+            fn (RoleOptionData $role): array => $role->toArray(),
+            resolve(AuthorizationCatalog::class)->assignableRoles(),
+        );
     }
 
     /**
@@ -90,12 +116,18 @@ final class FormComponent extends Component
      * `module`, `permissions` (lista de {value,label}) y `roles` (metadata
      * usada por Alpine para auto-seleccionar al elegir un rol).
      *
-     * @return array<int, array{module: string, permissions: array<int, array{value: string, label: string}>, roles: array<int, string>|null}>
+     * Llega por el contrato de Core: el módulo Users no conoce `Module` ni
+     * `Role` (regla 3 de CLAUDE.md).
+     *
+     * @return array<int, array<string, mixed>>
      */
     #[Computed]
     public function modules(): array
     {
-        return Module::where('active', true)->get()->permissionsToArray();
+        return array_map(
+            fn (PermissionModuleData $module): array => $module->toArray(),
+            resolve(AuthorizationCatalog::class)->permissionModules(),
+        );
     }
 
     public function render(): mixed
