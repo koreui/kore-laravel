@@ -44,6 +44,25 @@ return [
     ],
 
     /*
+     * Tokens de API (Sanctum) emitidos por `POST /api/v1/auth/login` y
+     * `/auth/refresh`.
+     *
+     * `expires_minutes` es la caducidad de CADA token, y viaja en su columna
+     * `expires_at`. 43200 minutos = 30 días. `null` = sin caducidad (un token
+     * que sólo muere cuando alguien lo revoca).
+     *
+     * NO se toca `sanctum.expiration`, que sigue en `null` a propósito: esa
+     * clave es global y retroactiva —al ponerla, todos los tokens ya emitidos
+     * pasan a caducar contados desde su `created_at`, incluidos los de
+     * integraciones que nadie iba a renovar—. La caducidad por token se decide
+     * al emitirlo (`createToken(..., expiresAt:)`) y no cambia bajo los pies de
+     * nadie cuando se edita la config.
+     */
+    'tokens' => [
+        'expires_minutes' => env('API_TOKEN_EXPIRES_MINUTES', 43200),
+    ],
+
+    /*
      * Documentación OpenAPI (dedoc/scramble) en `/api/docs` y `/api/docs.json`.
      *
      * Apagada por defecto: en producción una spec pública es un mapa de la

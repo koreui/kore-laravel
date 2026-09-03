@@ -18,6 +18,7 @@ Hub central de documentación. Las reglas vivas y resúmenes operativos están e
 - [`modules/tenancy.md`](modules/tenancy.md) — stancl/tenancy + activación opt-in
 - [`modules/users.md`](modules/users.md) — módulo Users (primer CRUD del boilerplate)
 - [`modules/docs.md`](modules/docs.md) — visor de `docs/` en `/docs` detrás de `DOCS_ENABLED`
+- [`modules/devices.md`](modules/devices.md) — inventario de dispositivos que consumen la API, detrás de `DEVICES_ENABLED`
 - [`modules/e2e.md`](modules/e2e.md) — harness de la suite E2E (`/__e2e__/*`) detrás de `E2E_HARNESS`
 
 ### Guías

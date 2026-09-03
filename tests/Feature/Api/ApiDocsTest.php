@@ -116,6 +116,30 @@ it('sirve un OpenAPI 3 con el endpoint del contrato', function (): void {
     });
 });
 
+it('documenta la autenticación por token y el CRUD de usuarios', function (): void {
+    $superadmin = User::factory()->create();
+    $superadmin->assignRole(Role::SUPERADMIN);
+
+    withApiDocs(function () use ($superadmin): void {
+        /** @var array<string, mixed> $document */
+        $document = $this->actingAs($superadmin)->get('/api/docs.json')->assertOk()->json();
+
+        expect($document['paths'] ?? [])
+            ->toHaveKey('/api/v1/auth/login')
+            ->toHaveKey('/api/v1/auth/refresh')
+            ->toHaveKey('/api/v1/auth/logout')
+            ->toHaveKey('/api/v1/auth/logout-all')
+            ->toHaveKey('/api/v1/users')
+            ->toHaveKey('/api/v1/users/{user}');
+
+        // Los verbos, no sólo la ruta: un `paths` con la clave y sin el método
+        // sería una spec que no describe nada.
+        expect($document['paths']['/api/v1/auth/login'])->toHaveKey('post')
+            ->and($document['paths']['/api/v1/users'])->toHaveKeys(['get', 'post'])
+            ->and($document['paths']['/api/v1/users/{user}'])->toHaveKeys(['get', 'put', 'delete']);
+    });
+});
+
 it('no documenta sus propias rutas', function (): void {
     $superadmin = User::factory()->create();
     $superadmin->assignRole(Role::SUPERADMIN);

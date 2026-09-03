@@ -397,20 +397,19 @@ $token = $user->createToken('mobile-app')->plainTextToken;
 // Endpoint protegido: middleware('auth:sanctum')
 ```
 
-`app/Modules/Auth/Routes/api.php`:
+`app/Modules/Auth/Routes/api.php` las registra en tres grupos —el público, el
+que va con token y el resto del módulo— y el provider lo carga sólo con
+`API_ENABLED=true`:
 
 ```php
-Route::middleware(['api', 'auth:sanctum'])
-    ->prefix('api/'.config('kore-api.version', 'v1'))
-    ->name('api.v1.')
-    ->group(function (): void {
-        Route::get('/user', [UserController::class, 'me'])->name('user.me');
-    });
+if ((bool) config('kore-app.api.enabled')) {
+    $this->loadRoutesFrom("{$base}/Routes/api.php");
+}
 ```
 
-`GET /api/v1/user` (`api.v1.user.me`) es el primer endpoint del boilerplate que
-cumple el contrato de R54 y sirve de plantilla para los siguientes: controller
-que extiende `ApiController`, respuesta por `respond()`, representación en
+`GET /api/v1/user` (`api.v1.user.me`) fue el primer endpoint del boilerplate que
+cumplió el contrato de R54 y sigue sirviendo de plantilla mínima: controller que
+extiende `ApiController`, respuesta por `respond()`, representación en
 `UserMeResource` y errores por `ApiExceptionRenderer`. Devuelve
 
 ```json
@@ -422,11 +421,65 @@ devolvía el modelo Eloquent a pelo. Un derivado que la consuma tiene que mover
 el cliente a `/api/v1/user` y leer bajo `data`. Ver
 [`../guides/api.md`](../guides/api.md).
 
-**Lo que todavía no hay**: no existe `POST /api/v1/auth/login` ni ningún flujo
-de emisión de tokens por API. Hoy el token se crea desde el web con
-`$user->createToken(...)`, o se usa la sesión vía
-`EnsureFrontendRequestsAreStateful`. La autenticación por API llega en la fase
-siguiente.
+### Autenticación por token (v2.2.0)
+
+El flujo completo vive en `AuthTokenController` y está documentado paso a paso,
+con `curl`, en [`../guides/api.md`](../guides/api.md#autenticación-por-token).
+Aquí sólo el mapa.
+
+| Método | Ruta | Nombre | Middleware |
+|--------|------|--------|-----------|
+| `POST` | `/api/v1/auth/login` | `api.v1.auth.login` | `api`, `throttle:api-auth` |
+| `POST` | `/api/v1/auth/refresh` | `api.v1.auth.refresh` | `api`, `auth:sanctum`, `throttle:api-auth` |
+| `POST` | `/api/v1/auth/logout` | `api.v1.auth.logout` | `api`, `auth:sanctum` |
+| `POST` | `/api/v1/auth/logout-all` | `api.v1.auth.logout-all` | `api`, `auth:sanctum` |
+| `GET` | `/api/v1/auth/me` | `api.v1.auth.me` | `api`, `auth:sanctum` |
+| `GET` | `/api/v1/user` | `api.v1.user.me` | `api`, `auth:sanctum` |
+
+Las dos últimas son **el mismo handler**: `api.v1.user.me` existe desde la
+v2.2.0 y no se rompe; el alias bajo `auth/` es el que espera encontrar quien
+acaba de llamar a `auth/login` y `auth/logout`.
+
+Cuatro decisiones que conviene tener a mano:
+
+1. **Las abilities del token son los permisos efectivos del usuario**
+   (`getAllPermissions()`), y `[]` si no tiene ninguno — nunca `['*']`. Se
+   comprueban con `abilities:` / `ability:`, aliasados en `bootstrap/app.php`.
+2. **La caducidad va en el token**, desde
+   `config('kore-api.tokens.expires_minutes')` (30 días por defecto, `null` = sin
+   caducidad). `sanctum.expiration` se queda en `null`: es global y retroactiva.
+3. **Una cuenta con 2FA confirmado no entra por la API**: 403
+   `two_factor_required`. El reto por API llegará como un endpoint propio.
+4. **`device_name` es obligatorio** y es el nombre del token. `device_id`,
+   `platform` y `app_version` no se guardan: viajan en `ApiTokenIssued`.
+
+#### Eventos
+
+`App\Modules\Auth\Events\{ApiTokenIssued, ApiTokenRevoked}` son la frontera
+pública de Auth hacia quien quiera reaccionar a un login por API sin importar
+nada más del módulo (R5). `ApiTokenRevoked::$reason` distingue `logout`,
+`logout_all`, `refresh` y `permissions_changed`; `$tokenId` a `null` significa
+«todos».
+
+#### Listener: revocar al cambiar permisos
+
+`Listeners/RevokeApiTokensOnPermissionChange` escucha los cuatro eventos de
+spatie/laravel-permission (`RoleAttachedEvent`, `RoleDetachedEvent`,
+`PermissionAttachedEvent`, `PermissionDetachedEvent`) y retira **todos** los
+tokens del usuario afectado. Sin él, degradar a alguien en la pantalla de
+usuarios le quita el botón del navegador y no le quita nada de la API: las
+abilities de un token se congelan al emitirlo.
+
+> ⚠️ Depende de `'events_enabled' => true` en `config/permission.php` (el default
+> del paquete es `false`). Con esa clave apagada el listener no corre nunca y
+> nadie se entera; `ApiTokenRevocationTest` la comprueba.
+
+Se cablea siempre, también con `API_ENABLED=false`: el toggle decide si hay
+rutas, no si los tokens que ya están en la tabla siguen abriendo puertas.
+
+Cambiar los permisos de un **rol** se ignora a propósito: `ModulesSeeder` y
+`kore:auth:permissions` los sincronizan en cada despliegue, y reaccionar a eso
+echaría a toda la plantilla de sus móviles cada vez que se añade un módulo.
 
 ## Tests
 
@@ -439,9 +492,11 @@ siguiente.
 | `AuthUserRegisterActionTest` | `AuthUserRegisterAction`: crea, hashea y dispara el evento | 3 |
 | `PasswordResetTest` | página, envío de notificación de reset | 2 |
 | `ApiTokenTest` | `/api/v1/user`: envelope, roles y permisos, lista blanca de atributos, 401 del invitado y que la ruta vieja ya no existe | 5 |
+| `ApiAuthTest` | login (envelope, abilities, caducidad, 2FA, anti-enumeración, throttle), logout, logout-all, refresco y los eventos | 21 |
+| `ApiTokenRevocationTest` | el listener de spatie: rol y permiso, `events_enabled`, el evento, aislamiento entre usuarios y lo que NO cubre | 11 |
 | `ApiRateLimitTest` | `throttle:api` en el grupo, limiter `api` registrado y cabeceras en la ruta del módulo | 3 |
 | `MagicLinkTest` | envío, rate limit, anti-enumeración, login con código | 6 |
-| `AuthorizationSeederTest` | módulos, permisos y roles que siembra `ModulesSeeder` | 7 |
+| `AuthorizationSeederTest` | módulos, permisos y roles que siembra `ModulesSeeder`, y que el catálogo resuelve el guard también bajo `sanctum` | 8 |
 | `TwoFactorToggleTest` | el toggle `AUTH_2FA_ENABLED` añade/quita la feature y sus rutas | 5 |
 | `DashboardTest` | el componente Livewire `Dashboard` y sus DTOs de cifras | 3 |
 | `FactoryResolutionTest` | los modelos del módulo resuelven su factory dentro del módulo | 4 |
@@ -449,7 +504,7 @@ siguiente.
 | `PasskeysScreenTest` | acceso a `/user/passkeys`, listado por dueño y revocación | 10 |
 | `DevAccountSwitcherTest` | el switcher `/dev/switch-account` sólo existe en `local` y sólo entra en cuentas de dominios reservados | 16 |
 
-Total Auth: **76 tests / 204 assertions**. (Cifra real de
+Total Auth: **113 tests / 365 assertions**. (Cifra real de
 `./vendor/bin/pest app/Modules/Auth --compact`; actualízala cuando cambie.)
 
 ## Cómo extender

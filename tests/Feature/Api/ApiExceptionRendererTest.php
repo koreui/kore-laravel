@@ -3,12 +3,15 @@
 declare(strict_types=1);
 
 use App\Exceptions\ConflictException;
+use App\Exceptions\TwoFactorRequiredException;
+use App\Exceptions\UpgradeRequiredException;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
 /*
 |--------------------------------------------------------------------------
@@ -54,11 +57,27 @@ beforeEach(function (): void {
             throw new ConflictException(__('Este dispositivo ya está registrado en otra cuenta.'));
         });
 
+        Route::get('/upgrade', function (): never {
+            throw new UpgradeRequiredException(__('Tu versión :version ya no está soportada. Actualiza la aplicación a la :minimum o superior para continuar.', ['version' => '1.0.0', 'minimum' => '2.0.0']));
+        });
+
+        Route::get('/two-factor', function (): never {
+            throw new TwoFactorRequiredException;
+        });
+
         Route::get('/boom', function (): never {
             throw new RuntimeException('La contraseña de la base de datos es hunter2');
         });
 
         Route::get('/throttled', fn (): array => ['ok' => true])->middleware('throttle:1,1');
+
+        Route::get('/bad-request', function (): never {
+            throw new BadRequestHttpException('JSON mal formado');
+        });
+
+        Route::get('/locked', function (): never {
+            abort(423);
+        });
     });
 
     Route::get('/probe-web', fn (): string => '<h1>Una pantalla</h1>');
@@ -134,6 +153,40 @@ it('devuelve 409 conflict con el mensaje de dominio', function (): void {
         ]]);
 });
 
+it('devuelve 426 upgrade_required con el mensaje de dominio y sin details', function (): void {
+    $response = $this->getJson('/api/probe/upgrade');
+
+    $response->assertStatus(426)
+        ->assertJsonPath('error.code', 'upgrade_required')
+        ->assertJsonPath('error.message', 'Tu versión 1.0.0 ya no está soportada. Actualiza la aplicación a la 2.0.0 o superior para continuar.')
+        ->assertJsonMissingPath('error.details');
+});
+
+it('devuelve 403 two_factor_required con su propio código', function (): void {
+    // Es un 403 con nombre propio y no un `forbidden` a secas: el cliente que lo
+    // recibe no tiene que pedir otro permiso ni reintentar, sino mandar a esa
+    // persona al navegador. El mensaje lo pone el contrato, no la excepción.
+    $this->getJson('/api/probe/two-factor')
+        ->assertStatus(403)
+        ->assertExactJson(['error' => [
+            'code' => 'two_factor_required',
+            'message' => 'Esta cuenta tiene verificación en dos pasos: inicia sesión desde el navegador.',
+        ]]);
+});
+
+it('devuelve 400 bad_request para una petición mal formada', function (): void {
+    $this->getJson('/api/probe/bad-request')
+        ->assertStatus(400)
+        ->assertJsonPath('error.code', 'bad_request')
+        ->assertJsonMissingPath('error.details');
+});
+
+it('devuelve http_error con el status original para un 4xx sin código propio', function (): void {
+    $this->getJson('/api/probe/locked')
+        ->assertStatus(423)
+        ->assertJsonPath('error.code', 'http_error');
+});
+
 it('devuelve 500 server_error sin filtrar nada con app.debug apagado', function (): void {
     config(['app.debug' => false]);
 
@@ -166,6 +219,7 @@ it('sólo pone details en el 422', function (): void {
         ['GET', '/api/probe/forbidden'],
         ['GET', '/api/probe/model-missing'],
         ['GET', '/api/probe/conflict'],
+        ['GET', '/api/probe/two-factor'],
         ['GET', '/api/probe/boom'],
         ['POST', '/api/probe/ok'],
     ];

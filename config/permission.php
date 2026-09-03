@@ -137,8 +137,18 @@ return [
      * \Spatie\Permission\Events\PermissionDetachedEvent
      *
      * To enable, set to true, and then create listeners to watch these events.
+     *
+     * kore-laravel: ENCENDIDO, y no es opcional. `AuthModuleServiceProvider`
+     * cablea `RevokeApiTokensOnPermissionChange` sobre los cuatro para retirar
+     * los tokens de API de quien acaba de perder un permiso: las abilities de
+     * un token de Sanctum se congelan al emitirlo, así que sin estos eventos
+     * degradar a alguien en la pantalla de usuarios no le quita nada de la API
+     * hasta que su token caduque. Ponerlo de nuevo en `false` no rompe ningún
+     * test de arranque —el listener simplemente no se ejecuta nunca—, que es
+     * exactamente por lo que `ApiTokenRevocationTest` comprueba también el
+     * valor de esta clave.
      */
-    'events_enabled' => false,
+    'events_enabled' => true,
 
     /*
      * Teams Feature.

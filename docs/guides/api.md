@@ -10,12 +10,16 @@ Se enciende con `API_ENABLED=true` (`kore-app.api.enabled`) y se parametriza en
 
 ## Lo que este contrato **no** hace todavía
 
-- **No hay autenticación por token propia.** `POST /api/v1/auth/login`,
-  `logout`, refresco y registro de dispositivo llegan en la fase siguiente. Hoy
-  la única forma de autenticarse es un token de Sanctum creado desde el web
-  (`$user->createToken(...)`) o la sesión, vía `EnsureFrontendRequestsAreStateful`.
-- **No hay endpoints de negocio.** El único que existe (`GET /api/v1/user`) está
-  ahí para que el contrato tenga un ejemplo vivo.
+- **No hay reto de 2FA por API.** Una cuenta con verificación en dos pasos
+  confirmada **no puede** pedir un token: `POST /api/v1/auth/login` responde 403
+  `two_factor_required` y su dueño entra por el navegador. Ver
+  [Autenticación por token](#autenticación-por-token).
+- **Auth no guarda dispositivos.** El login acepta `device_id`, `platform` y
+  `app_version` y los publica dentro de `ApiTokenIssued`; quien los guarda es el
+  módulo opcional **Devices** (`DEVICES_ENABLED`), que escucha ese evento (R5).
+  Ver [Dispositivos](#dispositivos).
+- **No hay refresh token separado.** `POST /api/v1/auth/refresh` rota el token de
+  acceso presentando el token de acceso: no hay dos credenciales con dos vidas.
 - **No hay versión 2.** Cuando la haya, `api/v2` convive con `api/v1`: la
   versión es un segmento de la URL, no una cabecera.
 
@@ -65,8 +69,10 @@ códigos son los de `App\Core\Enums\ApiErrorCode`:
 | `not_found`          | 404 | `ModelNotFoundException`, `NotFoundHttpException`, ruta inexistente |
 | `method_not_allowed` | 405 | verbo equivocado. Lleva la cabecera `Allow` |
 | `conflict`           | 409 | `App\Exceptions\ConflictException` (excepción de dominio) |
+| `two_factor_required`| 403 | `App\Exceptions\TwoFactorRequiredException` — la cuenta tiene 2FA y este flujo sólo sabe el primer paso |
 | `throttled`          | 429 | rate limit. Lleva `Retry-After` y las `X-RateLimit-*` |
 | `bad_request`        | 400 | petición mal formada |
+| `upgrade_required`   | 426 | `App\Exceptions\UpgradeRequiredException` — el middleware `devices.version` cortó a un cliente por debajo del mínimo |
 | `http_error`         | 4xx | cualquier otro status sin código propio (419, 402, 423…) |
 | `server_error`       | 5xx | todo lo demás |
 
@@ -79,13 +85,14 @@ Tres cosas que son decisiones, no detalles:
    `ModelNotFoundException` lleva dentro el FQCN del modelo y el id buscado; el
    de una `AuthorizationException` viene en inglés desde el Gate. Los mensajes
    canónicos están en `ApiErrorCode::message()`, en español y traducidos en
-   `lang/en.json` (R33). La única excepción es `ConflictException`, cuyo mensaje
+   `lang/en.json` (R33). Las excepciones son `ConflictException` y `UpgradeRequiredException`, cuyo mensaje
    es texto de dominio escrito a propósito.
 3. **El 500 no filtra nada.** Con `APP_DEBUG=true` —y sólo entonces— añade un
    bloque `error.debug` con la clase, el mensaje, el archivo y la línea. Nunca
    en producción, donde el detalle vive en Sentry.
 
-El 409 es el único que un endpoint dispara a mano, y lo hace desde el dominio:
+El 409 y el `two_factor_required` son los dos únicos que un endpoint dispara a
+mano, y los dos lo hacen desde el dominio:
 
 ```php
 // dentro de una Action, no del controller
@@ -95,6 +102,15 @@ throw new ConflictException(__('Este dispositivo ya está registrado en otra cue
 `App\Exceptions\ConflictException` no extiende `HttpException` a propósito: una
 Action tiene que seguir siendo ejecutable desde un job o un comando, donde nadie
 va a rendir un status (R20). Quien decide que eso es un 409 es el renderer.
+`App\Exceptions\TwoFactorRequiredException` es la misma pieza con otro código; a
+diferencia del 409, su mensaje lo pone el contrato y no el autor, porque la causa
+es siempre la misma.
+
+**Por qué `two_factor_required` y no un `forbidden` a secas.** Un 403 genérico le
+dice al cliente «no puedes» y le deja dos reacciones malas: reintentar, o pedirle
+al usuario un permiso que nadie le va a dar. Con un código propio, la reacción
+correcta es evidente y programable: manda a esa persona a la pantalla de login
+del navegador. Un `code` canónico existe precisamente para eso.
 
 Fuera de `api/*` el renderer devuelve `null` y una pantalla web sigue rindiendo
 su error en HTML como siempre.
@@ -129,6 +145,325 @@ enum si lo tiene y del nombre del case si no.
 'role' => EnumResource::make($user->systemRole()),
 'roles' => EnumResource::collection(SystemRole::assignable()),
 ```
+
+## Autenticación por token
+
+**TL;DR**: `POST /api/v1/auth/login` con email, contraseña y `device_name`
+devuelve un token Bearer de Sanctum cuyas **abilities son los permisos efectivos
+del usuario**. Caduca a los 30 días (`kore-api.tokens.expires_minutes`), se rota
+con `/auth/refresh` sin volver a pedir la contraseña, y se retira solo cuando
+alguien le cambia los permisos a su dueño.
+
+### Las cinco rutas
+
+| Método | Ruta | Nombre | Middleware | Respuesta |
+|--------|------|--------|-----------|-----------|
+| `POST` | `/api/v1/auth/login` | `api.v1.auth.login` | `api`, `throttle:api-auth` | 201 `{ data: { token, token_type, expires_at, user } }` |
+| `POST` | `/api/v1/auth/refresh` | `api.v1.auth.refresh` | `api`, `auth:sanctum`, `throttle:api-auth` | 201, mismo cuerpo que el login |
+| `POST` | `/api/v1/auth/logout` | `api.v1.auth.logout` | `api`, `auth:sanctum` | 204 sin cuerpo |
+| `POST` | `/api/v1/auth/logout-all` | `api.v1.auth.logout-all` | `api`, `auth:sanctum` | 204 sin cuerpo |
+| `GET` | `/api/v1/auth/me` | `api.v1.auth.me` | `api`, `auth:sanctum` | 200 `{ data: UserMeResource }` |
+
+`GET /api/v1/auth/me` y `GET /api/v1/user` (`api.v1.user.me`) son **el mismo
+endpoint con dos nombres**: el segundo existe desde la v2.2.0 y no se rompe; el
+primero es el que espera encontrar quien acaba de llamar a `auth/login` y
+`auth/logout`.
+
+El login **no** lleva middleware `guest`. Sería un tiro en el pie:
+`RedirectIfAuthenticated` responde con un 302 hacia una pantalla web, y volver a
+hacer login teniendo un token todavía válido es legítimo —es lo que hace una app
+recién reinstalada—.
+
+### El cuerpo del login
+
+```jsonc
+{
+  "email": "ada@example.com",     // obligatorio
+  "password": "…",                // obligatorio
+  "device_name": "iPhone de Ada", // OBLIGATORIO: es el nombre del token
+  "device_id": "ABC-123",         // opcional
+  "platform": "ios",              // opcional: ios | android | web | cli
+  "app_version": "1.4.2"          // opcional
+}
+```
+
+`device_name` no tiene default a propósito. Es lo único que le queda al usuario
+para decidir cuál revocar desde una pantalla de «mis sesiones», y cinco filas
+llamadas `api` no son una lista de dispositivos: son una lista de nadas.
+
+Los otros tres no se guardan en ninguna tabla. Viajan dentro del evento
+`App\Modules\Auth\Events\ApiTokenIssued` para que el módulo que lleve el registro
+de dispositivos los use sin que Auth sepa que existe (R5).
+
+### Abilities = permisos
+
+```php
+$abilities = $user->getAllPermissions()->pluck('name')->all();  // roles + directos
+```
+
+Un token lleva **exactamente** los permisos que su dueño tenía al emitirlo, y si
+no tenía ninguno lleva `[]` — nunca `['*']`. El fallback al comodín es tentador y
+es el error: le da la llave maestra justo a la cuenta que no tiene ninguna
+puerta. Un token con `[]` no abre ningún endpoint que exija una ability, que es
+literalmente lo que significa «este usuario no puede nada».
+
+Se comprueban con el middleware `abilities:` de Sanctum, aliasado en
+`bootstrap/app.php` (el paquete trae las clases pero no las aliasea):
+
+| Alias | Clase | Semántica |
+|-------|-------|-----------|
+| `abilities` | `CheckAbilities` | **todas** las que se listen (AND) |
+| `ability` | `CheckForAnyAbility` | **al menos una** (OR) |
+
+`abilities:users.edit` en una ruta de API se lee igual que el
+`permission:users.edit` de la ruta web equivalente. **No sustituye a la Policy**:
+ver [Users API v1](#users-api-v1).
+
+### Caducidad
+
+```php
+'tokens' => ['expires_minutes' => env('API_TOKEN_EXPIRES_MINUTES', 43200)],  // 30 días
+```
+
+La caducidad va en la fila del token (`expires_at`), no en `sanctum.expiration`,
+que sigue en `null` **a propósito**: esa clave es global y **retroactiva**. Al
+ponerla, todos los tokens ya emitidos pasan a caducar contados desde su
+`created_at`, y la integración que llevaba dos años funcionando se cae el día del
+deploy. Con `expires_minutes` a `null` el token no caduca, que sigue siendo una
+decisión legítima cuando el ciclo de vida lo lleva la revocación.
+
+`expires_at` se publica en ISO 8601 y no como «segundos restantes»: un
+`expires_in: 2592000` obliga al cliente a saber cuándo empezó a contar, y el
+único reloj que tiene a mano es el suyo.
+
+### Credenciales inválidas
+
+422 `validation_failed` con `details.email`, y **el mismo mensaje** tanto si el
+email no existe como si la contraseña es otra: decir «ese correo no está
+registrado» convierte el login en un censo de cuentas (R28). El texto sale de
+`auth.failed`, la misma frase que ve quien falla el login en el navegador.
+
+Hay una segunda puerta que cerrar, la del reloj: sin ella, la respuesta a un
+email inexistente vuelve en microsegundos y el tiempo delata lo que el mensaje
+calla. Por eso el controller gasta un `Hash::make()` de descarte cuando no
+encuentra al usuario.
+
+El intento fallido cuenta igual en el limiter: `throttle:api-auth` corre por
+delante del controller y suma en cada petición, salga como salga. Son 5 por
+minuto **y por IP** (R28) — quien fuerza credenciales todavía no tiene usuario,
+así que limitar por usuario no limitaría nada.
+
+### 2FA: la decisión
+
+**Una cuenta con 2FA confirmado no entra por la API.** `POST /auth/login`
+responde 403 `two_factor_required`.
+
+No es una limitación temporal disfrazada de política: mientras el reto por API no
+exista, aceptar email + contraseña sería publicar una puerta que se salta el
+segundo factor que esa persona activó a propósito, y la API dejaría de ser una
+vista de la aplicación para pasar a ser su punto más débil. Ni Notarium ni
+asper-server miran el 2FA en su login de API, y los dos tienen el agujero
+abierto.
+
+Dos matices:
+
+- Se mira también el toggle. Con `AUTH_2FA_ENABLED=false` no hay segundo factor
+  que respetar y un `two_factor_secret` viejo en la tabla no puede dejar a nadie
+  fuera.
+- **Confirmado**, no «empezado». Quien escaneó el QR pero no metió el código
+  sigue entrando: su cuenta todavía no está protegida por nada.
+
+Cuando llegue el reto por API será un endpoint más (`/auth/two-factor-challenge`),
+y este 403 pasará a ser su invitación en vez de un final.
+
+### Revocación al cambiar permisos
+
+Las abilities de un token se congelan al emitirlo. Sin nada más, degradar a
+alguien en la pantalla de usuarios le quita el botón del navegador y **no le
+quita nada de la API**: su móvil sigue presentando un token con `users.delete`
+dentro hasta que caduque, treinta días después. Es el agujero que R26 cierra en
+la UI, visto desde el otro lado del cable.
+
+Lo cierra `App\Modules\Auth\Listeners\RevokeApiTokensOnPermissionChange`, que
+escucha los cuatro eventos de spatie/laravel-permission
+(`RoleAttachedEvent`, `RoleDetachedEvent`, `PermissionAttachedEvent`,
+`PermissionDetachedEvent`) y retira **todos** los tokens del usuario afectado,
+disparando `ApiTokenRevoked(reason: 'permissions_changed')`.
+
+> ⚠️ Requiere `'events_enabled' => true` en `config/permission.php`. El default
+> del paquete es `false`, y con esa clave apagada el listener no se ejecuta nunca
+> sin que nadie se entere. `ApiTokenRevocationTest` comprueba el valor.
+
+Es un martillo, y a propósito: al usuario se le cierran todas las sesiones de
+API, incluida la que tuviera abierta. La alternativa —recalcular las abilities de
+cada token vivo— deja al cliente con un token cuyo contenido cambió sin avisar,
+que es peor de depurar que un re-login.
+
+**Lo que no cubre**: cambiar los permisos de un *rol* (no de un usuario) se
+ignora. `ModulesSeeder` y `kore:auth:permissions` sincronizan los permisos de
+todos los roles en cada despliegue, y reaccionar a eso echaría a toda la
+plantilla de sus móviles cada vez que alguien añade un módulo. Un proyecto que
+necesite cubrirlo lo hace desde un job, no desde un listener síncrono.
+
+### Los eventos
+
+| Evento | Cuándo | `reason` |
+|--------|--------|----------|
+| `ApiTokenIssued` | login, refresco | — |
+| `ApiTokenRevoked` | logout | `logout` |
+| `ApiTokenRevoked` | logout de todos (`tokenId` es `null`) | `logout_all` |
+| `ApiTokenRevoked` | refresco (el token viejo) | `refresh` |
+| `ApiTokenRevoked` | cambio de permisos (`tokenId` es `null`) | `permissions_changed` |
+
+`reason` es texto libre y viaja en el evento porque quien escucha necesita
+distinguir un cierre de sesión voluntario de una revocación forzada, y esa
+distinción se pierde si sólo se publica el hecho.
+
+### De punta a punta con `curl`
+
+```bash
+# 1 · Entrar
+curl -sX POST http://localhost:8000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@kore.test","password":"password","device_name":"curl","platform":"cli"}'
+# → 201 { "data": { "token": "3|xxxx…", "token_type": "Bearer",
+#          "expires_at": "2026-10-03T12:00:00+00:00", "user": { … } } }
+
+TOKEN='3|xxxx…'
+
+# 2 · Usarlo
+curl -s http://localhost:8000/api/v1/auth/me -H "Authorization: Bearer $TOKEN"
+
+# 3 · Rotarlo (el viejo deja de valer en el acto)
+curl -sX POST http://localhost:8000/api/v1/auth/refresh -H "Authorization: Bearer $TOKEN"
+
+# 4 · Salir de este dispositivo · 204 sin cuerpo
+curl -isX POST http://localhost:8000/api/v1/auth/logout -H "Authorization: Bearer $TOKEN"
+
+# 5 · Salir de todos
+curl -isX POST http://localhost:8000/api/v1/auth/logout-all -H "Authorization: Bearer $TOKEN"
+```
+
+### Las piezas
+
+| Archivo | Qué hace |
+|---------|----------|
+| `Auth/Http/Controllers/Api/V1/AuthTokenController.php` | autoriza, arma el DTO, llama a la Action |
+| `Auth/Http/Requests/Api/V1/LoginRequest.php` | valida la **forma** del cuerpo y produce `ApiLoginData` |
+| `Auth/Actions/AuthApiTokenIssueAction.php` | abilities + caducidad + `createToken` + evento |
+| `Auth/Actions/AuthApiTokenRevokeAction.php` | retira uno o todos + evento |
+| `Auth/Data/{ApiLoginData,ApiDeviceData,ApiTokenData}.php` | los tres DTOs (R8) |
+| `Auth/Http/Resources/Api/V1/ApiTokenResource.php` | `{ token, token_type, expires_at, user }` |
+| `Auth/Listeners/RevokeApiTokensOnPermissionChange.php` | R26 llevado al token |
+
+Comprobar la contraseña vive en el controller y no en una Action a propósito:
+decidir **quién** pregunta es autenticación, no negocio, y es lo mismo que hace
+el `LoginRequest` de Fortify. El caso de uso —emitir un token con estas abilities
+y esta caducidad— sí es la Action (R4).
+
+## Users API v1
+
+`api/v1/users` es el **endpoint de referencia** del boilerplate: el que hay que
+copiar cuando un módulo nuevo necesita publicar su recurso. Enseña las cinco
+piezas juntas y no reimplementa ninguna — las Actions, los DTOs y las reglas
+anti-escalada son literalmente las mismas que usa la pantalla Livewire.
+
+| Método | Ruta | Nombre | Ability | Policy | Respuesta |
+|--------|------|--------|---------|--------|-----------|
+| `GET` | `/api/v1/users` | `api.v1.users.index` | `users.view` | `viewAny` | 200 `{ data: [...], meta }` |
+| `GET` | `/api/v1/users/{user}` | `api.v1.users.show` | `users.view` | `view` | 200 `{ data }` |
+| `POST` | `/api/v1/users` | `api.v1.users.store` | `users.create` | `create` | 201 `{ data }` |
+| `PUT`/`PATCH` | `/api/v1/users/{user}` | `api.v1.users.update` | `users.edit` | `update` | 200 `{ data }` |
+| `DELETE` | `/api/v1/users/{user}` | `api.v1.users.destroy` | `users.delete` | `delete` | 204 sin cuerpo |
+
+Las rutas viven en `app/Modules/Users/Routes/api.php` y su provider las carga
+sólo con `API_ENABLED=true`, igual que hace Auth.
+
+### La doble barrera (R23 · R25)
+
+Cada ruta exige la ability del token **y** el método vuelve a preguntarle a la
+Policy. No es redundante: son dos preguntas distintas.
+
+- La **ability** dice qué se le concedió a *este token* cuando se emitió. Es lo
+  que hace que un token robado de una app de sólo lectura no pueda borrar nada
+  aunque su dueño sea administrador.
+- La **Policy** dice qué puede *este usuario* ahora mismo sobre *este registro*.
+  «Sólo un superadmin edita a otro superadmin» no es algo que una ability pueda
+  expresar: depende del registro, no del token.
+
+Quitar cualquiera de las dos deja un agujero distinto. Es la misma forma que
+tiene la UI, donde la ruta lleva `permission:users.edit` y el componente Livewire
+vuelve a autorizar porque `/livewire/update` no pasa por el middleware de la
+ruta.
+
+### El superadmin no sale
+
+El listado excluye a los superadmins, exactamente igual que `TableUsers`: es un
+rol que sólo se asigna por consola, y publicarlo sería regalarle a cualquiera con
+`users.view` la lista de las cuentas que más interesa atacar. Que la pantalla los
+oculte y la API los enseñara sería tener dos respuestas a la misma pregunta.
+
+Editarlos y borrarlos lo bloquea `UserPolicy` (403), y borrarse a uno mismo lo
+bloquea el controller con un `abort_if` — porque el `Gate::before` del superadmin
+devuelve `true` antes de que la Policy llegue a opinar.
+
+### Filtros y paginación
+
+```bash
+GET /api/v1/users?search=ada&role=Administrador&per_page=25&cursor=eyJpZCI6Miw…
+```
+
+`search` casa contra nombre **y** email; `role` es el nombre exacto del rol. El
+orden es por id descendente y no por `created_at`: la paginación por cursor
+necesita una columna única para no saltarse ni repetir filas, y dos usuarios
+sembrados en la misma transacción comparten `created_at`.
+
+### Anti-escalada por API (R26)
+
+El rol y los permisos que llegan por `POST`/`PUT` pasan por las mismas `Rules`
+que el formulario —`GrantableRole` y `GrantablePermission`—, así que nadie
+concede lo que no tiene. Un intento sale como un 422 con el motivo en `details`:
+
+```json
+{
+  "error": {
+    "code": "validation_failed",
+    "message": "Los datos enviados no son válidos.",
+    "details": {
+      "permissions.0": ["No puedes conceder el permiso «users.delete» porque tú no lo tienes."]
+    }
+  }
+}
+```
+
+> **Cicatriz (v2.2.0).** Esa regla estuvo **desactivada en la API** el tiempo que
+> tardó en escribirse su primer test.
+> `AuthorizationCatalog::permissionsForRole()` filtraba por
+> `config('auth.defaults.guard')`, y `AuthManager::shouldUse()` —que es lo que
+> llama `auth:sanctum`— **escribe** esa clave con el valor `sanctum`. Los roles
+> se siembran con `guard_name = 'web'`, así que en toda petición de la API el
+> método devolvía `[]`, `GrantableRole` no encontraba ningún permiso «que el
+> actor no tenga» y dejaba pasar cualquier rol: un `users.create` podía crear
+> administradores. Hoy el guard sale de `Guard::getDefaultName(User::class)`,
+> que es la misma resolución que usa spatie por dentro, y
+> `AuthorizationSeederTest` lo comprueba bajo los dos guards.
+
+### El cuerpo
+
+```jsonc
+{
+  "name": "Ada Lovelace",
+  "email": "ada@example.com",
+  "password": "…",                 // obligatorio al crear, opcional al editar
+  "password_confirmation": "…",
+  "role": "Usuario",
+  "permissions": ["users.view"]     // permisos DIRECTOS, además de los del rol
+}
+```
+
+Omitir `password` al editar significa «no la cambies». `PATCH` comparte reglas
+con `PUT`: un PATCH que validara sólo lo que llega evaluaría `GrantableRole`
+contra un usuario del que no sabe el resto.
 
 ## Cómo añadir un endpoint
 
@@ -318,6 +653,37 @@ cargan las rutas, no si existe el limiter. Y sin `RateLimiter::for('api')`,
 `throttle:api` degradaría a `maxAttempts = (int) 'api' = 0` y bloquearía todas
 las peticiones — Laravel no trae ninguno de fábrica.
 
+## Dispositivos
+
+El módulo opcional **Devices** (`DEVICES_ENABLED`, apagado por defecto) es hoy el
+único consumidor real de este contrato aparte de `GET /api/v1/user`, y el ejemplo
+del que copiar cuando un endpoint tiene que hacer algo más que devolver una fila:
+
+| Ruta | Qué hace |
+|------|----------|
+| `GET /api/v1/devices` | los del usuario del token, por cursor, con `current` |
+| `DELETE /api/v1/devices/{device:uuid}` | 204; revoca el dispositivo y borra su token de Sanctum |
+| `PUT /api/v1/devices/current/push-token` | 204; guarda el token de notificaciones del dispositivo en uso |
+
+Tres cosas que se repiten tal cual en cualquier recurso «de mi cuenta»:
+
+- **Ningún endpoint acepta un `user_id`**: el dueño sale del token y la consulta
+  se acota por él antes de buscar nada, así que el recurso de otro es un `404` y
+  no un `403` que confirmaría que existe.
+- **La identidad pública es un `uuid`** (`App\Core\Concerns\HasPublicUuid` con
+  `ROUTE_BY_UUID`), no el id entero, que diría cuántas filas hay.
+- **El resource es una lista blanca de verdad**: el `push_token` no aparece ni
+  aquí ni en el modelo (`#[Hidden]`).
+
+El módulo añade además un middleware **opt-in**, alias `devices.version`, que
+responde `426` con `error.code: upgrade_required` a los clientes por debajo de
+`config('devices.min_app_version')`. Lo hace lanzando `UpgradeRequiredException`, que
+`ApiExceptionRenderer` rinde con `ApiErrorCode::UpgradeRequired` (R54). No va en
+el grupo `api` a propósito.
+
+Detalle completo —modelo, eventos que escucha, comando de limpieza y config— en
+[`../modules/devices.md`](../modules/devices.md).
+
 ## Documentación OpenAPI (Scramble)
 
 | | |
@@ -379,7 +745,17 @@ API_DOCS=true php artisan route:list --path=api # ...con la doc encendida
 API_DOCS=true php artisan scramble:export      # spec a storage/app/openapi.json
 ./vendor/bin/pest tests/Feature/Api            # el contrato entero
 ./vendor/bin/pest tests/Arch                   # R54: quién hereda de quién
+
+# Los endpoints
+./vendor/bin/pest --filter=ApiAuth             # login, refresco, logout
+./vendor/bin/pest --filter=ApiTokenRevocation  # R26 llevado al token
+./vendor/bin/pest --filter=ApiUsers            # el CRUD de referencia
 ```
+
+> `scramble:export` **abre la base de datos**: infiere los tipos de los resources
+> mirando el esquema de los modelos. En un checkout recién clonado hay que correr
+> `php artisan migrate` antes, o el comando muere con un
+> `Database file … does not exist`.
 
 ## Reglas relacionadas
 

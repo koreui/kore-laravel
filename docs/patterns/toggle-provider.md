@@ -11,7 +11,7 @@ nada.
 
 El boilerplate tiene capacidades que un proyecto derivado puede no querer:
 multi-tenancy, backups, 2FA, login social. Todas se controlan desde
-`config/kore-app.php` (diez claves hoy) y todas se apagan por defecto o casi.
+`config/kore-app.php` (doce claves hoy) y todas se apagan por defecto o casi.
 
 Dos restricciones marcan la forma:
 

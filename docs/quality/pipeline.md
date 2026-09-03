@@ -41,10 +41,10 @@ no verifica nada.
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + `softprops/action-gh-release` |
 
 Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v2.2.0 y
-570 tests Pest. La suite E2E —163 tests en 18 archivos— va aparte y tarda
-31 s en local. Los 59 tests nuevos de la v2.2.0 son los del contrato de la API
-(`tests/Feature/Api`, 51), los cuatro de R54 en `ArchitectureTest` y los cuatro
-que ganó `ApiTokenTest` al pasar el endpoint de usuario por el envelope.
+693 tests Pest. La suite E2E —163 tests en 18 archivos— va aparte y tarda
+31 s en local. Los 182 tests nuevos de la v2.2.0 son el contrato de la API
+(`tests/Feature/Api`, 55), la autenticación por token y el CRUD de Users por
+API (Auth 113, Users 78), el módulo Devices (54) y los arch tests de R54.
 
 > Nota de entorno: `composer test` limpia la config cacheada antes de correr
 > Pest a propósito. Con un `bootstrap/cache/config.php` viejo, `PulseAccessTest`
@@ -416,21 +416,16 @@ $ composer ci
 ✓ Larastan nivel 8 + PHPat + disallowed-calls: 0 errors
 ✓ kore:arch:check: sin violaciones
 ✓ Rector: nothing to refactor
-✓ Pest: 570 passed (1461 assertions)
+✓ Pest: 693 passed (1961 assertions)
 ```
 
-Reparto de los 570 tests: 38 arch (`tests/Arch`: 27 en `ArchitectureTest` y 11
-en `PhpatArchitectureTest`), 80 del módulo Auth, 48 del módulo Users, 3 de
-Tenancy, 43 del módulo Docs, 29 del módulo E2E y 329 en `tests/Feature` (health,
-scheduler, Sentry, Pulse, Pennant, mass assignment, landing, traducciones,
-backup, cabeceras de seguridad, configuración de producción, logging,
-migraciones reversibles, instalación limpia, el MCP `kore`, `kore:arch:check`
-con sus 94 casos, los hooks, `kore:agents:sync`, `kore:changelog:section`, el
-419, `HasPublicUuid` y los 51 de `tests/Feature/Api` —el contrato de la API:
-renderer de errores, middleware, limiters, paginación por cursor, `EnumResource`
-y la documentación de Scramble). Aparte, la suite E2E de Playwright (`npm run e2e`): 163
-tests en 18 archivos —17 de spec más `auth.setup.ts`, que hace el login por
-rol—, 104 de ellos generados desde `tests/e2e/fixtures/access-map.ts`.
+Reparto de los 693 tests: 38 arch (`tests/Arch`: 27 en `ArchitectureTest` y 11
+en `PhpatArchitectureTest`), 113 del módulo Auth (incluida la API de tokens),
+78 del módulo Users (incluida su API v1), 3 de Tenancy, 43 del módulo Docs, 29
+del módulo E2E, 54 del módulo Devices y 333 en `tests/Feature` (plataforma,
+`kore:arch:check`, hooks, MCP, y el contrato de la API en `tests/Feature/Api`).
+Aparte, la suite E2E de Playwright (`npm run e2e`): 163 tests en 18 archivos,
+104 de ellos generados desde `tests/e2e/fixtures/access-map.ts`.
 
 Actualiza esta cifra cuando cambie (R41). Un número inventado en los docs es
 peor que no ponerlo: la auditoría de septiembre de 2026 encontró aquí «15 tests»

@@ -6,6 +6,8 @@ namespace App\Core\Http\Api\Exceptions;
 
 use App\Core\Enums\ApiErrorCode;
 use App\Exceptions\ConflictException;
+use App\Exceptions\TwoFactorRequiredException;
+use App\Exceptions\UpgradeRequiredException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -36,7 +38,8 @@ use Throwable;
  * **El mensaje lo pone el contrato, no la excepción** (ver
  * `ApiErrorCode::message()`): el texto de un `ModelNotFoundException` incluye el
  * FQCN del modelo y el id buscado, y el de una `AuthorizationException` viene
- * en inglés desde el Gate. La única excepción es `ConflictException`, cuyo
+ * en inglés desde el Gate. Las excepciones son `ConflictException` y
+ * `UpgradeRequiredException`, cuyo
  * mensaje es texto de dominio escrito a propósito.
  *
  * Ver `docs/guides/api.md` y R54 en `docs/architecture/rules.md`.
@@ -55,6 +58,8 @@ final class ApiExceptionRenderer
             $e instanceof AuthorizationException => $this->error(ApiErrorCode::Forbidden, 403),
             $e instanceof ModelNotFoundException => $this->error(ApiErrorCode::NotFound, 404),
             $e instanceof ConflictException => $this->conflict($e),
+            $e instanceof UpgradeRequiredException => $this->response(ApiErrorCode::UpgradeRequired, $e->getMessage(), 426),
+            $e instanceof TwoFactorRequiredException => $this->error(ApiErrorCode::TwoFactorRequired, 403),
             $e instanceof HttpExceptionInterface => $this->fromHttpException($e),
             default => $this->serverError($e),
         };

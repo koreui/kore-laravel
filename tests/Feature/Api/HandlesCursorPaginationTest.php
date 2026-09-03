@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Core\Http\Api\Controllers\ApiController;
+use App\Core\Http\Api\Resources\BaseApiResource;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +21,18 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
+/** @mixin User */
+final class CursorProbeResource extends BaseApiResource
+{
+    /**
+     * @return array{id: int|string|null, name: string}
+     */
+    public function toArray(Request $request): array
+    {
+        return ['id' => $this->getKey(), 'name' => $this->name];
+    }
+}
+
 final class CursorProbeController extends ApiController
 {
     public function index(Request $request): JsonResponse
@@ -32,6 +45,17 @@ final class CursorProbeController extends ApiController
         );
     }
 
+    /**
+     * La forma que documenta `docs/guides/api.md`: el resource envuelve el
+     * paginador entero, no sus `items()`.
+     */
+    public function resourceIndex(Request $request): JsonResponse
+    {
+        $users = $this->paginateWithCursor(User::query()->orderBy('id'), $request);
+
+        return $this->respond(CursorProbeResource::collection($users), meta: $this->cursorMeta($users));
+    }
+
     public function perPage(Request $request): JsonResponse
     {
         return $this->respond(['per_page' => $this->resolvePerPage($request)]);
@@ -41,6 +65,7 @@ final class CursorProbeController extends ApiController
 beforeEach(function (): void {
     Route::middleware('api')->prefix('api/probe')->group(function (): void {
         Route::get('/users', [CursorProbeController::class, 'index']);
+        Route::get('/users-resource', [CursorProbeController::class, 'resourceIndex']);
         Route::get('/per-page', [CursorProbeController::class, 'perPage']);
     });
 });
@@ -117,4 +142,25 @@ it('no arrastra un meta vacío cuando no se pasa ninguno', function (): void {
     $this->getJson('/api/probe/sin-meta')
         ->assertOk()
         ->assertExactJson(['data' => ['id' => 1]]);
+});
+
+it('publica un solo meta cuando el resource envuelve el paginador', function (): void {
+    User::factory()->count(5)->create();
+
+    $response = $this->getJson('/api/probe/users-resource?per_page=2');
+
+    // Laravel rinde un resource sobre un paginador con `PaginatedResourceResponse`,
+    // que añade SU meta (`path`, `per_page`, cursores) y lo funde con el nuestro
+    // con `array_merge_recursive`: sin el arreglo de `respond()`, `meta.per_page`
+    // llegaba al cliente como `[2, 2]`.
+    $response->assertOk()
+        ->assertJsonCount(2, 'data')
+        ->assertExactJsonStructure([
+            'data' => ['*' => ['id', 'name']],
+            'meta' => ['next_cursor', 'prev_cursor', 'per_page'],
+        ]);
+
+    expect($response->json('meta.per_page'))->toBe(2)
+        ->and($response->json('meta.next_cursor'))->toBeString()
+        ->and($response->json('meta.prev_cursor'))->toBeNull();
 });

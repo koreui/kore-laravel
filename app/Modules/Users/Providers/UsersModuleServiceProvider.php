@@ -26,6 +26,13 @@ final class UsersModuleServiceProvider extends ServiceProvider
         $base = __DIR__.'/..';
 
         $this->loadRoutesFrom("{$base}/Routes/web.php");
+
+        // Mismo patrón que Auth: con el toggle apagado la API del módulo no
+        // existe, ni siquiera como ruta que devuelve 401 (R10).
+        if ((bool) config('kore-app.api.enabled')) {
+            $this->loadRoutesFrom("{$base}/Routes/api.php");
+        }
+
         $this->loadJsonTranslationsFrom("{$base}/Resources/lang");
         $this->loadViewsFrom("{$base}/Resources/views", 'users');
         Blade::anonymousComponentPath("{$base}/Resources/views", 'users');

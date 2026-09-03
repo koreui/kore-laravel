@@ -18,7 +18,7 @@ El desarrollador trabaja en español. Comunícate en español.
 
 Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta `docs/`:
 
-- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **catálogo R1–R53**: cada regla con su enforcement, su válvula y su cicatriz
+- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **catálogo R1–R54**: cada regla con su enforcement, su válvula y su cicatriz
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) — stack y patrón modular monolith
 - [`docs/architecture/module-pattern.md`](docs/architecture/module-pattern.md) — cómo se construye un módulo (lista cerrada de carpetas)
 - [`docs/architecture/toggles.md`](docs/architecture/toggles.md) — `config/kore-app.php`
@@ -28,7 +28,9 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - [`docs/modules/users.md`](docs/modules/users.md) — Users (primer CRUD del boilerplate)
 - [`docs/modules/docs.md`](docs/modules/docs.md) — visor de `docs/` en `/docs` (toggle `DOCS_ENABLED`)
 - [`docs/modules/e2e.md`](docs/modules/e2e.md) — harness de la suite E2E (`/__e2e__/*`) y switcher de cuentas de desarrollo
+- [`docs/modules/devices.md`](docs/modules/devices.md) — dispositivos que consumen la API (toggle `DEVICES_ENABLED`)
 - [`docs/patterns/README.md`](docs/patterns/README.md) — la **regla de tres**: cuándo una solución sube al boilerplate, y el camino de vuelta de un proyecto hijo al padre
+- [`docs/guides/api.md`](docs/guides/api.md) — contrato de la API REST: envelope, errores, paginación, middleware, limiters y Scramble
 - [`docs/guides/crud.md`](docs/guides/crud.md) — patrón CRUD del boilerplate
 - [`docs/ops/deployment.md`](docs/ops/deployment.md) — Docker en VPS
 - [`docs/ops/observability.md`](docs/ops/observability.md) — Sentry · Pulse · Health · ActivityLog
@@ -44,6 +46,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - PHP 8.4+ · Laravel 13 · Livewire 4 · Alpine.js · Tailwind CSS v4
 - Componentes UI: **koreUi** (`<x-kore::*>`), nunca Flux UI ni otras
 - Auth: Fortify (2FA, passkeys WebAuthn, toggles) + Sanctum (toggle) + spatie/laravel-permission
+- API: contrato en `App\Core\Http\Api` (envelope `{data, meta?}` / `{error:{code,message,details?}}`, R54) + OpenAPI con dedoc/scramble + módulo opcional **Devices** (`DEVICES_ENABLED`): inventario de los clientes que consumen la API, alimentado por los eventos de Auth
 - DTOs: spatie/laravel-data
 - Feature flags: Laravel Pennant
 - Tests: Pest 5 (con arch tests en `tests/Arch/ArchitectureTest.php`)
@@ -66,7 +69,14 @@ app/
 │   │   └── Concerns/SupportsDryRun.php    # opción --dry-run + helpers
 │   ├── Contracts/              # interfaces compartidas (fronteras entre módulos)
 │   ├── Data/Data.php           # base DTO (extiende spatie/laravel-data)
-│   ├── Enums/                  # valores compartidos (SystemRole)
+│   ├── Enums/                  # valores compartidos (SystemRole, ApiErrorCode)
+│   ├── Http/Api/               # contrato de la API REST (R54)
+│   │   ├── Concerns/           # HandlesCursorPagination
+│   │   ├── Controllers/        # ApiController — respond() / respondNoContent()
+│   │   ├── Exceptions/         # ApiExceptionRenderer
+│   │   ├── Middleware/         # api.json · api.cache · api.audit
+│   │   ├── Requests/           # BaseApiRequest
+│   │   └── Resources/          # BaseApiResource · EnumResource
 │   ├── Mcp/                    # MCP server propio (KoreServer + Tools/)
 │   └── Support/                # helpers
 ├── Modules/{Domain}/           # lista CERRADA de carpetas (R3)
@@ -99,13 +109,14 @@ app/
 │   ├── Tests/                  # Feature/ y Unit/ del módulo
 │   ├── Fortify/                # única carpeta de adaptadores de paquete (sólo Auth)
 │   └── Providers/{Module}ServiceProvider.php
+├── Exceptions/                 # excepciones de dominio compartidas (409 · 403 · 426)
 ├── Models/User.php             # único modelo verdaderamente global
 └── Providers/
 ```
 
 ### Reglas de oro (resumen — el catálogo completo es [`docs/architecture/rules.md`](docs/architecture/rules.md))
 
-Las reglas están numeradas `R1..R53` para poder citarlas en un review, en un
+Las reglas están numeradas `R1..R54` para poder citarlas en un review, en un
 commit o en un comentario. Aquí va el resumen; el detalle —enforcement,
 severidad, por qué existe y la cicatriz que la originó— está en el catálogo.
 
@@ -125,6 +136,7 @@ severidad, por qué existe y la cicatriz que la originó— está en el catálog
 14. **R46 · R47 · R48** — las cabeceras de seguridad (CSP incluida) las emite la app desde `config/security.php`, no el hosting; `APP_DEBUG=true` en producción no arranca; y con `BACKUP_ENABLED=true` el backup va cifrado y el monitor vigila el mismo destino al que se escribe.
 15. **R49 · R50** — los skills viven en `.agents/skills/` y `.claude/skills/` son symlinks relativos, uno por skill; y `AGENTS.md` no se edita: se genera desde `CLAUDE.md` con `php artisan kore:agents:sync`.
 16. **R51 · R52 · R53** — el harness E2E sólo vive si coinciden flag, entorno y base de pruebas (los tres, no uno); toda ruta `GET` con nombre entra en `tests/e2e/fixtures/access-map.ts` con los roles que la abren; y al modificar una columna con `->change()` se repiten **todos** sus atributos previos o se pierden en silencio (usa el skill `kore-migration-change`).
+17. **R54** — toda respuesta de la API pasa por el contrato de Core: los controllers `Http/Controllers/Api/` extienden `ApiController`, los resources `BaseApiResource`, los requests `BaseApiRequest`, y los errores los rinde `ApiExceptionRenderer` (`{error:{code,message,details?}}`). Ver [`docs/guides/api.md`](docs/guides/api.md).
 
 ### Válvulas de escape
 
@@ -171,6 +183,7 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | `BACKUP_ENABLED`        | `false`          | spatie/laravel-backup (run+clean+monitor, zip cifrado, `BackupsCheck`) |
 | `DOCS_ENABLED`          | `false`          | Visor de `docs/` en `/docs` (local sí, producción no) |
 | `E2E_HARNESS`           | `false`          | Harness de la suite E2E (`/__e2e__/*`); sólo `.env.e2e` |
+| `DEVICES_ENABLED`       | `false`          | Módulo Devices: rutas `api/v1/devices/*`, listeners de los eventos de token de Auth, alias `devices.version` y `devices:cleanup` |
 | `AUTH_2FA_ENABLED`      | `true`           | 2FA vía Fortify                     |
 | `AUTH_PASSKEYS`         | `true`           | Passkeys (WebAuthn) vía Fortify     |
 | `AUTH_MAGIC_LINKS`      | `true`           | spatie/laravel-one-time-passwords   |
@@ -178,12 +191,17 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | `SOCIAL_GOOGLE`         | `false`          | proveedor Google de Socialite       |
 | `SOCIAL_GITHUB`         | `false`          | proveedor GitHub de Socialite       |
 
-Esas once claves son **todas** las de `config/kore-app.php`. Regla: un toggle
+Esas doce claves son **todas** las de `config/kore-app.php`. Regla: un toggle
 sólo existe si alguien lo lee. Reverb, Octane y Scout no son toggles sino
 módulos opcionales que se instalan bajo demanda; el modo `single-db`/`multi-db`
 de tenancy se elige en `config/tenancy.php` al correr `kore:tenancy:enable`.
 Sentry se activa con `SENTRY_LARAVEL_DSN` y Pulse con `PULSE_ENABLED`
 (`config/pulse.php`), fuera de `kore-app`.
+
+`config/kore-api.php` es un archivo aparte y **no** duplica `API_ENABLED`: guarda
+los parámetros del contrato de la API (`version`, `pagination`, `docs.enabled`
+vía `API_DOCS`, `limiters`). El check R11 sólo vigila `kore-app`, porque
+`kore-api` declara cifras y no capacidades.
 
 Cuando un toggle está OFF, su `ServiceProvider` debe hacer `return` temprano y no registrar nada: ni rutas, ni middleware, ni comandos de dominio, ni traducciones. Dos excepciones, y sólo dos (R10): el comando que enciende el toggle, y el namespace de vistas (`loadViewsFrom`), que sin rutas no expone nada y que Larastan necesita para validar `view('docs::x')`.
 
@@ -255,6 +273,12 @@ php artisan kore:agents:sync --check           # exit 1 si está desincronizado
 php artisan kore:changelog:section v1.4.0      # la sección del CHANGELOG de una release (R42)
 php artisan git-hooks:register                 # re-instala los hooks
 
+# API
+php artisan route:list --path=api               # qué endpoints hay publicados
+API_DOCS=true php artisan route:list --path=api  # ...con la documentación encendida
+API_DOCS=true php artisan scramble:export        # spec OpenAPI a storage/app/openapi.json (gitignored)
+./vendor/bin/pest tests/Feature/Api              # el contrato entero
+
 # MCP (los arranca el cliente vía .mcp.json / .codex/config.toml, no tú)
 php artisan boost:mcp               # Laravel Boost: framework, docs, base, logs, tinker
 php artisan mcp:start kore          # MCP propio: pregúntale al boilerplate por sí mismo
@@ -281,6 +305,8 @@ php artisan mcp:inspector kore      # inspector oficial, para depurar el server 
 - ❌ **No escribir una válvula `arch-exception` / `arch-accepted` por tu cuenta** ni silenciar una regla con `@phpstan-ignore`: párate y pregunta (R44).
 - ❌ No editar `AGENTS.md` a mano: se genera desde `CLAUDE.md` con `php artisan kore:agents:sync` (R50).
 - ❌ No copiar un skill dentro de `.claude/skills/`: la carpeta real es `.agents/skills/` y ahí sólo van symlinks relativos (R49).
+- ❌ No construir a mano el JSON de una respuesta de API: `respond()` / `respondNoContent()` de `ApiController` (R54).
+- ❌ No extender `FormRequest` ni `JsonResource` directamente en un módulo para la API: `BaseApiRequest` y `BaseApiResource` (R54).
 
 ## Antes de finalizar cualquier cambio
 

@@ -52,7 +52,7 @@ app/
 │   ├── Mcp/                       # MCP server propio (KoreServer + Tools/)
 │   └── Support/                   # helpers (AgentsFile)
 ├── Modules/{Domain}/              # cada feature aislada (ver module-pattern.md)
-├── Exceptions/ConflictException.php  # excepción de dominio compartida → 409
+├── Exceptions/                 # excepciones de dominio compartidas (409 · 403 · 426)
 ├── Models/User.php                # único modelo verdaderamente global
 └── Providers/
     ├── AppServiceProvider.php     # comandos de Core + los tres limiters de la API

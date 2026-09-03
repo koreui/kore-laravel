@@ -10,6 +10,305 @@ desde el upstream (`git remote add kore https://github.com/koreui/kore-laravel`)
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-09-03
+
+«API con contrato». Hasta la v2.1, `API_ENABLED` encendía una sola ruta que
+devolvía el modelo Eloquent a pelo. Notarium y asper-server —los dos proyectos
+de la cantera— habían reinventado por separado el envelope, el renderer de
+errores, la paginación por cursor, los limiters por perfil y la documentación
+OpenAPI. Esta release fija todo eso **una vez** en `App\Core\Http\Api` (R54),
+y sobre ese contrato monta la autenticación por token, el CRUD de Users como
+endpoint de referencia y un módulo opcional `Devices` para clientes móviles.
+
+La suite Pest pasa de 511 a **693** tests (1956 assertions), la E2E se queda en
+163, `config/kore-app.php` llega a **doce** claves con `DEVICES_ENABLED`, y el
+catálogo a `R1..R54` con **47** reglas con verificador automático y **7**
+manuales.
+
+### Añadido
+
+- **R54 · el contrato de la API vive en `App\Core\Http\Api`.** Toda respuesta de
+  `api/*` tiene la misma forma sin que ningún endpoint la escriba: éxito en
+  `{ data, meta? }`, fallo en `{ error: { code, message, details? } }`.
+  - `Controllers/ApiController` — `respond(JsonResource|array $data, int $status = 200, array $meta = [])`
+    y `respondNoContent()`. Trae `AuthorizesRequests` y `HandlesCursorPagination`.
+  - `Resources/BaseApiResource` (`$wrap = 'data'`) y `Resources/EnumResource`
+    (`{ value, label }`, con el `label()` del enum si lo tiene).
+  - `Requests/BaseApiRequest` — `authorize()` a `true` (la decisión es de la
+    Policy, R25) y `failedValidation()` que lanza la `ValidationException` limpia,
+    sin el redirect que el `FormRequest` de Laravel construye para HTML.
+  - `Concerns/HandlesCursorPagination` — `paginateWithCursor()`, `resolvePerPage()`
+    y `cursorMeta()` (`next_cursor` / `prev_cursor` / `per_page`), con el tope de
+    `per_page` en `config/kore-api.php`.
+  - `Exceptions/ApiExceptionRenderer` — traduce cualquier `Throwable` de `api/*`
+    a un código canónico de `App\Core\Enums\ApiErrorCode`: `validation_failed`
+    (422, el único con `details`), `unauthenticated`, `forbidden`, `not_found`,
+    `method_not_allowed`, `conflict`, `throttled` (con `Retry-After`),
+    `bad_request`, `http_error` y `server_error`. Los mensajes salen del contrato
+    y no de la excepción —el de un `ModelNotFoundException` filtra el modelo y el
+    id—, y el 500 sólo añade `error.debug` con `APP_DEBUG=true`.
+- **`App\Exceptions\ConflictException`** — excepción de dominio que el renderer
+  convierte en 409. Una Action puede lanzarla sin romper R20.
+- **Tres middleware con alias**: `api.json` (`ForceJsonResponse`) y `api.audit`
+  (`ApiAuditLogger`, línea estructurada por petición en el canal `api`, nunca el
+  cuerpo) van en el grupo `api` **por delante del throttle**; `api.cache`
+  (`ApiCacheableResponse`: ETag + 304 + `Cache-Control: private`) se pone endpoint
+  a endpoint.
+- **`config/kore-api.php`** — `version`, `pagination` (25/100), `docs.enabled`
+  (`API_DOCS`, false) y `limiters`. No duplica `API_ENABLED`.
+- **Tres rate limiters nombrados** (R28) en `AppServiceProvider::configureApiRateLimiters()`:
+  `api` (60/min por usuario o IP), `api-auth` (5/min **por IP**) y `api-uploads`
+  (30/min por usuario).
+- **Documentación OpenAPI (dedoc/scramble)** en `/api/docs` y `/api/docs.json`,
+  detrás de `API_DOCS` y del gate `viewApiDocs` (libre en `local`, sólo superadmin
+  fuera). `php artisan scramble:export` la vuelca en `storage/app/openapi.json`
+  (gitignored). Provider: `App\Providers\ApiDocsServiceProvider`.
+- **Canal de log `api`** en `config/logging.php` (stack, `LOG_API_STACK`, por
+  defecto `single`).
+- **`docs/guides/api.md`** — el contrato entero y cómo se añade un endpoint.
+
+#### Autenticación por token y Users API v1
+
+- **Autenticación por token (`api/v1/auth/*`)**. Cinco rutas: `POST /auth/login`
+  (201 con `{ token, token_type, expires_at, user }`), `POST /auth/refresh`
+  (rota el token con los permisos de ahora), `POST /auth/logout` y
+  `POST /auth/logout-all` (204 sin cuerpo) y `GET /auth/me`, que es un alias del
+  ya existente `api.v1.user.me` — el nombre viejo sigue funcionando.
+- **Las abilities de un token son los permisos efectivos de su dueño**
+  (`getAllPermissions()`), congeladas al emitirlo. Si el usuario no tiene
+  ninguno, el token sale con `[]`, **nunca** con `['*']`.
+- **Caducidad por token**: `API_TOKEN_EXPIRES_MINUTES` →
+  `config('kore-api.tokens.expires_minutes')`, 43200 minutos (30 días) por
+  defecto; `null` = sin caducidad. `sanctum.expiration` se queda en `null` a
+  propósito: es global y **retroactiva**.
+- **`RevokeApiTokensOnPermissionChange`**: cambiar el rol o los permisos de un
+  usuario retira **todos** sus tokens de API y dispara
+  `ApiTokenRevoked(reason: 'permissions_changed')`. Es R26 llevado al token,
+  cuyas abilities de otro modo seguirían valiendo hasta caducar.
+- **CRUD de usuarios por API** (`api/v1/users`), el endpoint de referencia del
+  boilerplate: los cinco verbos, paginación por cursor con `meta`, filtros
+  `search` y `role`, y **doble barrera** en cada ruta — la ability del token
+  (`abilities:users.edit`) más la Policy dentro del controller (R23 · R25).
+  Reutiliza las Actions, los DTOs y las reglas anti-escalada de la pantalla
+  Livewire: no reimplementa nada.
+- **Alias de middleware `abilities` y `ability`** (`CheckAbilities` /
+  `CheckForAnyAbility`) en `bootstrap/app.php`. Sanctum trae las clases pero
+  desde Laravel 11 ya no hay `Kernel.php` donde aliasearlas, así que sin estas
+  dos líneas `->middleware('abilities:…')` revienta en runtime.
+- **Código de error `two_factor_required` (403)** en `ApiErrorCode`, con su
+  `App\Exceptions\TwoFactorRequiredException` y su rama en
+  `ApiExceptionRenderer`. Mismo patrón que `ConflictException` → 409.
+- **`permission.events_enabled` pasa a `true`** en `config/permission.php`. Sin
+  esa clave spatie no dispara `RoleAttachedEvent` / `RoleDetachedEvent` /
+  `PermissionAttachedEvent` / `PermissionDetachedEvent`, y el listener de
+  revocación no se ejecutaría nunca sin que nadie se entere.
+- Tests: `ApiAuthTest` (21), `ApiTokenRevocationTest` (11), `ApiUsersTest` (30),
+  más un caso nuevo en `ApiExceptionRendererTest`, otro en
+  `HandlesCursorPaginationTest`, otro en `ApiDocsTest` y otro en
+  `AuthorizationSeederTest`.
+
+#### Módulo `Devices`
+
+- **Módulo `Devices`** (`app/Modules/Devices/`), el **duodécimo toggle** del
+  boilerplate (`DEVICES_ENABLED`, apagado por defecto). Es el inventario de los
+  clientes que consumen la API —una app móvil, un SPA, un CLI— y responde las
+  tres preguntas que el token solo no responde: dónde tengo la sesión abierta, a
+  qué dispositivo mando la notificación, y quién sigue con una versión que ya no
+  soporto. Sale de la cantera de Notarium (`MobileDevice`, `DeviceController`,
+  `EnsureMobileVersion`, `mobile:cleanup-*`), donde las tres estaban resueltas
+  pero atadas a «móvil»; aquí el vocabulario es «cliente de API» y el CLI cuenta
+  como dispositivo.
+- **El módulo no registra a nadie: escucha** (R5). `RegisterDeviceOnTokenIssued`
+  y `RevokeDeviceOnTokenRevoked` son toda la relación con Auth, vía
+  `App\Modules\Auth\Events\{ApiTokenIssued, ApiTokenRevoked}`. Auth no sabe que
+  Devices existe, y apagar el toggle deja de registrar los listeners sin que el
+  login por API cambie una coma.
+  - Con `deviceId`: `updateOrCreate` sobre `[user_id, device_id]` con `name`,
+    `platform`, `app_version`, `access_token_id` y `last_seen_at`, y `revoked_at`
+    de vuelta a `null` —volver a entrar es lo que resucita un dispositivo
+    revocado—. **Sin `deviceId` no hace nada**: un token creado desde el panel
+    web no identifica ningún aparato.
+  - `ApiTokenRevoked` con `tokenId` revoca ese dispositivo; con `null` (logout de
+    todos, cambio de contraseña, cuenta comprometida) revoca todos los del
+    usuario, sin tocar la fecha de los que ya estaban revocados.
+- **`Models/Device`** con `HasPublicUuid` + `ROUTE_BY_UUID`: la llave primaria
+  sigue siendo entera —barata para el índice y para la FK contra
+  `personal_access_tokens`— y el `uuid` es la identidad hacia afuera. Es el
+  primer modelo del boilerplate que estrena el trait, que hasta ahora sólo tenía
+  su test de laboratorio. `push_token` va `#[Hidden]` **y** fuera del resource:
+  es una credencial de envío, y quien la tiene puede mandar notificaciones a ese
+  teléfono.
+- **`Enums/Platform`** (`ios`, `android`, `web`, `cli`) con `label()` y
+  `supportsPush()`. No describe el aparato —para eso está `name`— sino los tres
+  tipos de cliente que se tratan distinto. Lo que no esté en la lista blanca de
+  `config('devices.platforms')` se guarda como `null` en vez de reventar el
+  login: la plataforma es metadato, no una decisión de autorización.
+- **Tres endpoints** bajo `api/v1`, detrás de `auth:sanctum` y de **los dos**
+  toggles (`DEVICES_ENABLED` y `API_ENABLED`), con el contrato de R54:
+  - `GET /api/v1/devices` — los del usuario del token, por cursor, con
+    `current: bool` calculado contra el token de la petición.
+  - `DELETE /api/v1/devices/{device:uuid}` — 204; revoca la fila **y borra el
+    token de Sanctum** en una transacción. Si es el dispositivo actual, el token
+    que se borra es el de esa misma petición: el 204 sale y la siguiente llamada
+    es un 401, sin ningún caso especial.
+  - `PUT /api/v1/devices/current/push-token` — 204; identifica el dispositivo por
+    el token en uso y no por un id que mande el cliente, así que una app no puede
+    reescribir el push token de otro dispositivo de la cuenta. No valida contra
+    ningún proveedor: guarda.
+  - **Ninguno acepta un `user_id`**: el dueño sale del token y la consulta se
+    acota por él antes de buscar nada, así que el uuid de otro es un `404` y no
+    un `403` que confirmaría que existe (criterio de las passkeys).
+- **Middleware `devices.version`** (`EnsureClientVersion`), port de
+  `EnsureMobileVersion`: lee `X-App-Version` y lanza `UpgradeRequiredException`, que `ApiExceptionRenderer`
+  rinde como `426` `upgrade_required` (caso propio en `ApiErrorCode`, mismo
+  camino que `ConflictException` → 409) por debajo de
+  `config('devices.min_app_version')`.
+  Sin cabecera deja pasar —los clientes web no la mandan y no se actualizan por
+  una tienda—. Es **opt-in por ruta y no está en el grupo `api`**: el día que se
+  sube el mínimo, el login y el propio listado de dispositivos tienen que seguir
+  respondiendo para que la app pueda decirle al usuario qué hacer.
+- **`devices:cleanup`** (`Console/Commands`, con `SupportsDryRun`), diario a las
+  04:00 dentro de un `if` del toggle en `routes/console.php`. Tres pasos y dos
+  relojes distintos: revoca los abandonados (`stale_after_days`, 180), borra sus
+  tokens de Sanctum —los recién revocados, los ya revocados y los caducados que
+  aún cuelgan de una fila— y purga los revocados hace más de `prune_after_days`
+  (90). Primero se revoca por silencio y **después** empieza a correr la
+  retención, así que lo revocado hoy no se borra hoy.
+- **`config/devices.php`**: `min_app_version` (`0.0.0`), `prune_after_days` (90),
+  `stale_after_days` (180) y `platforms`. Es a `kore-app.devices.enabled` lo que
+  `config/kore-api.php` es a `kore-app.api.enabled`: el toggle dice si el módulo
+  existe, este archivo dice cómo se comporta cuando existe.
+- **`docs/modules/devices.md`**, enlazado en `docs/README.md`, con el modelo, los
+  eventos que escucha, las rutas con su JSON, el middleware, el comando y la
+  config. Sección corta «Dispositivos» en `docs/guides/api.md` y fila nueva en
+  `docs/architecture/toggles.md`.
+- **54 tests Pest nuevos** en `app/Modules/Devices/Tests/Feature/`:
+  `DevicesToggleTest` (12), `DeviceListenersTest` (9), `DevicesApiTest` (14),
+  `EnsureClientVersionTest` (6), `DevicesCleanupCommandTest` (10) y
+  `DevicesConfigTest` (3).
+
+### Cambiado
+
+- **BREAKING · `GET /api/user` → `GET /api/v1/user`** (`api.user` → `api.v1.user.me`).
+  La respuesta ya no es el modelo Eloquent a pelo: es
+  `{ "data": { id, name, email, roles, permissions } }`
+  (`App\Modules\Auth\Http\Resources\Api\V1\UserMeResource`).
+- El limiter `api` se movió de `AuthModuleServiceProvider` a `AppServiceProvider`
+  y ahora lee su cifra de `config/kore-api.php`.
+- El preset `laravel()` de los arch tests ignora también `App\Core\Http\Api`.
+- `withEnvironment()` (`tests/Pest.php`) reengancha la base SQLite en memoria
+  después de cada `refreshApplication()`; antes, cualquier consulta dentro del
+  bloque moría con `no such table`.
+- `config/kore-app.php` pasa de once a **doce** claves con `devices.enabled`, y
+  con ella `KoreMcpTest` (`kore-list-toggles`), la tabla de
+  `docs/architecture/toggles.md` y el `about` de `AppServiceProvider`.
+- `docs/patterns/toggle-provider.md` decía «diez claves hoy» desde la v1.3.0;
+  ahora dice doce (R41).
+- **`ApiErrorCode` gana `upgrade_required`** (426, `UpgradeRequiredException`,
+  lanzada por el middleware `devices.version`), además del
+  `two_factor_required` del login. Ningún middleware escribe ya un JSON de error
+  a mano: R54 no tiene excepciones.
+
+### Corregido
+
+- **`AuthorizationCatalog::permissionsForRole()` devolvía `[]` en toda petición
+  de la API, desactivando R26 en silencio.** Filtraba por
+  `config('auth.defaults.guard')`, y `AuthManager::shouldUse()` —lo que llama
+  `auth:sanctum`— **escribe** esa clave con el valor `sanctum`; los roles se
+  siembran con `guard_name = 'web'`. Con la lista vacía, `GrantableRole` no
+  encontraba ningún permiso «que el actor no tenga» y dejaba pasar cualquier
+  rol: un token con `users.create` podía crear administradores. Ahora el guard
+  sale de `Guard::getDefaultName(User::class)`, la misma resolución que usa
+  spatie por dentro.
+- **`ApiController::respond()` duplicaba `meta` en los listados.** Un
+  `JsonResource` sobre un paginador se rinde por `PaginatedResourceResponse`,
+  que añade su propio `meta` y lo funde con el del endpoint usando
+  `array_merge_recursive`: el cliente recibía `meta.per_page = [25, 25]`. La
+  forma que documenta `docs/guides/api.md` ahora produce un único `meta`.
+
+### Migración desde 2.1.0
+
+1. **La ruta de usuario cambió.** Si algún cliente llama a `GET /api/user`,
+   muévelo a `GET /api/v1/user` y haz que lea bajo `data`. Si prefieres no tocar
+   el cliente todavía, deja un alias en tu `Routes/api.php`:
+
+   ```php
+   Route::middleware(['api', 'auth:sanctum'])
+       ->get('/api/user', [UserController::class, 'me'])
+       ->name('api.user');   // deprecado: retíralo en cuanto migren los clientes
+   ```
+
+2. **Si ya tenías endpoints de API**, hazlos heredar del contrato o el arch test
+   de R54 fallará: controllers de `Http/Controllers/Api` → `ApiController`,
+   resources de `Http/Resources/Api` → `BaseApiResource`, requests de
+   `Http/Requests/Api` → `BaseApiRequest`. Sus respuestas pasarán a venir
+   envueltas en `data`: revisa los clientes antes de desplegar.
+
+3. **Si tenías tu propio renderer de errores de API**, bórralo: el de
+   `bootstrap/app.php` cubre todo `api/*`. Si tus códigos de error eran otros
+   (`UNAUTHENTICATED` en mayúsculas, por ejemplo), decide si migras los clientes
+   o si adaptas `ApiErrorCode` en tu fork — pero no dejes los dos.
+
+4. **`.env`**: añade `API_DOCS=false` (en local, `true`). `.env.example` ya lo trae.
+
+5. **`config/logging.php`**: si lo tienes publicado y modificado, añade el canal
+   `api` a mano; sin él, el middleware `api.audit` no tiene dónde escribir.
+
+6. **`config/scramble.php`**: se publica con `api_path => 'api/v*'` y
+   `export_path => storage_path('app/openapi.json')`. Si ya lo tenías publicado,
+   reconcilia esas dos claves y `dev_tools.enabled`.
+
+7. **`phpunit.xml`**: añade `<env name="API_DOCS" value="false" force="true"/>`
+   para que la suite no dependa del `.env` del desarrollador.
+
+**Autenticación por token y Users API**:
+
+1. **`config/permission.php`**: pon `'events_enabled' => true`. Si tu proyecto ya
+   escucha esos cuatro eventos para otra cosa, revisa que reaccionar a los
+   `syncRoles()` / `syncPermissions()` de tus seeders no sea un problema.
+2. **`config/kore-api.php`**: añade el bloque `'tokens' => ['expires_minutes' =>
+   env('API_TOKEN_EXPIRES_MINUTES', 43200)]` y la variable a tu `.env`. Si
+   prefieres tokens sin caducidad, ponla a `null`; **no** toques
+   `sanctum.expiration`, que caducaría también los tokens ya emitidos.
+3. **`bootstrap/app.php`**: añade los alias `abilities` y `ability` si vas a usar
+   `->middleware('abilities:…')`.
+4. **`app/Modules/Auth/Support/AuthorizationCatalog.php`**: si lo copiaste antes
+   de esta versión, cambia `config('auth.defaults.guard')` por
+   `Guard::getDefaultName(User::class)`. **Es una corrección de seguridad**: sin
+   ella, la anti-escalada no protege ninguna ruta de API.
+5. Si tu API ya devolvía listados con `respond($resource, meta: …)`, comprueba si
+   algún cliente se había adaptado al `meta.per_page` como array. Ahora es un
+   entero, que es lo que el contrato prometía.
+6. `GET /api/v1/auth/me` es un alias de `GET /api/v1/user`, no un reemplazo:
+   el nombre `api.v1.user.me` sigue existiendo.
+7. **Si tus usuarios tienen 2FA confirmado, no podrán pedir tokens de API**
+   (403 `two_factor_required`). Es deliberado; si tu proyecto necesita otra
+   política, el punto único donde cambiarla es
+   `AuthTokenController::refuseWhenTwoFactorIsEnabled()`.
+
+**Devices**:
+
+- **Hay una migración nueva** (`app/Modules/Devices/Database/Migrations/2026_09_03_100000_create_devices_table.php`)
+  y **se aplica aunque el toggle esté apagado**: un `php artisan migrate` crea la
+  tabla `devices` en cualquier instalación. Es deliberado y es la misma decisión
+  que `AUTH_PASSKEYS=false` —un toggle apaga rutas y comportamiento, nunca el
+  esquema—: si la migración fuera condicional, dos instalaciones del mismo commit
+  tendrían bases distintas según el `.env` del día en que se migró, y encender
+  `DEVICES_ENABLED` en producción exigiría una migración a mano con tráfico
+  encima. Su `down()` hace `dropIfExists` (R29) y `MigrationsAreReversibleTest`
+  lo ejecuta.
+- **Nada más cambia si no enciendes el toggle.** Sin `DEVICES_ENABLED=true` no
+  hay rutas, ni alias de middleware, ni listeners, ni comando, ni tarea del
+  scheduler.
+- Para encenderlo: `DEVICES_ENABLED=true` en el `.env` (la clave nueva está
+  documentada en `.env.example`, junto con la opcional
+  `DEVICES_MIN_APP_VERSION`). Los endpoints piden además `API_ENABLED=true`.
+- **El inventario se llena solo en cuanto Auth dispare `ApiTokenIssued` con
+  `deviceId`.** Un derivado que ya tenga su propio login por token sólo tiene que
+  disparar los dos eventos de `App\Modules\Auth\Events` con los datos del
+  cliente; no hace falta llamar a ninguna Action de Devices.
+
+
 ## [2.1.0] - 2026-09-03
 
 «La suite se defiende sola». Primera release que sale de la cantera de los
@@ -1637,7 +1936,8 @@ scaffold, cifras inventadas en los docs).
   el paquete cambiara. Republicarlas es un `vendor:publish` cuando de verdad
   haya que personalizarlas.
 
-[Unreleased]: https://github.com/koreui/kore-laravel/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/koreui/kore-laravel/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/koreui/kore-laravel/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/koreui/kore-laravel/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/koreui/kore-laravel/compare/v1.4.1...v2.0.0
 [1.4.1]: https://github.com/koreui/kore-laravel/compare/v1.4.0...v1.4.1

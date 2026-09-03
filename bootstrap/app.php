@@ -12,6 +12,8 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Laravel\Sanctum\Http\Middleware\CheckAbilities;
+use Laravel\Sanctum\Http\Middleware\CheckForAnyAbility;
 use Sentry\Laravel\Integration;
 use Spatie\Permission\Middleware\PermissionMiddleware;
 use Spatie\Permission\Middleware\RoleMiddleware;
@@ -33,6 +35,23 @@ return Application::configure(basePath: dirname(__DIR__))
             'api.json' => ForceJsonResponse::class,
             'api.cache' => ApiCacheableResponse::class,
             'api.audit' => ApiAuditLogger::class,
+            /*
+             * Abilities de Sanctum. El paquete trae los dos middleware pero no
+             * los aliasea: en Laravel 11+ el `Kernel.php` donde estaban ya no
+             * existe, así que sin estas dos líneas `->middleware('abilities:…')`
+             * resuelve a una clase inexistente y revienta en runtime.
+             *
+             *   `abilities` · TODAS las que se listen (AND).
+             *   `ability`   · al menos UNA (OR).
+             *
+             * Un token del boilerplate lleva como abilities los permisos
+             * efectivos de su dueño (ver AuthApiTokenIssueAction), así que
+             * `abilities:users.edit` se lee igual que el `permission:users.edit`
+             * de una ruta web. No sustituye a la Policy: es la primera de las
+             * dos barreras (R25).
+             */
+            'abilities' => CheckAbilities::class,
+            'ability' => CheckForAnyAbility::class,
         ]);
 
         // Las cabeceras de seguridad las emite la aplicación (config/security.php),
@@ -49,8 +68,8 @@ return Application::configure(basePath: dirname(__DIR__))
          *   - `api.json` fuerza el `Accept` antes de que nada pueda fallar, así
          *     que también el error que se rinde dentro del propio throttle sale
          *     en JSON.
-         *   - `api.audit` es el más externo de los dos por la misma razón al
-         *     revés: detrás del throttle, el 429 —la petición que más interesa
+         *   - `api.audit` va también por delante del throttle por la misma razón
+         *     al revés: detrás del throttle, el 429 —la petición que más interesa
          *     auditar— se rendiría sin dejar línea de log.
          *
          * `api.cache` no está aquí: se pone endpoint a endpoint

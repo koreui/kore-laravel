@@ -337,7 +337,7 @@ Los controllers de `App\Modules\*\Http\Controllers\Api` extienden
 (`Http\Requests\Api`) extienden `BaseApiRequest`; y **ningún** error de
 `api/*` se rinde a mano: lo traduce `ApiExceptionRenderer`. El éxito viaja como
 `{ data, meta? }` y el fallo como `{ error: { code, message, details? } }`.
-> Enforcement: Pest arch (`tests/Arch/ArchitectureTest.php`, los tres `toExtend` por glob) · `./vendor/bin/pest tests/Arch` · **Error** · + Pest (`tests/Feature/Api/ApiExceptionRendererTest.php`, un caso por código canónico) · `composer test` · **Error**
+> Enforcement: Pest arch (`tests/Arch/ArchitectureTest.php`, tres `test()` con `is_subclass_of` sobre un glob, tolerantes a namespaces vacíos) · `./vendor/bin/pest tests/Arch` · **Error** · + Pest (`tests/Feature/Api/ApiExceptionRendererTest.php`, un caso por código canónico) · `composer test` · **Error**
 > Escape: `arch-accepted` (ver §Válvulas)
 
 Relacionada: R8 —un DTO es la forma de un dato *dentro* de la aplicación y un
@@ -1276,7 +1276,7 @@ con `--no-verify`, y entonces no verifica nada.
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + GitHub Release (R42) |
 
 Medido en un MacBook (Apple Silicon, PHP 8.4) sobre el repositorio a fecha de
-la v2.2.0, con 570 tests Pest y una suite E2E de 163 tests en 18 archivos
+la v2.2.0, con 693 tests Pest y una suite E2E de 163 tests en 18 archivos
 (31 s aparte). Las cuatro primeras capas caben holgadamente en su
 presupuesto: el margen es para que un proyecto derivado pueda crecer sin tener
 que rediseñar el pipeline.

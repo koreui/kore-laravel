@@ -11,17 +11,23 @@ use App\Modules\Auth\Http\Livewire\Dashboard;
 use App\Modules\Auth\Http\Livewire\DevAccountSwitcher;
 use App\Modules\Auth\Http\Livewire\MagicLink;
 use App\Modules\Auth\Http\Livewire\Passkeys;
+use App\Modules\Auth\Listeners\RevokeApiTokensOnPermissionChange;
 use App\Modules\Auth\Models\Role;
 use App\Modules\Auth\Policies\PasskeyPolicy;
 use App\Modules\Auth\Support\AuthorizationCatalog;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Passkeys\Passkey;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use Livewire\Livewire;
 use Override;
+use Spatie\Permission\Events\PermissionAttachedEvent;
+use Spatie\Permission\Events\PermissionDetachedEvent;
+use Spatie\Permission\Events\RoleAttachedEvent;
+use Spatie\Permission\Events\RoleDetachedEvent;
 
 final class AuthModuleServiceProvider extends ServiceProvider
 {
@@ -56,6 +62,7 @@ final class AuthModuleServiceProvider extends ServiceProvider
         $this->registerSuperadminGate();
         $this->registerObservabilityGates();
         $this->registerPasskeyPolicy();
+        $this->registerApiTokenRevocation();
 
         if ($this->app->runningInConsole()) {
             $this->commands([
@@ -92,6 +99,31 @@ final class AuthModuleServiceProvider extends ServiceProvider
     private function registerPasskeyPolicy(): void
     {
         Gate::policy(Passkey::class, PasskeyPolicy::class);
+    }
+
+    /**
+     * Un cambio de roles o permisos retira los tokens de API del usuario.
+     *
+     * Se cablea **siempre**, también con `API_ENABLED=false`: el toggle decide
+     * si hay rutas de API, no si los tokens que ya existen en la tabla siguen
+     * abriendo puertas. Un despliegue que apaga la API y deja vivos los tokens
+     * emitidos cuando estaba encendida es justo el caso en el que este listener
+     * hace falta.
+     *
+     * Los cuatro eventos los dispara spatie/laravel-permission sólo con
+     * `permission.events_enabled = true` (ver `config/permission.php`), y por
+     * eso ese flag no es opcional en este boilerplate.
+     *
+     * @see RevokeApiTokensOnPermissionChange
+     */
+    private function registerApiTokenRevocation(): void
+    {
+        Event::listen([
+            RoleAttachedEvent::class,
+            RoleDetachedEvent::class,
+            PermissionAttachedEvent::class,
+            PermissionDetachedEvent::class,
+        ], RevokeApiTokensOnPermissionChange::class);
     }
 
     private function loadModule(): void

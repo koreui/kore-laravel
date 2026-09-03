@@ -1,6 +1,6 @@
 # Autorización — roles, permisos y módulos
 
-**TL;DR**: spatie/laravel-permission (sin teams) + un modelo `Module` propio que es source of truth de los módulos del sistema y auto-genera permisos en formato `{slug}.{action}`. Cada usuario tiene **un rol + permisos directos**. Los permisos directos permiten personalización individual sin tener que crear un rol nuevo por cada combinación.
+**TL;DR**: spatie/laravel-permission (sin teams) + un modelo `Module` propio que es source of truth de los módulos del sistema y auto-genera permisos en formato `{slug}.{action}`. Cada usuario tiene **un rol + permisos directos**. Los permisos directos permiten personalización individual sin tener que crear un rol nuevo por cada combinación. En la API los mismos permisos viajan como **abilities** del token, y la Policy sigue siendo el único punto de decisión (R25): ver [Proteger la API](#proteger-la-api-abilities--permisos).
 
 ## Componentes
 
@@ -226,6 +226,93 @@ Es `app/Modules/Users/Routes/web.php` tal cual. Dos detalles que no son opcional
   `as()` puesto daría `users.users.index`.
 
 Los aliases `permission`, `role` y `role_or_permission` están registrados en `bootstrap/app.php`.
+
+## Proteger la API: abilities = permisos
+
+Un token de Sanctum lleva una lista de **abilities**, y en este boilerplate esa
+lista son los **permisos efectivos de su dueño en el momento de emitirlo**:
+
+```php
+// AuthApiTokenIssueAction
+$abilities = $user->getAllPermissions()->pluck('name')->all();  // roles + directos
+$user->createToken($device->name, $abilities, $expiresAt);
+```
+
+Si el usuario no tiene ninguno, el token sale con `[]` — **nunca** con `['*']`.
+El fallback al comodín es tentador y es el error: le da la llave maestra justo a
+la cuenta que no tiene ninguna puerta.
+
+Se comprueban con dos middleware de Sanctum, aliasados en `bootstrap/app.php`
+(el paquete trae las clases pero no los alias):
+
+| Alias | Clase | Semántica |
+|-------|-------|-----------|
+| `abilities:a,b` | `CheckAbilities` | **todas** (AND) |
+| `ability:a,b` | `CheckForAnyAbility` | **al menos una** (OR) |
+
+```php
+// app/Modules/Users/Routes/api.php
+Route::middleware('abilities:users.edit')->match(['put', 'patch'], '/users/{user}', 'update');
+```
+
+`abilities:users.edit` se lee igual que el `permission:users.edit` de la ruta web
+equivalente.
+
+### La ability no sustituye a la Policy (R25)
+
+La Policy sigue siendo el único punto de decisión, y el controller de la API la
+consulta igual que lo hace un componente Livewire:
+
+```php
+public function update(UserUpdateRequest $request, User $user, UserUpdateAction $update): JsonResponse
+{
+    $this->authorize('update', $user);   // ← la decisión, aquí
+    // …
+}
+```
+
+Son dos preguntas distintas, y por eso van las dos:
+
+| | Qué contesta | De qué depende |
+|---|---|---|
+| **Ability** | qué se le concedió a *este token* al emitirlo | del token |
+| **Policy** | qué puede *este usuario* ahora sobre *este registro* | del usuario y del registro |
+
+Una ability no puede expresar «sólo un superadmin edita a otro superadmin»:
+depende del registro, no del token. Y una Policy no puede expresar «este token
+concreto es de sólo lectura»: no sabe con qué credencial llegó la petición.
+Quitar cualquiera de las dos deja un agujero distinto.
+
+### Las abilities caducan; los permisos, no
+
+La lista se congela al emitir el token. Por eso `RevokeApiTokensOnPermissionChange`
+retira **todos** los tokens de quien acaba de cambiar de rol o de permisos: sin
+él, degradar a alguien en la pantalla de usuarios le quita el botón del navegador
+y no le quita nada de la API. Ver
+[`../guides/api.md`](../guides/api.md#revocación-al-cambiar-permisos).
+
+> ⚠️ Depende de `'events_enabled' => true` en `config/permission.php` (el default
+> del paquete es `false`).
+
+### El guard bajo el que se buscan los roles
+
+`AuthorizationCatalog::permissionsForRole()` resuelve el guard con
+`Guard::getDefaultName(User::class)` y **no** con `config('auth.defaults.guard')`.
+No es un detalle de estilo:
+
+> **Cicatriz (v2.2.0).** `AuthManager::shouldUse()` —lo que llama `auth:sanctum`,
+> y también `Sanctum::actingAs()` en un test— **escribe**
+> `config(['auth.defaults.guard' => 'sanctum'])`. Los roles se siembran con
+> `guard_name = 'web'`, así que en toda petición de la API el método devolvía
+> `[]`, `GrantableRole` no encontraba ningún permiso «que el actor no tenga» y
+> dejaba pasar cualquier rol: un `users.create` podía crear administradores. R26
+> quedaba desactivada en silencio justo en el canal donde no hay una pantalla que
+> lo delate. `AuthorizationSeederTest` lo comprueba ahora bajo los dos guards.
+
+La regla práctica: para preguntar «¿bajo qué guard viven los roles de este
+modelo?» se usa `Guard::getDefaultName($modelo)`, que es lo que hace spatie por
+dentro. `config('auth.defaults.guard')` contesta otra pregunta —«¿qué guard está
+usando la aplicación ahora mismo?»— y cambia bajo los pies.
 
 ## Proteger en Blade
 

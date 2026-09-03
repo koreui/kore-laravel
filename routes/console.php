@@ -100,6 +100,22 @@ if ((bool) config('kore-app.backup.enabled')) {
         ->sentryMonitor();
 }
 
+// Inventario de dispositivos (módulo Devices): sólo con DEVICES_ENABLED=true,
+// porque con el toggle apagado el comando `devices:cleanup` ni siquiera está
+// registrado — y `Schedule::command()` no falla aunque el comando no exista, así
+// que sin este `if` el scheduler intentaría correr un comando inexistente cada
+// noche. Es la misma pieza que aprendió el toggle de backup.
+//
+// A las 04:00, detrás del backup de la noche: si la purga se lleva algo que no
+// debía, el zip de las 02:00 todavía lo tiene.
+if ((bool) config('kore-app.devices.enabled')) {
+    Schedule::command('devices:cleanup')
+        ->dailyAt('04:00')
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->sentryMonitor();
+}
+
 // `model:prune` se deja fuera a propósito: hoy ningún modelo del boilerplate
 // usa el trait Prunable / MassPrunable, y el comando aborta si no encuentra
 // ninguno. Descoméntalo cuando añadas el primero.

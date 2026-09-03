@@ -9,6 +9,8 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Http\Response;
+use Illuminate\Pagination\AbstractCursorPaginator;
+use Illuminate\Pagination\AbstractPaginator;
 use Illuminate\Routing\Controller;
 
 /**
@@ -70,6 +72,18 @@ abstract class ApiController extends Controller
     protected function respond(JsonResource|array $data, int $status = 200, array $meta = []): JsonResponse
     {
         if ($data instanceof JsonResource) {
+            /*
+             * Un resource sobre un paginador se rinde por `PaginatedResourceResponse`,
+             * que añade su propio `meta` (`path`, `per_page`, cursores) y lo funde
+             * con el nuestro usando `array_merge_recursive`. El resultado no es un
+             * `meta` con más claves: es `meta.per_page = [25, 25]`, un array donde
+             * el cliente espera un número. El envelope del contrato tiene un solo
+             * `meta` y es el que pasa el endpoint, así que aquí se arma a mano.
+             */
+            if ($meta !== [] && $this->isPaginated($data)) {
+                return new JsonResponse(['data' => $data->resolve(), 'meta' => $meta], $status);
+            }
+
             $resource = $meta === [] ? $data : $data->additional(['meta' => $meta]);
 
             return $resource->response()->setStatusCode($status);
@@ -82,6 +96,21 @@ abstract class ApiController extends Controller
         }
 
         return new JsonResponse($payload, $status);
+    }
+
+    /**
+     * ¿Este resource envuelve un paginador?
+     *
+     * Es la misma condición que usa `ResourceCollection::toResponse()` para
+     * decidir si rinde por `PaginatedResourceResponse`, y por eso se comprueba
+     * igual: contra las dos bases abstractas de paginación —la clásica
+     * (`paginate`, `simplePaginate`) y la de cursor—, no contra sus
+     * implementaciones.
+     */
+    private function isPaginated(JsonResource $data): bool
+    {
+        return $data->resource instanceof AbstractPaginator
+            || $data->resource instanceof AbstractCursorPaginator;
     }
 
     /**

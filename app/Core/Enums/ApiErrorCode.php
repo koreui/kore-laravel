@@ -37,11 +37,22 @@ enum ApiErrorCode: string
     /** 409 · el estado actual del recurso no admite la operación. */
     case Conflict = 'conflict';
 
+    /**
+     * 403 · la cuenta tiene 2FA confirmado y este flujo sólo sabe el primer
+     * paso. Es un `forbidden` con nombre propio a propósito: el cliente que lo
+     * recibe no tiene que reintentar ni pedir otro permiso, sino mandar a esa
+     * persona al navegador. La lanza `App\Exceptions\TwoFactorRequiredException`.
+     */
+    case TwoFactorRequired = 'two_factor_required';
+
     /** 429 · rate limit. La respuesta lleva `Retry-After`. */
     case Throttled = 'throttled';
 
     /** 400 · la petición está mal formada (JSON inválido, parámetro ilegible). */
     case BadRequest = 'bad_request';
+
+    /** 426 · el cliente es demasiado viejo: tiene que actualizarse para seguir. */
+    case UpgradeRequired = 'upgrade_required';
 
     /** 4xx sin código propio (419, 402, 423...). El status manda. */
     case HttpError = 'http_error';
@@ -70,6 +81,7 @@ enum ApiErrorCode: string
             405 => self::MethodNotAllowed,
             409 => self::Conflict,
             422 => self::ValidationFailed,
+            426 => self::UpgradeRequired,
             429 => self::Throttled,
             default => self::HttpError,
         };
@@ -93,8 +105,10 @@ enum ApiErrorCode: string
             self::NotFound => __('No se encontró el recurso solicitado.'),
             self::MethodNotAllowed => __('El método no está permitido en esta ruta.'),
             self::Conflict => __('El estado actual del recurso no permite esta operación.'),
+            self::TwoFactorRequired => __('Esta cuenta tiene verificación en dos pasos: inicia sesión desde el navegador.'),
             self::Throttled => __('Demasiadas peticiones. Inténtalo de nuevo en unos momentos.'),
             self::BadRequest => __('La petición está mal formada.'),
+            self::UpgradeRequired => __('Tu versión de la aplicación ya no está soportada. Actualízala para continuar.'),
             self::HttpError => __('La petición no se pudo completar.'),
             self::ServerError => __('Ocurrió un error inesperado.'),
         };

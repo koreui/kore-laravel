@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Core\Contracts\AuthorizationCatalog;
+use App\Core\Enums\SystemRole;
 use App\Models\User;
 use App\Modules\Auth\Database\Seeders\ModulesSeeder;
 use App\Modules\Auth\Models\Module;
@@ -82,4 +84,33 @@ it('ModulesCollection flatPermissions returns all permission strings', function 
     $flat = Module::where('active', true)->get()->flatPermissions();
 
     expect($flat)->toContain('users.view', 'dashboard.view', 'roles.delete');
+});
+
+/*
+|--------------------------------------------------------------------------
+| El guard con el que el catálogo busca los roles
+|--------------------------------------------------------------------------
+|
+| `AuthManager::shouldUse()` —lo que llama `auth:sanctum`, y también
+| `Sanctum::actingAs()`— ESCRIBE `config(['auth.defaults.guard' => 'sanctum'])`.
+| Los roles se siembran con `guard_name = 'web'`, así que un catálogo que
+| filtrara por el default de la aplicación devolvía `[]` en cada petición de la
+| API, y `GrantableRole` dejaba pasar cualquier rol: R26 desactivada en silencio
+| justo donde no hay pantalla que lo delate (v2.2.0).
+|
+*/
+
+it('resuelve los permisos de un rol también bajo el guard sanctum', function (): void {
+    $this->seed(ModulesSeeder::class);
+
+    $catalog = resolve(AuthorizationCatalog::class);
+
+    $conWeb = $catalog->permissionsForRole(SystemRole::Admin->value);
+
+    expect($conWeb)->not->toBeEmpty();
+
+    auth()->shouldUse('sanctum');
+
+    expect(config('auth.defaults.guard'))->toBe('sanctum')
+        ->and($catalog->permissionsForRole(SystemRole::Admin->value))->toBe($conWeb);
 });

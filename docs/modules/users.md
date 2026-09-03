@@ -4,7 +4,8 @@
 módulo de referencia del boilerplate y ejemplifica el patrón completo: Form
 Object (validación) + `UserData` (DTO) + Actions (escritura) + Events +
 FormComponent + KoreDataTable + Controller + Policy + `permission` middleware +
-reglas anti-escalada.
+reglas anti-escalada. Desde la v2.2.0 el mismo CRUD se publica por
+[API](#api-v1-apiv1users), reutilizando esas Actions y esas reglas.
 
 ## Estructura
 
@@ -69,6 +70,66 @@ Las rutas viven en `app/Modules/Users/Routes/web.php` y todas pasan por `auth + 
 > Livewire.** Esas peticiones van a `/livewire/update`, que sólo pasa por el
 > grupo `web`. Toda autorización real vive **dentro** del componente
 > (`$this->authorize(...)`). Ver [Autorización](#autorización).
+
+## API v1 (`api/v1/users`)
+
+Desde la v2.2.0 el módulo publica el mismo CRUD por API, y es el **endpoint de
+referencia** del boilerplate: el que hay que copiar cuando un módulo nuevo
+necesita publicar su recurso. Paso a paso y con `curl`, en
+[`../guides/api.md`](../guides/api.md#users-api-v1).
+
+| Verbo | URI | Nombre | Ability del token | Policy |
+|-------|-----|--------|-------------------|--------|
+| GET | `/api/v1/users` | `api.v1.users.index` | `users.view` | `viewAny` |
+| GET | `/api/v1/users/{user}` | `api.v1.users.show` | `users.view` | `view` |
+| POST | `/api/v1/users` | `api.v1.users.store` | `users.create` | `create` |
+| PUT·PATCH | `/api/v1/users/{user}` | `api.v1.users.update` | `users.edit` | `update` |
+| DELETE | `/api/v1/users/{user}` | `api.v1.users.destroy` | `users.delete` | `delete` |
+
+Las rutas viven en `app/Modules/Users/Routes/api.php` y su provider las carga
+sólo con `API_ENABLED=true`, igual que hace Auth.
+
+**No reimplementa nada.** El controller usa las mismas `UserCreateAction`,
+`UserUpdateAction` y `UserDeleteAction`, y los requests producen el mismo
+`UserData` que `UserForm::toData()`. Lo único propio de la API son cuatro
+archivos:
+
+```
+Http/
+├── Controllers/Api/V1/UserController.php     # autoriza → DTO → Action → resource
+├── Requests/Api/V1/
+│   ├── UserApiRequest.php                    # base: reglas comunes + toData()
+│   ├── UserStoreRequest.php                  # password required
+│   └── UserUpdateRequest.php                 # password nullable
+└── Resources/Api/V1/UserResource.php         # lista blanca de lo que sale
+```
+
+### Doble barrera (R23 · R25)
+
+Cada ruta exige la ability del token **y** el método vuelve a preguntarle a la
+Policy. Son dos preguntas distintas: la ability dice qué se le concedió a *este
+token* cuando se emitió —lo que hace que un token robado de una app de sólo
+lectura no borre nada aunque su dueño sea administrador—, y la Policy dice qué
+puede *este usuario* ahora mismo sobre *este registro* («sólo un superadmin
+edita a otro superadmin» no cabe en una ability).
+
+Es la misma forma que tiene la UI: la ruta lleva `permission:users.edit` y el
+componente Livewire vuelve a autorizar porque `/livewire/update` no pasa por el
+middleware de la ruta.
+
+### Las mismas guardas que la pantalla
+
+- **El superadmin no sale en el listado**, exactamente como en `TableUsers`.
+- **Editarlo y borrarlo** lo bloquea `UserPolicy` (403).
+- **Borrarse a uno mismo** lo bloquea el controller con `abort_if`, porque el
+  `Gate::before` del superadmin devuelve `true` antes de que la Policy opine.
+- **Anti-escalada (R26)**: el rol y los permisos pasan por `GrantableRole` y
+  `GrantablePermission`, las mismas reglas que el formulario. Un intento sale
+  como 422 `validation_failed` con el motivo en `details`.
+
+`UserResource` publica `id`, `name`, `email`, `roles`, `permissions` (los
+**efectivos**) y `created_at`. Es una lista blanca: una columna nueva en la tabla
+no se publica sola.
 
 ## Modelos y dependencias
 
@@ -309,6 +370,24 @@ haría un cliente malicioso por `/livewire/update`:
 
 **`UserActivityLogTest.php`** — el audit log registra alta, cambios y `causer`,
 y nunca el password.
+
+**`ApiUsersTest.php`** — el CRUD por API, con las dos barreras probadas por
+separado (`Sanctum::actingAs($user, $abilities)` permite dar el permiso y negar
+la ability, y al revés):
+- 401 del invitado en los cinco verbos
+- Listado: envelope + `meta`, paginación por cursor sin repetir ni saltarse
+  filas, tope de `per_page`, filtros `search` y `role`, superadmins ocultos
+- Cada verbo con y sin su ability, y con la ability pero sin el permiso
+- `show`: 404 canónico y lista blanca de campos
+- `store`: alta con rol y permisos, 422 con `details`, email duplicado
+- **R26 por API**: ni un permiso ni un rol que el actor no tenga → 422
+- `update`: `PUT` y `PATCH`, «omitir password = no la cambies», superadmin
+  intocable
+- `destroy`: 204 sin cuerpo, superadmin y auto-borrado bloqueados
+- Con `API_ENABLED=false` no existe ninguna ruta
+
+Total Users: **78 tests / 286 assertions**. (Cifra real de
+`./vendor/bin/pest app/Modules/Users --compact`; actualízala cuando cambie.)
 
 ## Cómo extender
 

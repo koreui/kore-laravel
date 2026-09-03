@@ -43,6 +43,16 @@ return [
         'enabled' => (bool) env('DOCS_ENABLED', false),
     ],
 
+    // Dispositivos que consumen la API (módulo Devices). Opt-in: un proyecto
+    // derivado sin app móvil ni CLI no necesita el inventario. Con el toggle
+    // apagado no hay rutas, ni listeners de los eventos de Auth, ni comando de
+    // limpieza, ni entrada en el scheduler. La TABLA sí se migra siempre:
+    // un toggle apaga rutas y comportamiento, nunca el esquema (mismo criterio
+    // que las passkeys). Ver docs/modules/devices.md.
+    'devices' => [
+        'enabled' => (bool) env('DEVICES_ENABLED', false),
+    ],
+
     'socialite' => [
         'google' => (bool) env('SOCIAL_GOOGLE', false),
         'github' => (bool) env('SOCIAL_GITHUB', false),

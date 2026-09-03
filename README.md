@@ -6,7 +6,8 @@ Boilerplate Laravel 13 production-ready con Livewire 4, Tailwind CSS v4, koreUi 
 
 - **PHP** 8.4+ · **Laravel** 13
 - **UI** Livewire 4 + Alpine.js + Tailwind CSS v4 + [koreUi](https://github.com/koreui/kore-ui)
-- **Auth** Fortify + Sanctum (toggle) + spatie/laravel-permission
+- **Auth** Fortify (2FA, passkeys, magic links) + Sanctum (toggle) + spatie/laravel-permission
+- **API** contrato en `App\Core\Http\Api` (R54): envelope, errores canónicos, cursor, limiters, tokens con abilities = permisos, OpenAPI con dedoc/scramble
 - **DTOs** spatie/laravel-data
 - **Feature flags** Laravel Pennant
 - **Tests** Pest 5 + arch tests (`tests/Arch/`) + E2E Playwright (`tests/e2e/`)
@@ -51,9 +52,9 @@ Para desactivarlo, `TENANCY_ENABLED=false` en `.env` y todo el módulo deja de b
 
 Reglas vivas y resúmenes en `CLAUDE.md` / `AGENTS.md`. Detalles en [`docs/`](docs/README.md):
 
-- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **las 53 reglas del boilerplate** (`R1..R53`), cada una con su verificador, su severidad y la cicatriz que la originó
+- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **las 54 reglas del boilerplate** (`R1..R54`), cada una con su verificador, su severidad y la cicatriz que la originó
 - [`docs/architecture/`](docs/architecture/) — overview, module-pattern, toggles, authorization
-- [`docs/modules/`](docs/modules/) — auth, tenancy, users, docs, e2e
+- [`docs/modules/`](docs/modules/) — auth, tenancy, users, docs, e2e, devices
 - [`docs/ops/`](docs/ops/) — deployment, observability
 - [`docs/quality/`](docs/quality/) — pipeline (Pint, Larastan, PHPat, disallowed-calls, `kore:arch:check`, Rector, Pest, hooks, CI) y E2E
 - [`docs/ai/`](docs/ai/) — trabajar con la AI (Boost, MCP `kore`, skills)
@@ -72,9 +73,14 @@ documentos reescritos y la UI del proyecto. En producción se deja apagado.
 
 | Variable             | Default       | Activa                          |
 | -------------------- | ------------- | ------------------------------- |
-| `API_ENABLED`        | `true`        | Sanctum + rutas API             |
+| `API_ENABLED`        | `true`        | Sanctum + rutas API v1          |
 | `TENANCY_ENABLED`    | `false`       | Multi-tenancy (stancl/tenancy)  |
+| `BACKUP_ENABLED`     | `false`       | spatie/laravel-backup (run + clean + monitor) |
+| `DOCS_ENABLED`       | `false`       | Visor de `docs/` en `/docs`     |
+| `E2E_HARNESS`        | `false`       | Harness `/__e2e__/*` (sólo `.env.e2e`) |
+| `DEVICES_ENABLED`    | `false`       | Módulo Devices (clientes de la API) |
 | `AUTH_2FA_ENABLED`   | `true`        | 2FA de Fortify                  |
+| `AUTH_PASSKEYS`      | `true`        | Passkeys (WebAuthn)             |
 | `AUTH_MAGIC_LINKS`   | `true`        | Magic links / OTP               |
 | `AUTH_SOCIAL_LOGIN`  | `false`       | Socialite                       |
 | `SOCIAL_GOOGLE`      | `false`       | proveedor Google                |

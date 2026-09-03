@@ -10,6 +10,7 @@
 | `TENANCY_ENABLED`      | `false`       | Módulo Tenancy completo (stancl/tenancy)            | `TenancyModuleServiceProvider` |
 | `BACKUP_ENABLED`       | `false`       | spatie/laravel-backup: comandos `backup:*`, las 3 tareas del scheduler y el `BackupsCheck` de `/health` | `BackupServiceProvider`, `routes/console.php` |
 | `DOCS_ENABLED`         | `false`       | Visor de `docs/` en `/docs` (módulo Docs). Pensado para local; producción lo deja apagado | `DocsModuleServiceProvider` |
+| `DEVICES_ENABLED`      | `false`       | Módulo Devices: rutas `api/v1/devices/*`, listeners de `ApiTokenIssued`/`ApiTokenRevoked`, alias `devices.version` y `devices:cleanup` en el scheduler. **La tabla `devices` se migra igual** con el toggle apagado | `DevicesModuleServiceProvider`, `routes/console.php`, `AppServiceProvider::configureAbout()` |
 | `E2E_HARNESS`          | `false`       | Harness de la suite E2E: rutas `/__e2e__/*` (módulo E2E). Sólo lo enciende `.env.e2e`, y aun así hacen falta el entorno y una base de pruebas | `E2EModuleServiceProvider` vía `HarnessGuard` |
 | `AUTH_2FA_ENABLED`     | `true`        | Fortify `twoFactorAuthentication` (rutas + pantalla)| `FortifyServiceProvider::register()` |
 | `AUTH_MAGIC_LINKS`     | `true`        | OTP via spatie/laravel-one-time-passwords           | `Auth/Routes/web.php`, `login.blade.php` |
@@ -18,7 +19,7 @@
 | `SOCIAL_GOOGLE`        | `false`       | proveedor Google de Socialite                       | `SocialiteController`, `login.blade.php` |
 | `SOCIAL_GITHUB`        | `false`       | proveedor GitHub de Socialite                       | `SocialiteController`, `login.blade.php` |
 
-Estas once son **todas** las claves de `config/kore-app.php`. La columna
+Estas doce son **todas** las claves de `config/kore-app.php`. La columna
 "quién lo lee" no es decorativa: es la regla. Un toggle que nadie lee es una
 mentira en la documentación, y por eso en la v1.0.0 se borraron
 `REVERB_ENABLED`, `OCTANE_ENABLED`/`OCTANE_SERVER`, `SCOUT_ENABLED`/`SCOUT_DRIVER`,
