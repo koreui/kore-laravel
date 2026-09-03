@@ -31,3 +31,4 @@ Thumbs.db
 /tests/e2e/results
 /playwright-report
 /test-results
+release-body.md

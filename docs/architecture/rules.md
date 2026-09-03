@@ -1,4 +1,4 @@
-# Reglas de arquitectura (R1–R48)
+# Reglas de arquitectura (R1–R50)
 
 **TL;DR**: las reglas del boilerplate son numeradas, citables (`R5`) y cada una
 dice quién la verifica y con qué comando. Lo que se puede verificar, falla el
@@ -199,6 +199,14 @@ Cuando `config('kore-app.{x}.enabled')` es `false`, el provider del módulo hace
 registrar su propio comando de activación *antes* del early return, porque si no
 no habría forma de encenderlo desde una instalación limpia. Nada más: ese
 comando no carga rutas, ni vistas, ni migraciones.
+
+**Segunda excepción, más pequeña: el namespace de vistas.** Larastan valida
+cada `view('docs::x')` contra el `ViewFactory` de la aplicación que arranca
+durante el análisis, y en CI el toggle vale su default. Un provider puede
+registrar su `loadViewsFrom()` antes del `return` (así lo hace
+`DocsModuleServiceProvider`): sin rutas no hay forma de llegar a esas vistas,
+así que no expone nada observable. Nada más pasa por ahí: rutas, middleware,
+comandos de dominio y traducciones siguen detrás del `return`.
 > Enforcement: **Manual** + el test del toggle (cada toggle tiene el suyo: `TwoFactorToggleTest`, `TenancyToggleTest`) · `composer test` · **Error**
 > Escape: `arch-accepted`
 
@@ -719,7 +727,7 @@ sale en el listado con su archivo y el comando devuelve exit 1.
 > Enforcement: **Manual** · **Error** en review
 > Escape: ninguna
 
-**Por qué.** Es la única forma de que las 44 reglas restantes signifiquen algo:
+**Por qué.** Es la única forma de que las 49 reglas restantes signifiquen algo:
 un arch test dice que la clase está en su sitio, no que haga lo que promete.
 
 **Cicatriz.** `README.md` y `CLAUDE.md` prometían arch tests «desde el día uno»
@@ -816,8 +824,9 @@ que ningún número.
 anunciaba «32 Tests Pest» **hardcodeado** en la Blade. Los dos, v1.0.0.
 
 ### R42 · Toda release tiene su entrada en el CHANGELOG
-Formato Keep a Changelog, con nota de migración para proyectos derivados.
-> Enforcement: **Manual** · **Error** en review de release
+Formato Keep a Changelog, con nota de migración para proyectos derivados. El tag
+`vX.Y.Z` no se publica si `CHANGELOG.md` no tiene su sección `## [X.Y.Z]`.
+> Enforcement: `kore:changelog:section` desde `.github/workflows/release.yml` · `git push --tags` · **Error** · que la nota de migración sirva de verdad: **Manual** · **Error** en review de release
 > Escape: ninguna
 
 Relacionada: R40, de la que ésta es el corolario en el eje del tiempo. R40 pide
@@ -831,15 +840,33 @@ proyecto derivado: es lo que lee para saber qué aplicar de `git merge v1.x`.
 `CHANGELOG.md` y sin ninguna forma de actualizar un derivado. Era el bloqueante
 estructural del proyecto.
 
+Y una segunda, de la propia regla: hasta la v1.3.0 el único verificador era el
+review de la release, es decir, acordarse. Desde la v1.4.0 el workflow de
+release le pide la sección al `CHANGELOG.md` con
+`php artisan kore:changelog:section vX.Y.Z` y, si no está, **no publica el
+release**: el tag se queda sin página y el derivado sin nota de migración, que
+es exactamente el fallo que la regla existe para evitar. El generador automático
+—release-please y familia— se descartó a propósito: reescribiría en inglés,
+desde los subjects de los commits, un archivo que aquí se escribe a mano y en
+español porque es la API de actualización de los proyectos hijos.
+
 ### R43 · Conventional commits
-`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, con `!` para breaking changes.
-> Enforcement: **Manual** · **Warning** (hay hueco para un hook `commit-msg`)
+`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, `perf:`, `ci:`,
+`build:`, `style:` y `revert:`, con ámbito opcional (`feat(users):`) y `!` para
+breaking changes. Los mensajes que escribe git por su cuenta —`Merge …`,
+`Revert "…"`, `fixup!` / `squash!` / `amend!`— pasan sin tocar.
+> Enforcement: hook `commit-msg` (`App\Core\Console\Hooks\ConventionalCommitMsgHook`) · `git commit` · **Error** · que el tipo elegido sea el correcto: **Manual**
 > Escape: ninguna
 
 **Por qué.** Es lo que permite generar el CHANGELOG y calcular el siguiente
 semver sin discutirlo.
 
-**Cicatriz.** Sin cicatriz todavía.
+**Cicatriz.** Sin cicatriz todavía. Hasta la v1.3.0 esta regla era la más fácil
+de romper del catálogo —era **Manual** y **Warning**, y el propio
+`pipeline.md` la listaba en «cómo subir el listón»—, así que en la v1.4.0 se le
+puso el hook. Se valida sólo la **primera línea útil** del mensaje, que es la
+que acaba en el `git log --oneline`; el cuerpo y el pie (`Co-Authored-By`,
+`Refs`) no se miran.
 
 ### R44 · Una excepción de arquitectura nunca la aprueba el agente
 Las válvulas tienen gramática fija (§Válvulas), citan una regla existente,
@@ -873,6 +900,54 @@ lo temporal es el proyecto.
 
 **Cicatriz.** Sin cicatriz todavía: hoy no hay baseline y el objetivo es que
 siga sin haberlo.
+
+### R49 · Los skills viven en `.agents/skills/` y `.claude/skills/` son enlaces
+La carpeta real de cada skill es `.agents/skills/{nombre}/`. En
+`.claude/skills/{nombre}` va un **symlink relativo** a
+`../../.agents/skills/{nombre}` —uno por skill, no uno de la carpeta padre— y
+nada más: ni copias, ni carpetas sueltas, ni enlaces con ruta absoluta.
+> Enforcement: `kore:arch:check` · `composer arch` · **Error**
+> Escape: ninguna
+
+**Por qué.** Los dos clientes leen la misma carpeta de formas distintas: Claude
+Code sigue los symlinks **a nivel de skill individual** (no los de la carpeta
+padre, por eso los enlaces son ocho y no uno), y Codex no resuelve enlaces en
+absoluto. De ahí el reparto: la carpeta real es la del estándar Agent Skills
+—`.agents/skills/`, la que lee el cliente que no sigue enlaces— y el espejo de
+Claude Code se resuelve solo. El enlace es relativo porque uno absoluto rompe el
+repositorio en cualquier otro clon, y Git versiona symlinks (modo `120000`), así
+que la estructura viaja en el commit y no hay nada que reinstalar.
+
+**Cicatriz.** Hasta la v1.3.0 los ocho skills estaban **duplicados byte a byte**
+en las dos carpetas y `working-with-ai.md` documentaba el mantenimiento a mano:
+`cp -R .claude/skills/mi-skill .agents/skills/` y `diff -r` para comprobarlo.
+Que las copias no se hubieran desincronizado todavía era cuestión de tiempo, y
+además R40 barría los dos sets: cada cita de regla de un skill se leía —y se
+podía reportar— dos veces.
+
+### R50 · `AGENTS.md` se genera desde `CLAUDE.md`
+`AGENTS.md` no se edita: es un artefacto —cabecera de aviso más `CLAUDE.md`
+íntegro— que produce `php artisan kore:agents:sync`. Lo que se edita es
+`CLAUDE.md`, y el commit lleva los dos.
+> Enforcement: `kore:arch:check` (mismo contenido esperado que `kore:agents:sync --check`) · `composer arch` · **Error**
+> Escape: ninguna
+
+Relacionada: R40, de la que ésta es el caso extremo —un doc que miente porque
+alguien editó su gemelo— y, a diferencia de R40, con el arreglo en un comando.
+
+**Por qué.** Dos archivos que tienen que quedar idénticos y se mantienen a mano
+se desincronizan el día que alguien edita el que tenía abierto; y el que se
+queda viejo es el que lee **el otro** agente, así que el error no lo ve quien lo
+cometió. Generar uno desde el otro convierte la disciplina en un comando, y el
+check convierte el comando en un fallo del build. El hook de pre-commit **no**
+lo regenera a propósito: un hook que escribe deja commiteado algo distinto de lo
+que se revisó.
+
+**Cicatriz.** Los dos archivos existían idénticos desde la v1.0.0 y el único
+verificador era un `diff CLAUDE.md AGENTS.md` que había que acordarse de correr;
+`working-with-ai.md` lo pedía con la frase «se escribe uno y se copia». La
+v1.3.0 los tocó a los dos en cinco sitios distintos (el rango `R1..R48`, las
+ocho claves de `kore-app`, las reglas de oro…) y sobrevivieron de milagro.
 
 ---
 
@@ -949,15 +1024,22 @@ con `--no-verify`, y entonces no verifica nada.
 | Capa | Presupuesto | Medido | Qué corre |
 |------|-------------|--------|-----------|
 | **pre-commit** | ~2 s | **0,7 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
-| **pre-push** | ~30 s | **3 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
-| **`composer ci`** | ~90 s | **10 s** | `pint --test` (0,5) + `phpstan` (0,7 con caché, 2,0 en frío) + `composer arch` (0,2) + `rector --dry-run` (2,8) + `pest` (6,1, secuencial) |
-| **CI (GitHub)** | ~3 min | — | `composer ci` en matriz 8.3 / 8.4 + `composer audit` + `npm ci && npm run build` + E2E (45 tests en 12 archivos) |
+| **commit-msg** | ~1 s | **0,3 s** | `ConventionalCommitMsgHook` — el asunto sigue Conventional Commits (R43) |
+| **pre-push** | ~30 s | **4 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
+| **`composer ci`** | ~90 s | **16 s** | `pint --test` (1,1) + `phpstan` (0,6 con caché, 2,0 en frío) + `composer arch` (0,2) + `rector --dry-run` (4,3) + `pest` (9,3, secuencial) |
+| **CI (GitHub)** | ~3 min | — | `composer ci` en matriz 8.3 / 8.4 + `composer audit` + `npm ci && npm run build` + E2E (57 tests en 15 archivos) |
+| **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + GitHub Release (R42) |
 
 Medido en un MacBook (Apple Silicon, PHP 8.4) sobre el repositorio a fecha de
-la v1.3.0, con 277 tests Pest y una suite E2E de 45 tests en 12 archivos
-(13 s aparte). Las tres primeras capas caben holgadamente en su
+la v1.4.0, con 391 tests Pest y una suite E2E de 57 tests en 15 archivos
+(19 s aparte). Las cuatro primeras capas caben holgadamente en su
 presupuesto: el margen es para que un proyecto derivado pueda crecer sin tener
 que rediseñar el pipeline.
+
+El `commit-msg` es la capa más barata del pipeline —una expresión regular sobre
+una línea— y casi todo su tiempo medido es el arranque de `artisan`. Va aparte y
+no dentro del pre-commit porque git se lo pasa en otro momento: el pre-commit
+mira el contenido y todavía no hay mensaje que mirar.
 
 Los hooks se instalan solos (`composer install` dispara `git-hooks:register`) y
 se re-registran a mano con `php artisan git-hooks:register`.
@@ -972,9 +1054,11 @@ se re-registran a mano con `php artisan git-hooks:register`.
 | **PHPat** (`tests/Arch/PhpatArchitecture.php`) | `composer analyse` | R1, R4, R5, R6, R7, R8, R19 |
 | **disallowed-calls** (`phpstan-disallowed.neon`) | `composer analyse` | R17, R18, R19, R20, R21, R22, R27 |
 | **Larastan nivel 8** | `composer analyse` | R15 |
-| **`kore:arch:check`** | `composer arch` | R11, R23, R24, R29, R30, R37, R38, R40, R44, R45 |
+| **`kore:arch:check`** | `composer arch` | R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50 |
 | **Pint** | `composer lint` | R13, R16 |
 | **Tests Pest** | `composer test` | R10, R12, R26, R27, R28, R29, R33, R34, R46, R47, R48 |
+| **Hooks de git** (`config/git-hooks.php`) | `git commit` | R43 |
+| **GitHub Actions** (`.github/workflows/release.yml`) | `git push --tags` | R42 |
 | **E2E Playwright** | `npm run e2e` | *ninguna* — ver abajo |
 | **Revisión humana** | code review | R2, R4, R9, R10, R12, R14, R16, R25, R28, R31, R32, R35, R36, R39, R40, R41, R42, R43, R44, R48 |
 
@@ -996,13 +1080,22 @@ Pest arch y la semántica del nombre (`{Domain}{Object}{Verb}`) en revisión
 humana; R14 tiene el `final` verificado en Actions, Data, Events, Rules,
 Policies y Providers, y a ojo en el resto.
 
-De las 48 reglas, **40 tienen al menos un verificador automático** que falla el
-build (entero o en parte) y **8 son íntegramente manuales**: R31, R32, R35, R36,
-R39, R41, R42 y R43. Ninguna regla está sin clasificar: si dice **Manual**, es
-porque hoy no hay forma barata de verificarla, no porque nadie lo haya mirado.
+De las 50 reglas, **44 tienen al menos un verificador automático** que falla el
+build (entero o en parte) y **6 son íntegramente manuales**: R31, R32, R35, R36,
+R39 y R41. Ninguna regla está sin clasificar: si dice **Manual**, es porque hoy
+no hay forma barata de verificarla, no porque nadie lo haya mirado.
 
-El reparto es 40/8 y no 39/9 porque **R34** (sin interpolación dentro de `__()`)
-resultó estar verificada sin que nadie lo hubiera comprobado: el extractor de
-`TranslationsTest` captura el literal tal cual, así que una clave interpolada
-aparece como «sin traducir» y el test falla. Es la lección de R41 aplicada a
-este mismo archivo: la cifra se recuenta, no se hereda.
+El reparto es 44/6 y no 42/8 porque **R42** y **R43** dejaron de ser manuales en
+la v1.4.0: el hook `commit-msg` rechaza un asunto que no siga Conventional
+Commits, y `release.yml` se niega a publicar un tag cuyo `CHANGELOG.md` no tenga
+sección. Las dos siguen apareciendo en la fila de revisión humana porque su
+mitad blanda —que el tipo del commit sea el correcto, que la nota de migración
+le sirva de verdad a un derivado— no la ve ninguna herramienta; eso no las hace
+manuales, igual que no lo son R2 ni R14.
+
+Antes de eso, el reparto era 40/8 y no 39/9 porque **R34** (sin interpolación
+dentro de `__()`) resultó estar verificada sin que nadie lo hubiera comprobado:
+el extractor de `TranslationsTest` captura el literal tal cual, así que una clave
+interpolada aparece como «sin traducir» y el test falla. Las dos veces, la misma
+lección —la de R41— aplicada a este mismo archivo: la cifra se recuenta, no se
+hereda.

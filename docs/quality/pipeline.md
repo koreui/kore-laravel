@@ -1,6 +1,6 @@
 # Pipeline de calidad
 
-**TL;DR**: Pint formatea, Larastan nivel 8 analiza los tipos, PHPat vigila el grafo de dependencias, `phpstan-disallowed-calls` prohíbe llamadas concretas, `kore:arch:check` hace los checks textuales, Rector refactoriza y Pest 3 testea. `igorsgm/laravel-git-hooks` reparte el trabajo entre pre-commit y pre-push, y GitHub Actions lo corre todo en cada PR. El comando único es `composer ci`.
+**TL;DR**: Pint formatea, Larastan nivel 8 analiza los tipos, PHPat vigila el grafo de dependencias, `phpstan-disallowed-calls` prohíbe llamadas concretas, `kore:arch:check` hace los checks textuales, Rector refactoriza y Pest 3 testea. `igorsgm/laravel-git-hooks` reparte el trabajo entre pre-commit, commit-msg y pre-push, y GitHub Actions lo corre todo en cada PR y publica el release desde el CHANGELOG. El comando único es `composer ci`.
 
 El catálogo de reglas —qué se verifica, con qué herramienta y con qué severidad— vive en [`../architecture/rules.md`](../architecture/rules.md). Este documento explica cómo está montado el pipeline; aquel dice qué comprueba.
 
@@ -15,10 +15,14 @@ composer test:coverage     # Pest --coverage --min=80
 composer lint              # Pint (aplica fixes)
 composer lint:test         # Pint --test (no fix)
 composer analyse           # Larastan + PHPat + disallowed-calls (un solo binario)
-composer arch              # kore:arch:check (checks textuales)
+composer arch              # kore:arch:check (checks textuales: R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50)
 composer refactor          # Rector (aplica)
 composer refactor:test     # Rector --dry-run
 composer ci                # lint:test + analyse + arch + refactor:test + test
+
+php artisan kore:agents:sync             # regenera AGENTS.md desde CLAUDE.md (R50)
+php artisan kore:agents:sync --check     # exit 1 si está desincronizado, sin escribir
+php artisan kore:changelog:section v1.4.0  # la sección del CHANGELOG de una release (R42)
 ```
 
 ## Capas de verificación
@@ -30,16 +34,17 @@ no verifica nada.
 | Capa | Presupuesto | Medido | Qué corre |
 |------|-------------|--------|-----------|
 | **pre-commit** | ~2 s | **0,7 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
-| **pre-push** | ~30 s | **3 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
-| **`composer ci`** | ~90 s | **10 s** | `pint --test` (0,5) + `phpstan` (0,7 con caché, 2,0 en frío) + `composer arch` (0,2) + `rector --dry-run` (2,8) + `pest` (6,1, secuencial) |
+| **commit-msg** | ~1 s | **0,3 s** | `ConventionalCommitMsgHook` — el asunto sigue Conventional Commits (R43) |
+| **pre-push** | ~30 s | **4 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
+| **`composer ci`** | ~90 s | **16 s** | `pint --test` (1,1) + `phpstan` (0,6 con caché, 2,0 en frío) + `composer arch` (0,2) + `rector --dry-run` (4,3) + `pest` (9,3, secuencial) |
 | **CI (GitHub)** | ~3 min | — | `composer ci` en matriz 8.3 / 8.4 + `composer audit` + `npm ci && npm run build` + E2E |
+| **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + `softprops/action-gh-release` |
 
-Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v1.3.0 y
-277 tests Pest. La suite E2E —45 tests en 12 archivos— va aparte y tarda 13 s
-en local. Los tests que migran de verdad (`MigrationsAreReversibleTest`,
-`CleanInstallTest`) y los que arrancan la aplicación con otro entorno
-(`BackupTest`, `ProductionConfigTest`) son los que explican el segundo y medio
-de más respecto a la v1.2.0.
+Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v1.4.0 y
+391 tests Pest. La suite E2E —57 tests en 15 archivos— va aparte y tarda
+19 s en local. Los tests nuevos de la v1.4.0 (los comandos de Core, el hook de
+`commit-msg`, el MCP `kore` y el módulo Docs) son los que explican el tiempo de
+más de `pest` respecto a la v1.3.0.
 
 > Nota de entorno: `composer test` limpia la config cacheada antes de correr
 > Pest a propósito. Con un `bootstrap/cache/config.php` viejo, `PulseAccessTest`
@@ -166,9 +171,11 @@ php artisan kore:arch:check --root=/otro/repo  # otra raíz (lo usan sus tests)
 | R40 | todo `docs/**/*.md` está enlazado desde `docs/README.md`, y toda `R{n}` citada en el código, los skills, los `*.neon` y `CLAUDE.md`/`AGENTS.md` existe en `rules.md` (cuenta cualquier `R{n}` suelta, no sólo las seguidas de `:` o `·`) |
 | R44 | las válvulas de escape tienen la gramática correcta, citan una regla existente, llevan `@owner`, no han caducado y **usan la forma que esa regla declara** en su `> Escape:` |
 | R45 | si hay `phpstan-baseline.neon`, su primera línea es `# arch-baseline: vence YYYY-MM-DD` y la fecha no ha pasado |
+| R49 | cada `.agents/skills/{nombre}` tiene su symlink en `.claude/skills/{nombre}` apuntando a `../../.agents/skills/{nombre}`, y en `.claude/skills/` no hay nada que no sea uno de esos enlaces |
+| R50 | `AGENTS.md` es exactamente lo que generaría `php artisan kore:agents:sync` desde `CLAUDE.md` |
 
 Salida: `R{n} archivo:línea mensaje`, y exit code 1 si hay algo. Tests:
-`tests/Feature/ArchCheckCommandTest.php` (73 casos, un árbol de fixtures que
+`tests/Feature/ArchCheckCommandTest.php` (83 casos, un árbol de fixtures que
 viola cada check y otro que lo cumple).
 
 ### Rector — `rector.php`
@@ -272,6 +279,10 @@ Excepciones documentadas en el propio archivo:
     ArchCheckPreCommitHook::class,       // kore:arch:check sobre los staged
 ],
 
+'commit-msg' => [
+    ConventionalCommitMsgHook::class,    // el asunto sigue Conventional Commits (R43)
+],
+
 'pre-push' => [
     PrePushHook::class,                  // phpstan + pest --parallel
 ],
@@ -298,7 +309,7 @@ Excepciones documentadas en el propio archivo:
 > exportar variables.
 
 
-Las dos clases propias viven en `app/Core/Console/Hooks/`:
+Las tres clases propias viven en `app/Core/Console/Hooks/`:
 
 - **`ArchCheckPreCommitHook`** toma los archivos del commit y se los pasa al
   comando por `--files`. Si el comando devuelve distinto de 0, lanza
@@ -306,9 +317,22 @@ Las dos clases propias viven en `app/Core/Console/Hooks/`:
 - **`PrePushHook`** corre PHPStan y después Pest en paralelo, parando en el
   primero que falle e imprimiendo su salida. Rector, `composer audit` y el build
   de Vite **no** están aquí a propósito: romperían el presupuesto de 30 s.
+- **`ConventionalCommitMsgHook`** mira la **primera línea útil** del mensaje —la
+  primera que no es una línea en blanco ni un comentario de git— contra
+  `tipo(ámbito)!: descripción`. Deja pasar lo que escribe git por su cuenta
+  (`Merge …`, `Revert "…"`, `fixup!`, `squash!`, `amend!`) y no toca el cuerpo ni
+  el pie del mensaje. Si falla, imprime el formato y un ejemplo válido. Es la
+  capa más barata del pipeline: una expresión regular, sin procesos ni base de
+  datos.
 
-Tests: `tests/Feature/GitHooksTest.php` prueba la decisión de cada hook (seguir
-o abortar) con un `Command` de doble y `Process::fake()`. No se prueba con un
+> **Los hooks no escriben archivos.** Cuando `CLAUDE.md` entra en un commit sin
+> su `AGENTS.md` regenerado, el pre-commit falla y dice `php artisan
+> kore:agents:sync` — pero no lo corre él. Un hook que modifica el árbol deja
+> commiteado algo distinto de lo que el desarrollador revisó, y encima en
+> silencio.
+
+Tests: `tests/Feature/GitHooksTest.php` (36 casos) prueba la decisión de cada
+hook (seguir o abortar) con un `Command` de doble y `Process::fake()`. No se prueba con un
 commit real porque haría falta escribir un archivo con una violación dentro de
 `app/` o `tests/`, y con `pest --parallel` ese archivo lo vería el proceso que
 corre los arch tests de verdad.
@@ -318,6 +342,12 @@ Para reinstalarlos a mano:
 ```bash
 php artisan git-hooks:register
 ```
+
+> En un **git worktree** `git-hooks:register` falla con «Git not initialized in
+> this project»: el paquete busca `.git/hooks` como directorio y en un worktree
+> `.git` es un archivo que apunta al repositorio principal. Los hooks se instalan
+> desde el clon normal; en un worktree se verifican llamando al comando a mano:
+> `php artisan git-hooks:commit-msg <ruta-al-mensaje>`.
 
 ## CI — GitHub Actions
 
@@ -341,6 +371,31 @@ Job `assets`: Node 20, `npm ci`, `npm run build`. Los tests corren con
 - Trigger: `push` a `main` y todo `pull_request` contra `main`
 - Concurrency: cancela ejecuciones previas del mismo branch
 
+`.github/workflows/release.yml`:
+
+Se dispara **sólo al empujar un tag `v*`**, con `permissions: contents: write` y
+nada más. Tres pasos:
+
+1. `composer install` (con dev: `PrePushCommand` extiende una clase de
+   `igorsgm/laravel-git-hooks`, que es `require-dev`, y `AppServiceProvider` la
+   registra; con `--no-dev` cualquier `php artisan` moriría al autocargarla).
+2. `php artisan kore:changelog:section "$GITHUB_REF_NAME"` → `release-body.md`.
+   Si el tag no tiene su sección en `CHANGELOG.md`, el comando devuelve 1 y el
+   job falla: **el release no se publica** (R42).
+3. `softprops/action-gh-release@v2` con `name: vX.Y.Z` y `body_path:
+   release-body.md`.
+
+**Por qué no release-please.** Generaría el CHANGELOG en inglés desde los
+subjects de los commits y chocaría con el que hay: aquí está escrito a mano, en
+español y con nota de migración, porque es la API de actualización de los
+proyectos derivados (R42). El workflow *lee* ese archivo en vez de reescribirlo.
+
+Además del workflow, el repositorio trae `.github/PULL_REQUEST_TEMPLATE.md`
+(checklist de `composer ci`, E2E, doc en el mismo commit, CHANGELOG y válvulas),
+`.github/ISSUE_TEMPLATE/` (bug, propuesta y `config.yml` con
+`blank_issues_enabled: false`) y `.github/CODEOWNERS`, que pide review explícito
+en `docs/architecture/rules.md`, `config/kore-app.php`, `.github/` y `app/Core/`.
+
 ## Estado actual
 
 ```
@@ -349,15 +404,18 @@ $ composer ci
 ✓ Larastan nivel 8 + PHPat + disallowed-calls: 0 errors
 ✓ kore:arch:check: sin violaciones
 ✓ Rector: nothing to refactor
-✓ Pest: 277 passed (687 assertions)
+✓ Pest: 391 passed (927 assertions)
 ```
 
-Reparto de los 277 tests: 21 arch (`tests/Arch`), 41 del módulo Auth, 48 del
-módulo Users, 3 de Tenancy y 164 en `tests/Feature` (health, scheduler, Sentry,
-Pulse, Pennant, mass assignment, landing, traducciones, `kore:arch:check`, los
-hooks y, desde la v1.3.0, backup, cabeceras de seguridad, configuración de
-producción, logging, migraciones reversibles e instalación limpia). Aparte, la
-suite E2E de Playwright (`npm run e2e`): 45 tests en 12 archivos —11 de spec más `auth.setup.ts`, que hace el login por rol—.
+Reparto de los 391 tests: 21 arch (`tests/Arch`), 41 del módulo Auth, 48 del
+módulo Users, 3 de Tenancy, 43 del módulo Docs y 235 en `tests/Feature`
+(health, scheduler, Sentry, Pulse, Pennant, mass assignment, landing,
+traducciones, backup, cabeceras de seguridad, configuración de producción,
+logging, migraciones reversibles, instalación limpia, el MCP `kore` y —desde la
+v1.4.0— `kore:arch:check` con sus 83 casos, los hooks con 36, `kore:agents:sync`
+con 7 y `kore:changelog:section` con 9). Aparte, la suite E2E de Playwright
+(`npm run e2e`): 57 tests en 15 archivos —14 de spec más
+`auth.setup.ts`, que hace el login por rol—.
 
 Actualiza esta cifra cuando cambie (R41). Un número inventado en los docs es
 peor que no ponerlo: la auditoría de septiembre de 2026 encontró aquí «15 tests»
@@ -370,7 +428,7 @@ cuando había 32.
 | Larastan nivel 8 → 9          | strict, harder, prepara baseline (con fecha, R45) |
 | Pest coverage min 80% → 90%   | `test:coverage` exige más cobertura          |
 | Agregar mutation testing      | `composer require --dev pestphp/pest-plugin-mutate` |
-| Hook `commit-msg` de conventional commits | automatiza R43, hoy manual       |
+| Validar el **cuerpo** del commit-msg | hoy sólo se mira el asunto; el pie (`Refs:`, `BREAKING CHANGE:`) no |
 
 Antes de subir el nivel, agrega un baseline para no romper nada existente:
 

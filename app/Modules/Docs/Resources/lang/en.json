@@ -1,0 +1,6 @@
+{
+    "En esta página": "On this page",
+    "Los Markdown de docs/ servidos por la propia aplicación. Se enciende con DOCS_ENABLED y se apaga en producción.": "The Markdown files under docs/, served by the application itself. Turn it on with DOCS_ENABLED and off in production.",
+    "Ver en GitHub": "View on GitHub",
+    "Índice": "Index"
+}

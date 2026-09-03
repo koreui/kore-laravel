@@ -183,6 +183,9 @@ TRUSTED_PROXIES=*
 # Toggles del boilerplate (kore-app)
 API_ENABLED=true
 TENANCY_ENABLED=false
+# Visor de docs/ en /docs. En producción SIEMPRE apagado: .env.example lo trae
+# en true y publicaría la documentación interna a cualquiera que sepa la URL.
+DOCS_ENABLED=false
 
 # Auth
 AUTH_2FA_ENABLED=true

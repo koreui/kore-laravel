@@ -7,6 +7,14 @@
                 "boost:mcp"
             ]
         },
+        "kore": {
+            "command": "php",
+            "args": [
+                "artisan",
+                "mcp:start",
+                "kore"
+            ]
+        },
         "kore-ui": {
             "type": "http",
             "url": "https://kore-ui-mcp.ovilla.dev/mcp"

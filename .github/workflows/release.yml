@@ -1,0 +1,64 @@
+name: Release
+
+# Se dispara al empujar un tag `vX.Y.Z`. El cuerpo del release NO se genera
+# desde los mensajes de commit: sale de la sección correspondiente de
+# CHANGELOG.md, que en este repositorio se escribe a mano, en español y con nota
+# de migración, porque es la API de actualización de los proyectos derivados
+# (R42). Si el tag no tiene sección, el workflow falla y el release no se
+# publica.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publicar release desde el CHANGELOG
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+
+      # Con dev: `App\Core\Console\Hooks\PrePushCommand` extiende una clase de
+      # igorsgm/laravel-git-hooks, que es require-dev, y AppServiceProvider la
+      # registra. Con --no-dev, cualquier `php artisan` moriría al autocargarla.
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Extraer la sección del CHANGELOG
+        id: changelog
+        run: |
+          set -uo pipefail
+          TAG="${GITHUB_REF_NAME}"
+
+          if ! php artisan kore:changelog:section "${TAG}" --no-ansi > release-body.md; then
+            cat release-body.md
+            echo "::error::CHANGELOG.md no tiene la sección de ${TAG}. Toda release lleva la suya (R42)."
+            exit 1
+          fi
+
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "--- cuerpo del release ---"
+          cat release-body.md
+
+      - name: Crear el release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.changelog.outputs.tag }}
+          body_path: release-body.md
+          draft: false
+          prerelease: false

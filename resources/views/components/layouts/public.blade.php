@@ -1,4 +1,12 @@
 @props(['title' => null])
+
+@php
+    // Igual que en la landing: si el visor de /docs está encendido (DOCS_ENABLED),
+    // la documentación se lee dentro de la app; si no, en GitHub.
+    $docsUrl = Route::has('docs.index')
+        ? route('docs.index', absolute: false)
+        : 'https://github.com/koreui/kore-laravel/tree/main/docs';
+@endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="h-full" x-data>
 <head>
@@ -24,7 +32,7 @@
             </a>
 
             <nav class="hidden items-center gap-6 text-sm md:flex">
-                <a href="https://github.com/koreui/kore-laravel/tree/main/docs" class="text-kore-muted-fg transition-colors hover:text-kore-fg">{{ __('Documentación') }}</a>
+                <a href="{{ $docsUrl }}" class="text-kore-muted-fg transition-colors hover:text-kore-fg">{{ __('Documentación') }}</a>
                 <a href="/#features" class="text-kore-muted-fg transition-colors hover:text-kore-fg">{{ __('Características') }}</a>
                 <a href="https://github.com/koreui/kore-laravel" class="text-kore-muted-fg transition-colors hover:text-kore-fg">GitHub</a>
             </nav>

@@ -227,7 +227,9 @@ return [
          * `openssl rand -base64 32` y guárdala FUERA del servidor (si se pierde,
          * los backups son irrecuperables). Ver docs/ops/deployment.md.
          */
-        'password' => env('BACKUP_ARCHIVE_PASSWORD'),
+        // `?: null`: con `BACKUP_ARCHIVE_PASSWORD=` (presente y vacía) env() devuelve ''
+        // y el paquete intentaría cifrar con contraseña vacía; vacía = sin cifrar.
+        'password' => env('BACKUP_ARCHIVE_PASSWORD') ?: null,
 
         /*
          * The encryption algorithm to be used for archive encryption.

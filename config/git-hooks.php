@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Core\Console\Hooks\ArchCheckPreCommitHook;
+use App\Core\Console\Hooks\ConventionalCommitMsgHook;
 use App\Core\Console\Hooks\PrePushHook;
 use Igorsgm\GitHooks\Console\Commands\Hooks\PintPreCommitHook;
 
@@ -62,7 +63,9 @@ return [
     |
     */
     'commit-msg' => [
-
+        // Capa 0 (milisegundos): el asunto sigue Conventional Commits (R43).
+        // Ver docs/architecture/rules.md §Capas de verificación.
+        ConventionalCommitMsgHook::class,
     ],
 
     /*

@@ -1,6 +1,7 @@
 ---
 name: kore-e2e-test
 description: Crear o ampliar tests E2E de Playwright en tests/e2e/ de kore-laravel, con su page object y sus specs por módulo. Úsalo cuando el usuario pida "crear un test e2e", "agregar un spec de playwright", "probar el flujo X en el navegador" o verificar en un navegador real que Livewire, Alpine y koreUi funcionan juntos.
+compatibility: "kore-laravel (Laravel 12, Livewire 4, Pest 3). Claude Code, Codex y cualquier cliente Agent Skills."
 ---
 
 # Crear tests E2E (Playwright) en kore-laravel

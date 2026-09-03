@@ -1,0 +1,27 @@
+# Dueños del código — https://docs.github.com/es/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Gana la ÚLTIMA regla que casa, así que las específicas van debajo de la
+# general. Hoy el dueño es el mismo en todas: la gracia no es repartir el
+# repositorio, es que un cambio en el catálogo de reglas, en los toggles, en la
+# automatización o en el kernel compartido **pida review explícito** en vez de
+# colarse dentro de un PR grande de otra cosa.
+
+*                               @CesarOvilla
+
+# El catálogo de reglas es la fuente de verdad del proyecto (R40): CLAUDE.md,
+# AGENTS.md y los skills sólo resumen y enlazan aquí. Añadir, relajar o
+# renumerar una regla es una decisión de arquitectura, no un detalle de PR.
+/docs/architecture/rules.md     @CesarOvilla
+
+# Los nueve toggles del boilerplate. Una clave nueva la heredan todos los
+# proyectos derivados, y una clave sin lector real es un toggle fantasma (R11).
+/config/kore-app.php            @CesarOvilla
+
+# Automatización del repositorio: CI, workflow de release, plantillas y este
+# mismo archivo. Un cambio aquí decide qué se verifica antes de mergear.
+/.github/                       @CesarOvilla
+
+# El kernel compartido: contratos, DTOs base, Action base y los comandos
+# transversales (kore:arch:check, kore:agents:sync, kore:changelog:section).
+# Core no depende de ningún módulo (R6) y lo usan todos.
+/app/Core/                      @CesarOvilla

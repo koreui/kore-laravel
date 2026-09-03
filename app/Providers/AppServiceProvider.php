@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Core\Console\AgentsSyncCommand;
 use App\Core\Console\ArchCheckCommand;
+use App\Core\Console\ChangelogSectionCommand;
 use App\Core\Console\Hooks\PrePushCommand;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
@@ -80,7 +82,9 @@ final class AppServiceProvider extends ServiceProvider
     {
         if ($this->app->runningInConsole()) {
             $this->commands([
+                AgentsSyncCommand::class,
                 ArchCheckCommand::class,
+                ChangelogSectionCommand::class,
                 // Reemplaza al del paquete: acepta los argumentos que git pasa al pre-push.
                 PrePushCommand::class,
             ]);
@@ -168,6 +172,9 @@ final class AppServiceProvider extends ServiceProvider
             '2FA' => fn (): string => $state(config('kore-app.auth.two_factor')),
             'Magic links' => fn (): string => $state(config('kore-app.auth.magic_links')),
             'Social login' => fn (): string => $state(config('kore-app.auth.social_login')),
+            'Social Google' => fn (): string => $state(config('kore-app.socialite.google')),
+            'Social GitHub' => fn (): string => $state(config('kore-app.socialite.github')),
+            'Docs' => fn (): string => $state(config('kore-app.docs.enabled')),
             'Backup' => fn (): string => config('kore-app.backup.enabled')
                 ? 'enabled'.(config('backup.backup.password') ? ' (zip cifrado)' : ' (zip SIN cifrar)')
                 : 'disabled',

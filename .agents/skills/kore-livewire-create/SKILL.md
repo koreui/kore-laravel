@@ -1,6 +1,7 @@
 ---
 name: kore-livewire-create
 description: Crear un componente Livewire 4 dentro de un módulo de kore-laravel, con su vista en Resources/views/ y registro en el ServiceProvider del módulo. Úsalo cuando el usuario pida "crear un componente Livewire", "agregar una página interactiva" o trabajar con componentes reactivos.
+compatibility: "kore-laravel (Laravel 12, Livewire 4, Pest 3). Claude Code, Codex y cualquier cliente Agent Skills."
 ---
 
 # Crear Livewire component en kore-laravel

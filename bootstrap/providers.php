@@ -9,4 +9,5 @@ return [
     App\Modules\Auth\Providers\AuthModuleServiceProvider::class,
     App\Modules\Tenancy\Providers\TenancyModuleServiceProvider::class,
     App\Modules\Users\Providers\UsersModuleServiceProvider::class,
+    App\Modules\Docs\Providers\DocsModuleServiceProvider::class,
 ];

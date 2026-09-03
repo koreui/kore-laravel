@@ -10,6 +10,260 @@ desde el upstream (`git remote add kore https://github.com/koreui/kore-laravel`)
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-03
+
+«DX y AI tooling». Tres cosas del repositorio se mantenían a mano y sólo se
+verificaban acordándose: los ocho skills estaban duplicados byte a byte en
+`.claude/skills/` y `.agents/skills/`, `AGENTS.md` era una copia manual de
+`CLAUDE.md`, y los conventional commits eran una regla **Manual · Warning** con
+un «hay hueco para un hook» escrito al lado. Esta release convierte las tres en
+código: una carpeta real y ocho symlinks, un comando que genera, y un hook que
+rechaza. Y le da al agente dos cosas que hasta ahora tenía que buscarse
+abriendo medio repositorio: un **MCP server propio** (`kore`) que responde por
+módulos, toggles, permisos y reglas, y un **visor de `docs/` en `/docs`**
+servido por la propia aplicación. Alrededor del repositorio, lo que faltaba:
+plantillas de PR e issue, `CODEOWNERS`, un workflow de release que **se niega a
+publicar un tag sin su sección del CHANGELOG**, la guía de actualización para
+derivados y los dos primeros patrones documentados con la regla de tres.
+
+La suite Pest pasa de 277 a **391** tests, la E2E de 45 a **57**, y el catálogo
+de `R1..R48` a `R1..R50`, con **44** reglas con verificador automático (eran 40).
+
+### Añadido
+
+- **MCP server propio, `kore`** (`app/Core/Mcp/KoreServer.php`, registrado en
+  `routes/ai.php` con `Mcp::local('kore', KoreServer::class)`). Se arranca con
+  `php artisan mcp:start kore` y lo declaran `.mcp.json` y `.codex/config.toml`,
+  que siguen siendo espejo el uno del otro. `routes/ai.php` es un archivo que
+  `laravel/mcp` (ya instalado como dependencia de Boost) carga solo si existe,
+  así que no toca `bootstrap/app.php`. Convive con `laravel-boost` sin solaparse:
+  Boost responde sobre **el framework** (esquema, queries, docs de paquetes,
+  tinker) y `kore` responde sobre **este proyecto**.
+- **Cinco herramientas, todas `readOnlyHint` + `idempotentHint`:**
+  `kore-list-modules` (inventario de `app/Modules/*` leyendo el sistema de
+  archivos: provider, si está registrado, carpetas de la lista cerrada de R3,
+  Actions, Livewire, rutas y tests; no instancia una sola clase de
+  `App\Modules`, R6), `kore-list-toggles` (las nueve claves de `kore-app` con su
+  valor, su variable de `.env`, su default y **la lista de archivos que las
+  leen**, más las claves que encienden capacidades sin ser toggles),
+  `kore-list-permissions` (roles, matriz de permisos y qué hay sembrado, todo por
+  `App\Core\Contracts\AuthorizationCatalog`; si la base no responde degrada al
+  catálogo estático con aviso), `kore-get-rule` (una regla del catálogo por
+  número, o la tabla resumen; una regla inexistente devuelve `Response::error()`,
+  no una excepción) y `kore-arch-check` (ejecuta exactamente
+  `kore:arch:check`, sin parámetro para elegir otro comando: una tool que acepta
+  un comando arbitrario deja de ser un linter y pasa a ser una shell remota).
+- **Ninguna tool devuelve un secreto.** Cualquier clave cuyo nombre contenga
+  `token`, `password`, `secret`, `key`, `dsn`, `passphrase` o `credential` se
+  responde como `configurado` / `sin configurar`. Lo cubre un test.
+- **`tests/Feature/KoreMcpTest.php`** (15 tests) con el helper de test de
+  `laravel/mcp` (`KoreServer::tool(...)`), que manda un `tools/call` real por un
+  transporte falso: cubre nombre, esquema y serialización, no sólo `handle()`.
+- **Visor de documentación en `/docs`, detrás del toggle `DOCS_ENABLED`**
+  (default `false`; `.env.example` lo trae en `true`, `.env.e2e` también y
+  `phpunit.xml` lo fuerza a `false`). La landing enlazaba a GitHub porque
+  `/docs` daba 404; ahora los mismos `docs/*.md` se sirven renderizados con la
+  UI de la app, y con el toggle apagado los enlaces vuelven a apuntar a GitHub
+  solos. La fuente sigue siendo única: `docs/`, lo que se revisa en el PR y lo
+  que R40 vigila.
+- **Módulo `app/Modules/Docs/`** con la lista cerrada de R3 y sin `Actions/`
+  (leer un archivo y convertirlo a HTML es una consulta, no un caso de uso):
+  `DocsController` con dos métodos delgados, `MarkdownRenderer` y
+  `DocLinkExtension` en `Support/`, `DocumentData` en `Data/`, dos Blade y su
+  `en.json`. El renderizado es `Str::markdown()` —el GFM que Laravel ya trae:
+  tablas, listas de tareas, código, **cero dependencias nuevas**— con
+  `html_input => 'strip'` y `allow_unsafe_links => false`.
+- **Reescritura de los enlaces entre documentos con una extensión de
+  CommonMark, no con una regex.** `../architecture/rules.md` →
+  `/docs/architecture/rules`, `rules.md#r11` → `/docs/architecture/rules#r11`,
+  `../README.md` → `/docs`, y lo que cae fuera de `docs/` (`../../CHANGELOG.md`)
+  → GitHub. Un `](...)` también aparece dentro de un span de código
+  (`docs/audit/…` cita literalmente `` `[koreUi](../koreUi)` ``) y una regex lo
+  reescribiría; la extensión trabaja sobre el árbol parseado. De paso pone el
+  `id` de cada encabezado con el mismo slug que GitHub (acentos incluidos) y
+  recoge los `##` para el índice lateral con los mismos slugs.
+- **Seguridad del `path` por partida doble**: la ruta restringe `{path}` a
+  `[A-Za-z0-9_\-/]+` (sin puntos, así que `..` no casa con ninguna ruta) y
+  `DocsController::resolve()` repite la comprobación sobre el archivo ya resuelto
+  (`realpath` + prefijo de `base_path('docs')`, que cierra también los symlinks
+  que apunten fuera). Redundante a propósito: el día que alguien relaje el
+  `where()`, `/docs/../.env` tiene que seguir siendo un 404.
+- **43 tests del módulo Docs** (`DocsToggleTest` 5, `DocsPagesTest` 13 —cinco
+  formas de intentar salirse de `docs/`, todas 404—, `MarkdownRendererTest` 25) y
+  **12 E2E** en `tests/e2e/specs/docs/` (smoke, navegación entre documentos con
+  breadcrumb e índice lateral, y «autorización»: público, sin escapes, 404 para
+  lo que no existe) con su page object `DocsPage.ts` (R36).
+- **`php artisan kore:agents:sync`** (`app/Core/Console/AgentsSyncCommand.php`) —
+  genera `AGENTS.md` desde `CLAUDE.md`: una cabecera en comentario
+  HTML («Generado desde CLAUDE.md… No edites este archivo») más el original
+  íntegro debajo. Con `--check` no escribe nada y devuelve exit 1 si el generado
+  no coincide. La lógica de «qué debería contener» vive en
+  `App\Core\Support\AgentsFile`, para que el comando y el check no la dupliquen
+  (R50).
+- **`php artisan kore:changelog:section vX.Y.Z`**
+  (`app/Core/Console/ChangelogSectionCommand.php`) — imprime la sección
+  `## [X.Y.Z]` del `CHANGELOG.md`. Acepta el tag con o sin `v`. Devuelve exit 1
+  si la sección no existe **o está vacía**: es lo que hace que R42 deje de
+  depender del review.
+- **Hook `commit-msg`** (`app/Core/Console/Hooks/ConventionalCommitMsgHook.php`)
+  — valida la **primera línea útil** del mensaje contra
+  `tipo(ámbito)!: descripción`, con los once tipos de Conventional Commits. Deja
+  pasar lo que escribe git por su cuenta: `Merge …`, `Revert "…"`, `fixup!`,
+  `squash!` y `amend!`. Si falla, imprime el formato, la lista de tipos y un
+  ejemplo válido. Registrado en `config/git-hooks.php` → `'commit-msg'` (R43).
+- **Dos checks nuevos en `kore:arch:check`**: **R49** (cada
+  `.agents/skills/{nombre}` tiene su symlink en `.claude/skills/{nombre}`
+  apuntando exactamente a `../../.agents/skills/{nombre}`, y en `.claude/skills/`
+  no hay nada más: una copia real es deriva) y **R50** (`AGENTS.md` es lo que
+  generaría `kore:agents:sync`). El pre-commit los corre y, si fallan, **no
+  regenera nada**: nombra el comando. Un hook que escribe deja commiteado algo
+  distinto de lo que se revisó.
+- **`.github/workflows/release.yml`** — al empujar un tag `v*`: extrae la sección
+  del CHANGELOG con `kore:changelog:section`, **falla si no existe** y publica el
+  GitHub Release con `softprops/action-gh-release@v2`, nombre `vX.Y.Z` y esa
+  sección como cuerpo. Permisos mínimos (`contents: write`). **No se usa
+  release-please** a propósito: generaría un CHANGELOG en inglés desde los
+  subjects de los commits y chocaría con el que hay, escrito a mano y en español
+  porque es la API de actualización de los proyectos derivados.
+- **`.github/PULL_REQUEST_TEMPLATE.md`** (qué cambia, por qué, las reglas `R{n}`
+  afectadas, y una checklist con `composer ci`, `npm run e2e` si tocó UI, doc en
+  el mismo commit, `[Unreleased]`, `AGENTS.md` regenerado y **ninguna válvula
+  nueva sin `@owner`**), **`.github/ISSUE_TEMPLATE/`** (`bug_report.md` con «qué
+  hace y dónde dice otra cosa» y la salida de `php artisan about --only=kore`,
+  `feature_request.md` con la regla de tres delante, y `config.yml` con
+  `blank_issues_enabled: false`) y **`.github/CODEOWNERS`** (`* @CesarOvilla` y
+  dueño explícito para `docs/architecture/rules.md`, `config/kore-app.php`,
+  `.github/` y `app/Core/`: un cambio en el catálogo, en los toggles, en la
+  automatización o en el kernel pide review explícito).
+- **`docs/patterns/`** — la **regla de tres** (una vez es un caso, dos una
+  coincidencia, tres un patrón), el camino de vuelta de un proyecto hijo al padre
+  y el formato fijo de cada patrón. Estrena con los dos que ya la cumplen:
+  `toggle-provider.md` (`TenancyModuleServiceProvider`,
+  `FortifyServiceProvider::configureTwoFactorFeature()`, `BackupServiceProvider`)
+  y `test-con-otro-entorno.md` (`TwoFactorToggleTest`, `BackupTest`,
+  `ProductionConfigTest`, que convergieron en `withEnvironment()`).
+- **`docs/ops/upgrading-from-boilerplate.md`** — la receta para un derivado:
+  `git remote add kore`, `git fetch kore --tags`, `git merge vX.Y.Z`, leer la
+  nota de migración de **cada versión intermedia**, los archivos que siempre dan
+  conflicto y cómo reconciliar cada uno, qué hacer con las migraciones
+  publicadas, y cómo verificar después. Cierra con el camino inverso.
+- **`docs/modules/docs.md`** y **`compatibility:`** en el frontmatter de los
+  cuatro skills propios (parte del estándar Agent Skills; Claude Code lo acepta e
+  ignora).
+- **Tests nuevos (277 → 391)**: `KoreMcpTest` (15), el módulo Docs (43),
+  `AgentsSyncCommandTest` (7), `ChangelogSectionCommandTest` (9), 10 casos más en
+  `ArchCheckCommandTest` (73 → 83) y 30 más en `GitHooksTest` (6 → 36).
+
+### Cambiado
+
+- **Los ocho skills dejan de estar duplicados.** `.agents/skills/{nombre}/` es la
+  carpeta real —el formato del estándar Agent Skills— y `.claude/skills/{nombre}`
+  pasa a ser un **symlink relativo** a `../../.agents/skills/{nombre}`, uno por
+  skill (no uno de la carpeta padre: Claude Code sigue los enlaces a nivel de
+  skill individual, pero no el del contenedor). El reparto no es arbitrario:
+  Codex **no resuelve symlinks**, así que la carpeta real tiene que ser la que él
+  lee. Git versiona los enlaces (modo `120000`) (R49).
+- **`AGENTS.md` cambia de contenido**: gana la cabecera del
+  generador. Ya no es byte a byte igual que `CLAUDE.md`.
+- **`config/kore-app.php`** pasa de ocho a nueve claves con `docs.enabled`. Los
+  docs que citaban «ocho» dicen nueve (R41). **`.env.e2e`** pierde siete
+  variables fantasma que arrastraba desde la v1.0.0 (`TENANCY_MODE`,
+  `REVERB_ENABLED`, `OCTANE_*`, `SCOUT_*`, `SENTRY_ENABLED`).
+- **`ArchCheckCommand::checkCitedRulesExist()` barre sólo `.agents/skills`**:
+  con los symlinks, barrer los dos sets leería cada archivo dos veces.
+- **`AppServiceProvider::registerCoreCommands()`** registra `kore:agents:sync` y
+  `kore:changelog:section` junto a `ArchCheckCommand` y `PrePushCommand`.
+- **`docs/architecture/rules.md`**: rango `R1..R50`; R49 y R50 nuevas en §7;
+  **R43** pasa de `Manual · Warning` a `hook commit-msg · Error`; **R42** gana
+  `release.yml` / `kore:changelog:section` como enforcement; **R10** declara su
+  segunda excepción (el namespace de vistas, que sin rutas no expone nada; lo
+  necesita Larastan, que valida cada `view('docs::x')` contra la app que arranca
+  en el análisis); el «Índice por herramienta» suma R49 y R50 a
+  `kore:arch:check` y dos filas nuevas («Hooks de git» → R43, «GitHub Actions» →
+  R42); la tabla de capas suma `commit-msg` y `Release`; y los recuentos del
+  final pasan de **40/8** a **44/6** (manuales: R31, R32, R35, R36, R39 y R41).
+- **`resources/views/welcome.blade.php`** y el layout público: los enlaces a la
+  documentación pasan por `Route::has('docs.index')`: al visor si el toggle está
+  encendido, a GitHub si no. `resources/css/app.css` gana `.docs-prose` sobre
+  tokens de koreUi (sin instalar `@tailwindcss/typography`).
+- **`CLAUDE.md`** (y por tanto `AGENTS.md`): aviso de que `AGENTS.md` es
+  generado, línea «AI:» del stack con el MCP `kore` y los symlinks, `Core/Mcp/`
+  en el árbol, puntos 12 (R43) y 15 (R49 · R50) en las reglas de oro, la fila
+  `commit-msg` y `Release` en las capas, `DOCS_ENABLED` en los toggles, los
+  comandos nuevos, dos «NO HACER» más y la lista «Antes de finalizar» con
+  `kore:agents:sync` y el hook.
+- **Cifras al día** (R41) en `rules.md` y `pipeline.md`: 391 tests, 57 E2E en 15
+  archivos, `composer ci` 16 s, pre-push 4 s, pre-commit 0,7 s, commit-msg 0,3 s.
+- **Los números de las reglas de mentira de `ArchCheckCommandTest`** (los
+  fixtures que declaran `> Escape:`) suben de `R50..R54` a `R80..R84`: R50 ya es
+  una regla real.
+
+### Corregido
+
+- **`config/backup.php` no generaba el zip cuando `BACKUP_ARCHIVE_PASSWORD`
+  estaba presente y vacía.** `.env.example` trae `BACKUP_ARCHIVE_PASSWORD=`, así
+  que después del `composer setup` documentado `env()` devuelve `''` —no `null`—,
+  spatie da la encriptación por activada y falla al crear el archivo:
+  `backup:run` no dejaba nada y `BackupTest > it leaves the backup archive in the
+  clear without a password` se ponía en rojo. En CI pasaba porque allí no hay
+  `.env`. Es exactamente el fallo que la v1.3.0 corrigió en `config/logging.php`
+  y en `backup.notifications.mail.to`; a esta clave se le escapó. Ahora
+  `env('BACKUP_ARCHIVE_PASSWORD') ?: null`. Lo encontraron, por separado, los
+  tres agentes que trabajaron esta release.
+
+### Migración desde 1.3.0
+
+Nada de esto rompe una aplicación en marcha: no toca rutas existentes, módulos
+ni base de datos. Para traerlo a un derivado:
+
+1. **Skills a symlinks.** Con las dos carpetas idénticas (`diff -r .claude/skills
+   .agents/skills` vacío; si no, resuélvelo antes: la que se conserva es
+   `.agents/skills`):
+
+   ```bash
+   for name in $(ls .agents/skills); do
+     rm -rf ".claude/skills/$name"
+     ln -s "../../.agents/skills/$name" ".claude/skills/$name"
+   done
+   git add -A .claude/skills && git ls-files -s .claude/skills   # modo 120000
+   ```
+
+   Copia `app/Core/Console/ArchCheckCommand.php` (el check de R49 y el barrido
+   de citas) y verifica con `php artisan kore:arch:check --rule=R49`.
+2. **`AGENTS.md` generado.** Copia `app/Core/Support/AgentsFile.php`,
+   `app/Core/Console/AgentsSyncCommand.php` y su registro en
+   `AppServiceProvider::registerCoreCommands()`. Si tu `AGENTS.md` había
+   divergido de `CLAUDE.md`, **el comando se queda con `CLAUDE.md` y descarta la
+   diferencia**: `diff CLAUDE.md AGENTS.md` antes de correrlo, y lleva a
+   `CLAUDE.md` lo que quieras conservar. Después `php artisan kore:agents:sync`.
+3. **Hook de `commit-msg`.** Copia
+   `app/Core/Console/Hooks/ConventionalCommitMsgHook.php`, regístralo en
+   `config/git-hooks.php` → `'commit-msg'` y corre `php artisan
+   git-hooks:register` (desde el clon normal: en un git worktree el paquete falla
+   con «Git not initialized in this project», porque ahí `.git` es un archivo).
+   Sólo mira los commits nuevos: no reescribe nada.
+4. **MCP `kore`.** Copia `app/Core/Mcp/` entera y `routes/ai.php` (sin Boost,
+   `composer require --dev laravel/mcp`). Añade `"kore": { "command": "php",
+   "args": ["artisan", "mcp:start", "kore"] }` a `.mcp.json` y
+   `[mcp_servers.kore]` a `.codex/config.toml`. `KoreMcpTest` afirma cosas de
+   este repositorio (cuatro módulos, nueve toggles, tres roles): es un inventario,
+   ajústalo al tuyo.
+5. **Visor `/docs`.** Copia `app/Modules/Docs/`, regístralo en
+   `bootstrap/providers.php`, añade el bloque `docs` a `config/kore-app.php`,
+   `DOCS_ENABLED=true` a `.env.example` y `.env.e2e`, `DOCS_ENABLED=false`
+   forzado en `phpunit.xml` y **`DOCS_ENABLED=false` en el `.env` de
+   producción** (en un derivado privado, `docs/` es interno). El `.docs-prose` de
+   `resources/css/app.css` y el cambio de `welcome.blade.php` son opcionales.
+6. **Release y GitHub.** Copia `app/Core/Console/ChangelogSectionCommand.php` (y
+   su registro) y `.github/workflows/release.yml`; si tu `CHANGELOG.md` no usa
+   `## [X.Y.Z] - fecha`, adáptalo o el workflow fallará siempre. Copia
+   `.github/PULL_REQUEST_TEMPLATE.md`, `.github/ISSUE_TEMPLATE/` y
+   `.github/CODEOWNERS`, y **cambia `@CesarOvilla` por tu usuario**.
+7. **Catálogo y docs.** Añade R49 y R50 a tu `rules.md` (o `composer arch`
+   fallará por R40 en cuanto el código las cite), actualiza `R1..R48` →
+   `R1..R50`, y si copias `docs/patterns/`, `docs/ops/upgrading-from-boilerplate.md`
+   o `docs/modules/docs.md`, enlázalos desde tu `docs/README.md` (R40).
+
 ## [1.3.0] - 2026-09-03
 
 «Producción completa». El stack Docker de la v1.2.0 tenía volúmenes persistentes
@@ -770,7 +1024,8 @@ scaffold, cifras inventadas en los docs).
   el paquete cambiara. Republicarlas es un `vendor:publish` cuando de verdad
   haya que personalizarlas.
 
-[Unreleased]: https://github.com/koreui/kore-laravel/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/koreui/kore-laravel/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/koreui/kore-laravel/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/koreui/kore-laravel/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/koreui/kore-laravel/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/koreui/kore-laravel/compare/v1.0.0...v1.1.0

@@ -36,6 +36,13 @@ return [
         'enabled' => (bool) env('BACKUP_ENABLED', false),
     ],
 
+    // Visor de docs/ en /docs; pensado para local, apágalo en producción. Con
+    // el toggle apagado el módulo Docs no registra ninguna ruta y /docs es un
+    // 404 como cualquier otra ruta inexistente.
+    'docs' => [
+        'enabled' => (bool) env('DOCS_ENABLED', false),
+    ],
+
     'socialite' => [
         'google' => (bool) env('SOCIAL_GOOGLE', false),
         'github' => (bool) env('SOCIAL_GITHUB', false),

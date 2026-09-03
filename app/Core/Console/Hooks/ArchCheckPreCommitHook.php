@@ -22,6 +22,12 @@ use Illuminate\Console\Command;
  * mirar todo el repositorio para no dar falsos positivos —el de toggles— lo
  * hacen igualmente.
  *
+ * **Este hook no escribe nada.** Cuando `CLAUDE.md` o `AGENTS.md` entran en el
+ * commit, el check de R50 comprueba que el segundo esté generado desde el
+ * primero, pero no lo regenera: un hook que modifica archivos deja commiteado
+ * algo distinto de lo que el desarrollador revisó, y encima sin avisar. Falla y
+ * dice qué correr (`php artisan kore:agents:sync`).
+ *
  * Ver docs/architecture/rules.md §Capas de verificación.
  */
 final class ArchCheckPreCommitHook implements PreCommitHook

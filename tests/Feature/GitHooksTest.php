@@ -3,10 +3,12 @@
 declare(strict_types=1);
 
 use App\Core\Console\Hooks\ArchCheckPreCommitHook;
+use App\Core\Console\Hooks\ConventionalCommitMsgHook;
 use App\Core\Console\Hooks\PrePushCommand;
 use App\Core\Console\Hooks\PrePushHook;
 use Igorsgm\GitHooks\Exceptions\HookFailException;
 use Igorsgm\GitHooks\Git\ChangedFiles;
+use Igorsgm\GitHooks\Git\CommitMessage;
 use Igorsgm\GitHooks\Git\Log;
 use Illuminate\Console\Command;
 use Illuminate\Console\OutputStyle;
@@ -145,6 +147,95 @@ it('el hook de pre-push aborta el push y no llega a Pest si PHPStan falla', func
     }
 
     Process::assertRanTimes(fn ($process): bool => str_contains($process->command, 'pest'), 0);
+});
+
+/*
+|--------------------------------------------------------------------------
+| commit-msg · Conventional commits (R43)
+|--------------------------------------------------------------------------
+*/
+
+/**
+ * Pasa un mensaje por el hook. Devuelve `true` si el commit sigue adelante y
+ * lanza `HookFailException` si el hook lo aborta.
+ */
+function commitMessagePasses(string $message): bool
+{
+    $hook = new ConventionalCommitMsgHook;
+    $hook->setCommand(hookCommand());
+
+    $next = false;
+    $hook->handle(new CommitMessage($message, new ChangedFiles('')), function () use (&$next): bool {
+        $next = true;
+
+        return true;
+    });
+
+    return $next;
+}
+
+it('el hook de commit-msg acepta un asunto convencional', function (string $message): void {
+    expect(commitMessagePasses($message))->toBeTrue();
+})->with([
+    'sin ámbito' => 'feat: añade el filtro por rol',
+    'con ámbito' => 'feat(users): añade el filtro por rol',
+    'ámbito con separadores' => 'fix(auth/2fa): recupera los códigos de recuperación',
+    'breaking change' => 'refactor(users)!: el DTO deja de aceptar arrays',
+    'breaking change sin ámbito' => 'feat!: cambia el contrato del catálogo',
+    'chore' => 'chore(release): v1.4.0',
+    'docs' => 'docs: explica la regla de tres',
+    'test' => 'test(backup): cubre el zip cifrado',
+    'perf' => 'perf: evita el N+1 de la tabla de usuarios',
+    'ci' => 'ci: publica el release desde el CHANGELOG',
+    'build' => 'build(docker): añade mysql-client',
+    'style' => 'style: pint sobre los providers',
+    'revert' => 'revert: vuelve al middleware anterior',
+    'con cuerpo debajo' => "feat(users): añade el filtro por rol\n\nEl cuerpo puede decir lo que quiera.\nRefs: #12",
+]);
+
+it('el hook de commit-msg aborta un asunto que no lo es', function (string $message): void {
+    $hook = new ConventionalCommitMsgHook;
+    $hook->setCommand(hookCommand());
+
+    expect(fn (): mixed => $hook->handle(new CommitMessage($message, new ChangedFiles('')), fn (): bool => true))
+        ->toThrow(HookFailException::class);
+})->with([
+    'sin tipo' => 'arreglos varios',
+    'tipo inventado' => 'wip: a medias',
+    'sin los dos puntos' => 'feat añade el filtro',
+    'sin descripción' => 'feat:',
+    'tipo en mayúsculas' => 'Feat: añade el filtro',
+    'ámbito en mayúsculas' => 'feat(Users): añade el filtro',
+    'con espacio antes de los dos puntos' => 'feat : añade el filtro',
+    'el tipo no abre la línea' => 'por fin feat: añade el filtro',
+]);
+
+it('el hook de commit-msg deja pasar lo que escribe git por su cuenta', function (string $message): void {
+    expect(commitMessagePasses($message))->toBeTrue();
+})->with([
+    'merge' => "Merge branch 'main' into feat/dx",
+    'merge de pull request' => 'Merge pull request #12 from koreui/feat/dx',
+    'revert generado' => 'Revert "feat(users): añade el filtro por rol"',
+    'fixup' => 'fixup! feat(users): añade el filtro por rol',
+    'squash' => 'squash! feat(users): añade el filtro por rol',
+]);
+
+it('el hook de commit-msg mira la primera línea útil, no los comentarios de git', function (): void {
+    $message = "\n"
+        ."# Please enter the commit message for your changes. Lines starting\n"
+        ."# with '#' will be ignored, and an empty message aborts the commit.\n"
+        ."\n"
+        ."feat(dx): unifica los skills en .agents/skills\n";
+
+    expect(commitMessagePasses($message))->toBeTrue();
+});
+
+it('el hook de commit-msg no se mete con un mensaje vacío: de eso ya se ocupa git', function (): void {
+    expect(commitMessagePasses("\n# todo comentarios\n"))->toBeTrue();
+});
+
+it('el hook de commit-msg está registrado en config/git-hooks.php', function (): void {
+    expect(config('git-hooks.commit-msg'))->toContain(ConventionalCommitMsgHook::class);
 });
 
 /*

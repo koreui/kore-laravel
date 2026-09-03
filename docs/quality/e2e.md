@@ -81,7 +81,7 @@ tests/e2e/
 ├── fixtures/index.ts           # `test` extendido: opción `role` + fixtures asX
 ├── pages/                      # page objects
 │   ├── LoginPage.ts  RegisterPage.ts  ForgotPasswordPage.ts  MagicLinkPage.ts
-│   └── DashboardPage.ts  UsersIndexPage.ts  UserFormPage.ts
+│   └── DashboardPage.ts  UsersIndexPage.ts  UserFormPage.ts  DocsPage.ts
 ├── support/
 │   ├── env.ts                  # lee .env.e2e (baseURL, rutas)
 │   ├── users.ts                # cuentas sembradas + rutas de storageState
@@ -92,7 +92,8 @@ tests/e2e/
 └── specs/
     ├── smoke/landing.spec.ts
     ├── auth/{login,register,forgot-password,magic-link,protected-routes}.spec.ts
-    └── users/{index,create,edit,delete,dashboard}.spec.ts
+    ├── users/{index,create,edit,delete,dashboard}.spec.ts
+    └── docs/{smoke,navigation,authorization}.spec.ts
 ```
 
 ## Convenciones
@@ -151,7 +152,7 @@ Como mínimo, en `tests/e2e/specs/{modulo}/`:
 2. **Un happy path**: el caso de uso central de punta a punta (crear, enviar, publicar…), con datos únicos creados por el propio test.
 3. **Un spec de autorización por rol**: quién entra (200), quién no (403) y qué acciones se le ocultan en la UI.
 
-Usa el skill `kore-e2e-test` (`.claude/skills/kore-e2e-test/`) para el andamiaje.
+Usa el skill `kore-e2e-test` (`.agents/skills/kore-e2e-test/`) para el andamiaje.
 
 ## Depurar un fallo
 

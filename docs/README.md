@@ -6,7 +6,7 @@ Hub central de documentación. Las reglas vivas y resúmenes operativos están e
 
 ### Arquitectura
 
-- [`architecture/rules.md`](architecture/rules.md) — **catálogo R1–R48**: cada regla con su enforcement, su válvula de escape y la cicatriz que la originó
+- [`architecture/rules.md`](architecture/rules.md) — **catálogo R1–R50**: cada regla con su enforcement, su válvula de escape y la cicatriz que la originó
 - [`architecture/overview.md`](architecture/overview.md) — stack, capas y decisiones
 - [`architecture/module-pattern.md`](architecture/module-pattern.md) — cómo se construye un módulo (y qué carpetas puede tener)
 - [`architecture/toggles.md`](architecture/toggles.md) — `config/kore-app.php`
@@ -17,6 +17,7 @@ Hub central de documentación. Las reglas vivas y resúmenes operativos están e
 - [`modules/auth.md`](modules/auth.md) — Fortify + Sanctum + permission + 2FA + OTP + Socialite
 - [`modules/tenancy.md`](modules/tenancy.md) — stancl/tenancy + activación opt-in
 - [`modules/users.md`](modules/users.md) — módulo Users (primer CRUD del boilerplate)
+- [`modules/docs.md`](modules/docs.md) — visor de `docs/` en `/docs` detrás de `DOCS_ENABLED`
 
 ### Guías
 
@@ -28,10 +29,17 @@ Hub central de documentación. Las reglas vivas y resúmenes operativos están e
 - [`quality/pipeline.md`](quality/pipeline.md) — Pint · Larastan · PHPat · disallowed-calls · `kore:arch:check` · Rector · Pest · hooks · CI
 - [`quality/e2e.md`](quality/e2e.md) — Playwright: suite E2E, entorno aislado y convenciones
 
+### Patrones
+
+- [`patterns/README.md`](patterns/README.md) — la regla de tres: cuándo una solución sube al boilerplate y con qué formato
+- [`patterns/toggle-provider.md`](patterns/toggle-provider.md) — provider que no registra nada con el toggle apagado
+- [`patterns/test-con-otro-entorno.md`](patterns/test-con-otro-entorno.md) — arrancar la aplicación con otras variables de entorno en un test
+
 ### Operación
 
 - [`ops/deployment.md`](ops/deployment.md) — Docker en VPS (PHP-FPM + Nginx + MySQL + Redis)
 - [`ops/observability.md`](ops/observability.md) — Sentry + Pulse + Health + ActivityLog
+- [`ops/upgrading-from-boilerplate.md`](ops/upgrading-from-boilerplate.md) — actualizar un proyecto derivado desde el upstream (y devolverle mejoras)
 
 ### AI
 

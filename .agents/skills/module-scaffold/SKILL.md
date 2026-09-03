@@ -1,6 +1,7 @@
 ---
 name: module-scaffold
 description: Crear un módulo nuevo en app/Modules/{Domain} siguiendo el patrón Modular Monolith + Action de kore-laravel. Úsalo cuando el usuario pida "crear un módulo", "scaffold un dominio nuevo" o "agregar un Module" (ej. Billing, Orders, Inventory).
+compatibility: "kore-laravel (Laravel 12, Livewire 4, Pest 3). Claude Code, Codex y cualquier cliente Agent Skills."
 ---
 
 # Crear módulo en kore-laravel

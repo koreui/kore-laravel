@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Core\Console;
 
+use App\Core\Support\AgentsFile;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Support\Arr;
@@ -123,6 +124,8 @@ final class ArchCheckCommand extends Command
             'R40' => 'checkDocs',
             'R44' => 'checkEscapeValves',
             'R45' => 'checkBaselineExpiry',
+            'R49' => 'checkSkillsAreLinked',
+            'R50' => 'checkAgentsFileIsGenerated',
         ];
 
         if ($only !== null && ! isset($checks[$only])) {
@@ -836,13 +839,17 @@ final class ArchCheckCommand extends Command
      * Toda `R{n}` citada desde el código o desde CLAUDE/AGENTS existe en
      * rules.md. Se deja fuera `docs/`, porque `docs/audit/` cita las reglas de
      * OTRO proyecto y ésas no tienen por qué existir aquí.
+     *
+     * De los skills se barre sólo `.agents/skills`: desde la v1.4.0
+     * `.claude/skills/{nombre}` es un symlink a esa carpeta (R49), y barrer las
+     * dos sería leer cada archivo dos veces y reportar cada cita dos veces.
      */
     private function checkCitedRulesExist(): void
     {
         $known = $this->knownRules();
 
         $files = array_merge(
-            $this->findFiles(['app', 'tests', '.claude/skills', '.agents/skills'], ['*.php', '*.md', '*.ts']),
+            $this->findFiles(['app', 'tests', '.agents/skills'], ['*.php', '*.md', '*.ts']),
             $this->globFiles(['*.neon', 'CLAUDE.md', 'AGENTS.md']),
         );
 
@@ -911,6 +918,146 @@ final class ArchCheckCommand extends Command
         if (! $expiry instanceof CarbonImmutable || $expiry->startOfDay()->lessThan(CarbonImmutable::today())) {
             $this->violation('R45', $baseline, 1, "el baseline venció el {$matches[1]}: vacíalo o renueva la fecha con el equipo");
         }
+    }
+
+    /*
+    |----------------------------------------------------------------------
+    | R49 · los skills viven en .agents/skills y .claude/skills son enlaces
+    |----------------------------------------------------------------------
+    */
+    private function checkSkillsAreLinked(): void
+    {
+        $canonical = $this->root.'/.agents/skills';
+        $mirror = $this->root.'/.claude/skills';
+
+        if (! is_dir($canonical) || ! $this->skillsInScope()) {
+            return;
+        }
+
+        foreach ($this->skillNames($canonical) as $name) {
+            $this->assertSkillIsLinked($mirror.'/'.$name, $name);
+        }
+
+        if (! is_dir($mirror)) {
+            return;
+        }
+
+        foreach ($this->skillNames($mirror) as $name) {
+            if (is_dir($canonical.'/'.$name)) {
+                continue;
+            }
+
+            $this->violation('R49', $mirror.'/'.$name, 1, "en .claude/skills hay «{$name}», que no existe en .agents/skills: el original vive allí y aquí sólo van enlaces");
+        }
+    }
+
+    /**
+     * `.claude/skills/{nombre}` tiene que ser exactamente el symlink relativo
+     * `../../.agents/skills/{nombre}`.
+     *
+     * La ruta relativa importa: una absoluta rompe el repositorio para
+     * cualquier otro clon, y una copia real vuelve a la deriva que R49 vino a
+     * cerrar.
+     */
+    private function assertSkillIsLinked(string $link, string $name): void
+    {
+        $expected = '../../.agents/skills/'.$name;
+
+        if (! is_link($link)) {
+            $message = file_exists($link)
+                ? "es una copia y no un enlace: bórralo y crea el symlink «ln -s {$expected} .claude/skills/{$name}»"
+                : "falta el enlace en .claude/skills: créalo con «ln -s {$expected} .claude/skills/{$name}»";
+
+            $this->violation('R49', $link, 1, $message);
+
+            return;
+        }
+
+        $target = readlink($link);
+
+        if ($target !== $expected) {
+            $this->violation('R49', $link, 1, sprintf(
+                'el enlace apunta a «%s» y tiene que apuntar a «%s»',
+                $target === false ? '?' : $target,
+                $expected,
+            ));
+        }
+    }
+
+    /**
+     * Nombres de los skills de una carpeta: cada entrada que sea un directorio
+     * o un enlace, sin los `.` de sistema.
+     *
+     * @return array<int, string>
+     */
+    private function skillNames(string $directory): array
+    {
+        $entries = scandir($directory);
+
+        if ($entries === false) {
+            return [];
+        }
+
+        $names = array_values(array_filter(
+            $entries,
+            fn (string $entry): bool => ! str_starts_with($entry, '.')
+                && (is_dir($directory.'/'.$entry) || is_link($directory.'/'.$entry)),
+        ));
+
+        sort($names);
+
+        return $names;
+    }
+
+    /**
+     * Con `--files`, R49 sólo corre si el commit toca alguno de los dos sets:
+     * es un check de estructura de carpetas, no de contenido de archivo.
+     */
+    private function skillsInScope(): bool
+    {
+        if ($this->scope === null) {
+            return true;
+        }
+
+        foreach ($this->scope as $path) {
+            if (str_starts_with($path, $this->root.'/.agents/skills') || str_starts_with($path, $this->root.'/.claude/skills')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /*
+    |----------------------------------------------------------------------
+    | R50 · AGENTS.md se genera desde CLAUDE.md
+    |----------------------------------------------------------------------
+    */
+    private function checkAgentsFileIsGenerated(): void
+    {
+        $agents = new AgentsFile($this->root);
+
+        if (! $agents->sourceExists()) {
+            return;
+        }
+
+        if (! $this->inScope($agents->sourcePath()) && ! $this->inScope($agents->generatedPath())) {
+            return;
+        }
+
+        if ($agents->isInSync()) {
+            return;
+        }
+
+        // El check no regenera nada: un hook que escribe archivos deja el
+        // commit distinto de lo que el desarrollador revisó.
+        $this->violation(
+            'R50',
+            $agents->generatedPath(),
+            1,
+            AgentsFile::GENERATED.' no coincide con '.AgentsFile::SOURCE
+            .': corre `php artisan kore:agents:sync` y vuelve a añadir '.AgentsFile::GENERATED.' al commit',
+        );
     }
 
     /*

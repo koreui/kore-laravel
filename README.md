@@ -13,7 +13,7 @@ Boilerplate Laravel 12 production-ready con Livewire 4, Tailwind CSS v4, koreUi 
 - **Calidad** Pint + Larastan nivel 8 + PHPat + `spaze/phpstan-disallowed-calls` + `kore:arch:check` + Rector
 - **Multi-tenancy** stancl/tenancy v3 (toggle)
 - **Observabilidad** Sentry + Laravel Pulse + spatie/laravel-health + spatie/laravel-activitylog
-- **AI** Laravel Boost (MCP) + CLAUDE.md + AGENTS.md + skills locales
+- **AI** Laravel Boost (MCP) + MCP propio `kore` + `CLAUDE.md` (y `AGENTS.md`, generado desde él) + skills en `.agents/skills/`
 
 ## Arquitectura
 
@@ -51,12 +51,18 @@ Para desactivarlo, `TENANCY_ENABLED=false` en `.env` y todo el módulo deja de b
 
 Reglas vivas y resúmenes en `CLAUDE.md` / `AGENTS.md`. Detalles en [`docs/`](docs/README.md):
 
-- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **las 48 reglas del boilerplate** (`R1..R48`), cada una con su verificador, su severidad y la cicatriz que la originó
+- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **las 50 reglas del boilerplate** (`R1..R50`), cada una con su verificador, su severidad y la cicatriz que la originó
 - [`docs/architecture/`](docs/architecture/) — overview, module-pattern, toggles, authorization
-- [`docs/modules/`](docs/modules/) — auth, tenancy, users
+- [`docs/modules/`](docs/modules/) — auth, tenancy, users, docs
 - [`docs/ops/`](docs/ops/) — deployment, observability
 - [`docs/quality/`](docs/quality/) — pipeline (Pint, Larastan, PHPat, disallowed-calls, `kore:arch:check`, Rector, Pest, hooks, CI) y E2E
-- [`docs/ai/`](docs/ai/) — trabajar con la AI (Boost, skills)
+- [`docs/ai/`](docs/ai/) — trabajar con la AI (Boost, MCP `kore`, skills)
+- [`docs/patterns/`](docs/patterns/README.md) — la regla de tres: cuándo una solución sube al boilerplate, y cómo vuelve una mejora de un proyecto hijo al padre
+- [`docs/ops/upgrading-from-boilerplate.md`](docs/ops/upgrading-from-boilerplate.md) — actualizar un proyecto derivado desde el upstream
+
+Con `DOCS_ENABLED=true` (el default de `.env.example`) todo esto se lee también
+en **`/docs`**, servido por la propia aplicación: mismos archivos, enlaces entre
+documentos reescritos y la UI del proyecto. En producción se deja apagado.
 
 > `koreUi` se consume desde Packagist (`kore-ui/kore-ui ^2.2`). No hay path repository; un `composer install` lo instala como cualquier otra dependencia. Código fuente: [github.com/koreui/kore-ui](https://github.com/koreui/kore-ui).
 
@@ -134,12 +140,18 @@ Detalles completos (firewall, SSH, fail2ban, server block del Nginx del host, de
 
 ## Trabajar con la AI
 
-Este repo incluye `CLAUDE.md`, `AGENTS.md`, `.mcp.json` y skills locales en `.claude/skills/` y `.agents/skills/`. Cualquier asistente compatible (Claude Code, Codex, etc.) los detecta automáticamente.
+Este repo incluye `CLAUDE.md`, `.mcp.json` (con `laravel-boost`, `kore-ui` y el MCP propio `kore`) y ocho skills. Cualquier asistente compatible (Claude Code, Codex, etc.) los detecta automáticamente.
 
-**Skills propios:**
+Dos detalles del montaje, y los dos son reglas del catálogo:
+
+- Los skills viven **una sola vez**, en `.agents/skills/` (el formato del estándar [Agent Skills](https://agentskills.io)); `.claude/skills/{nombre}` es un symlink relativo a cada uno (R49). Claude Code sigue esos enlaces; Codex no resuelve symlinks, por eso la carpeta real es la suya.
+- `AGENTS.md` **no se edita**: se genera desde `CLAUDE.md` con `php artisan kore:agents:sync` (R50), y `composer arch` falla si se desincronizan.
+
+**Skills propios** (`.agents/skills/`):
 - `module-scaffold` — crear un módulo nuevo en `app/Modules/{Domain}/` con todo el patrón
 - `kore-action-create` — crear una Action (caso de uso) siguiendo `{Domain}{Object}{Verb}Action`
 - `kore-livewire-create` — crear un componente Livewire 4 con vistas koreUi y registro en provider
+- `kore-e2e-test` — crear o ampliar un spec de Playwright en `tests/e2e/`
 
 Skills oficiales (de Laravel Boost): `laravel-best-practices`, `livewire-development`, `pennant-development`, `pest-testing`.
 

@@ -1,0 +1,12 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: Documentación del boilerplate
+    url: https://github.com/koreui/kore-laravel/blob/main/docs/README.md
+    about: Índice de docs. Antes de abrir una incidencia, mira si la respuesta está en architecture/rules.md, quality/pipeline.md u ops/.
+  - name: Catálogo de reglas (R1–R50)
+    url: https://github.com/koreui/kore-laravel/blob/main/docs/architecture/rules.md
+    about: Cada regla con su enforcement, su válvula de escape y la cicatriz que la originó. Si algo del build falla, empieza aquí.
+  - name: Actualizar un proyecto derivado
+    url: https://github.com/koreui/kore-laravel/blob/main/docs/ops/upgrading-from-boilerplate.md
+    about: Cómo traer una release del boilerplate a tu proyecto y qué archivos reconciliar a mano.

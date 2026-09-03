@@ -1,4 +1,11 @@
 @php
+    // Con DOCS_ENABLED=true el visor de /docs existe y es a donde se enlaza; sin
+    // él, la documentación vive en GitHub. Un solo sitio decide, y las dos
+    // salidas son enlaces válidos (antes /docs era un 404).
+    $docsUrl = Route::has('docs.index')
+        ? route('docs.index', absolute: false)
+        : 'https://github.com/koreui/kore-laravel/tree/main/docs';
+
     $features = [
         ['icon' => 'layers', 'title' => __('Modular Monolith'), 'body' => __('Cada dominio aislado en app/Modules con su propio provider, rutas, vistas, modelos y tests.')],
         ['icon' => 'shield-check', 'title' => __('Auth completo'), 'body' => __('Fortify · Sanctum · 2FA · Magic links · Socialite. Roles + permisos con bypass de superadmin.')],
@@ -23,7 +30,7 @@
             <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-kore-border bg-kore-surface px-4 py-1.5 text-sm">
                 <span class="flex h-2 w-2 animate-pulse rounded-full bg-kore-success"></span>
                 <span class="text-kore-muted-fg">v1.0 disponible</span>
-                <a href="https://github.com/koreui/kore-laravel/tree/main/docs" class="font-medium text-kore-primary">{{ __('Ver docs') }} &rarr;</a>
+                <a href="{{ $docsUrl }}" class="font-medium text-kore-primary">{{ __('Ver docs') }} &rarr;</a>
             </div>
 
             <h1 class="mx-auto max-w-4xl text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
@@ -176,7 +183,7 @@
                     <span class="text-sm text-kore-muted-fg">{{ config('app.name') }} &copy; {{ now()->year }}. MIT License.</span>
                 </div>
                 <div class="flex items-center gap-4 text-sm">
-                    <a href="https://github.com/koreui/kore-laravel/tree/main/docs" class="text-kore-muted-fg transition-colors hover:text-kore-fg">{{ __('Docs') }}</a>
+                    <a href="{{ $docsUrl }}" class="text-kore-muted-fg transition-colors hover:text-kore-fg">{{ __('Docs') }}</a>
                     <a href="/up" class="inline-flex items-center gap-1.5 text-kore-muted-fg transition-colors hover:text-kore-fg">
                         <span class="h-1.5 w-1.5 rounded-full bg-kore-success"></span>
                         {{ __('Estado') }}

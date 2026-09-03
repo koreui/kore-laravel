@@ -17,6 +17,13 @@ experimental_use_rmcp_client = true
 command = "php"
 args = ["artisan", "boost:mcp"]
 
+# Servidor MCP propio del boilerplate (app/Core/Mcp/KoreServer.php, registrado
+# en routes/ai.php): módulos, toggles, permisos, reglas y kore:arch:check.
+# Misma definición que en .mcp.json.
+[mcp_servers.kore]
+command = "php"
+args = ["artisan", "mcp:start", "kore"]
+
 # Documentación de los componentes koreUi (list-components, get-component-docs...).
 # Misma URL que .mcp.json.
 [mcp_servers.kore-ui]

@@ -48,6 +48,14 @@
         <env name="MAIL_MAILER" value="array" force="true"/>
         <env name="QUEUE_CONNECTION" value="sync" force="true"/>
         <env name="SESSION_DRIVER" value="array" force="true"/>
+        <!--
+            El visor de /docs va apagado por defecto en la suite: .env.example lo
+            trae en true (es cómodo en local) y sin este force el desarrollador
+            que copia .env.example vería fallar los tests que comprueban el caso
+            "toggle apagado". Los que necesitan el visor lo encienden con el
+            helper withEnvironment() de tests/Pest.php.
+        -->
+        <env name="DOCS_ENABLED" value="false" force="true"/>
         <env name="PULSE_ENABLED" value="false" force="true"/>
         <env name="TELESCOPE_ENABLED" value="false" force="true"/>
         <env name="NIGHTWATCH_ENABLED" value="false" force="true"/>

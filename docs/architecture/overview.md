@@ -18,7 +18,7 @@
 | Tests           | Pest 3 + arch tests (`tests/Arch/`) + E2E Playwright (`tests/e2e/`) |
 | Calidad         | Pint + Larastan (larastan 3, nivel 8) + PHPat + `spaze/phpstan-disallowed-calls` + `kore:arch:check` + Rector |
 | Observabilidad  | Sentry · Pulse · spatie/laravel-health · spatie/laravel-activitylog |
-| AI              | Laravel Boost MCP + CLAUDE.md/AGENTS.md     |
+| AI              | Laravel Boost MCP + MCP propio `kore` + CLAUDE.md (AGENTS.md generado) + skills en `.agents/skills/` |
 
 ## Estructura de carpetas
 
@@ -29,14 +29,17 @@ app/
 │   ├── Concerns/                  # traits compartidos (hoy vacía)
 │   ├── Console/                   # comandos transversales
 │   │   ├── ArchCheckCommand.php   # kore:arch:check
-│   │   └── Hooks/                 # hooks de git (pre-commit, pre-push)
+│   │   ├── AgentsSyncCommand.php  # kore:agents:sync
+│   │   ├── ChangelogSectionCommand.php  # kore:changelog:section
+│   │   └── Hooks/                 # hooks de git (pre-commit, commit-msg, pre-push)
 │   ├── Contracts/                 # interfaces (puentes entre módulos)
 │   │   └── AuthorizationCatalog.php
 │   ├── Data/
 │   │   ├── Data.php               # base DTO (extiende spatie/laravel-data)
 │   │   └── Authorization/         # DTOs que cruzan la frontera Auth → Users
 │   ├── Enums/                     # valores compartidos (SystemRole)
-│   └── Support/                   # helpers (hoy vacía)
+│   ├── Mcp/                       # MCP server propio (KoreServer + Tools/)
+│   └── Support/                   # helpers (AgentsFile)
 ├── Modules/{Domain}/              # cada feature aislada (ver module-pattern.md)
 ├── Models/User.php                # único modelo verdaderamente global
 └── Providers/
@@ -77,7 +80,7 @@ la cicatriz real que la originó. Este resumen sólo da el titular.
 | [R35](rules.md) | un test Pest por Action, componente Livewire y ruta |
 
 Ver detalle en:
-- [`rules.md`](rules.md) — **el catálogo completo `R1..R48`** (fuente de verdad)
+- [`rules.md`](rules.md) — **el catálogo completo `R1..R50`** (fuente de verdad)
 - [`module-pattern.md`](module-pattern.md) — cómo se construye un módulo
 - [`toggles.md`](toggles.md) — `config/kore-app.php`
 - [`../quality/pipeline.md`](../quality/pipeline.md) — pipeline que hace cumplir esto

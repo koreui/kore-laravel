@@ -186,7 +186,7 @@ final class UserCreateAction extends Action
 `UserUpdateAction::handle(User $user, UserData $data): User` y
 `UserDeleteAction::handle(User $user): void` siguen el mismo molde.
 
-Skill: `.claude/skills/kore-action-create/`.
+Skill: `.agents/skills/kore-action-create/`.
 
 ---
 
@@ -555,4 +555,4 @@ Los componentes `<x-kore::*>` (input, select, password, datepicker, upload, etc.
 
 ## Skill de la AI
 
-Para crear un módulo CRUD desde cero, pide a la AI ejecutar el skill `module-scaffold` (`.claude/skills/module-scaffold/SKILL.md`). Para crear sólo Actions o componentes Livewire, hay skills específicos: `kore-action-create`, `kore-livewire-create`.
+Para crear un módulo CRUD desde cero, pide a la AI ejecutar el skill `module-scaffold` (`.agents/skills/module-scaffold/SKILL.md`). Para crear sólo Actions o componentes Livewire, hay skills específicos: `kore-action-create`, `kore-livewire-create`.

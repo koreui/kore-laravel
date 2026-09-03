@@ -225,11 +225,11 @@ it('R44 · pasa con las dos formas bien escritas y una fecha futura', function (
  * en el catálogo. Estos casos usan un catálogo propio para poder declarar cada
  * variante sin depender del de verdad.
  */
-$catalogoConEscapes = "### R50 · sólo accepted\n> Escape: `arch-accepted`\n\n"
-    ."### R51 · sólo exception\n> Escape: `arch-exception`\n\n"
-    ."### R52 · ninguna\n> Escape: ninguna\n\n"
-    ."### R53 · las dos\n> Escape: `arch-accepted` o `arch-exception`\n\n"
-    ."### R54 · sin escape declarado\n";
+$catalogoConEscapes = "### R80 · sólo accepted\n> Escape: `arch-accepted`\n\n"
+    ."### R81 · sólo exception\n> Escape: `arch-exception`\n\n"
+    ."### R82 · ninguna\n> Escape: ninguna\n\n"
+    ."### R83 · las dos\n> Escape: `arch-accepted` o `arch-exception`\n\n"
+    ."### R84 · sin escape declarado\n";
 
 it('R44 · rechaza la forma de válvula que la regla no declara', function (string $valvula, string $esperado) use ($catalogoConEscapes): void {
     $root = archFixture(['app/Demo/Forma.php' => "<?php\n\n// {$valvula}\n"], $catalogoConEscapes);
@@ -239,20 +239,20 @@ it('R44 · rechaza la forma de válvula que la regla no declara', function (stri
     expect($exit)->toBe(1)->and($output)->toContain($esperado);
 })->with([
     'exception sobre una regla de sólo accepted' => [
-        'arch-exception: R50 · deuda · @cesar · 2099-12-31',
-        'R50 sólo admite arch-accepted',
+        'arch-exception: R80 · deuda · @cesar · 2099-12-31',
+        'R80 sólo admite arch-accepted',
     ],
     'accepted sobre una regla de sólo exception' => [
-        'arch-accepted: R51 · decisión · @cesar',
-        'R51 sólo admite arch-exception',
+        'arch-accepted: R81 · decisión · @cesar',
+        'R81 sólo admite arch-exception',
     ],
     'accepted sobre una regla sin válvula' => [
-        'arch-accepted: R52 · decisión · @cesar',
-        'R52 no admite válvula',
+        'arch-accepted: R82 · decisión · @cesar',
+        'R82 no admite válvula',
     ],
     'exception sobre una regla sin válvula' => [
-        'arch-exception: R52 · deuda · @cesar · 2099-12-31',
-        'R52 no admite válvula',
+        'arch-exception: R82 · deuda · @cesar · 2099-12-31',
+        'R82 no admite válvula',
     ],
 ]);
 
@@ -263,12 +263,12 @@ it('R44 · acepta la forma que la regla sí declara', function (string $valvula)
 
     expect($exit)->toBe(0);
 })->with([
-    'accepted donde toca' => 'arch-accepted: R50 · decisión revisada · @cesar',
-    'exception donde toca' => 'arch-exception: R51 · deuda con fecha · @cesar · 2099-12-31',
-    'accepted en una regla que admite las dos' => 'arch-accepted: R53 · decisión · @cesar',
-    'exception en una regla que admite las dos' => 'arch-exception: R53 · deuda · @cesar · 2099-12-31',
-    'accepted en una regla que no declara escape' => 'arch-accepted: R54 · el catálogo no restringe · @cesar',
-    'exception en una regla que no declara escape' => 'arch-exception: R54 · el catálogo no restringe · @cesar · 2099-12-31',
+    'accepted donde toca' => 'arch-accepted: R80 · decisión revisada · @cesar',
+    'exception donde toca' => 'arch-exception: R81 · deuda con fecha · @cesar · 2099-12-31',
+    'accepted en una regla que admite las dos' => 'arch-accepted: R83 · decisión · @cesar',
+    'exception en una regla que admite las dos' => 'arch-exception: R83 · deuda · @cesar · 2099-12-31',
+    'accepted en una regla que no declara escape' => 'arch-accepted: R84 · el catálogo no restringe · @cesar',
+    'exception en una regla que no declara escape' => 'arch-exception: R84 · el catálogo no restringe · @cesar · 2099-12-31',
 ]);
 
 it('R44 · una válvula de la forma equivocada tampoco exime a su check', function () use ($catalogoConEscapes): void {
@@ -470,6 +470,124 @@ it('R45 · pasa con una fecha futura y cuando no hay baseline', function (): voi
     [$exitSinBaseline] = archCheck($sinBaseline, 'R45');
 
     expect($exitVigente)->toBe(0)->and($exitSinBaseline)->toBe(0);
+});
+
+/*
+|--------------------------------------------------------------------------
+| R49 · los skills viven en .agents/skills y .claude/skills son enlaces
+|--------------------------------------------------------------------------
+*/
+
+/** El SKILL.md mínimo que necesita un fixture de R49. */
+function skillStub(string $name): string
+{
+    return "---\nname: {$name}\ndescription: Un skill de mentira.\n---\n\n# {$name}\n";
+}
+
+it('R49 · pasa cuando cada skill tiene su symlink relativo', function (): void {
+    $root = archFixture(['.agents/skills/demo/SKILL.md' => skillStub('demo')]);
+
+    File::ensureDirectoryExists($root.'/.claude/skills');
+    symlink('../../.agents/skills/demo', $root.'/.claude/skills/demo');
+
+    [$exit] = archCheck($root, 'R49');
+
+    expect($exit)->toBe(0);
+});
+
+it('R49 · falla cuando el skill está copiado en .claude/skills en vez de enlazado', function (): void {
+    $root = archFixture([
+        '.agents/skills/demo/SKILL.md' => skillStub('demo'),
+        '.claude/skills/demo/SKILL.md' => skillStub('demo'),
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R49');
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('R49')
+        ->and($output)->toContain('es una copia y no un enlace');
+});
+
+it('R49 · falla cuando falta el enlace', function (): void {
+    $root = archFixture(['.agents/skills/demo/SKILL.md' => skillStub('demo')]);
+
+    [$exit, $output] = archCheck($root, 'R49');
+
+    expect($exit)->toBe(1)->and($output)->toContain('falta el enlace');
+});
+
+it('R49 · falla cuando el enlace no apunta a la ruta relativa esperada', function (): void {
+    $root = archFixture(['.agents/skills/demo/SKILL.md' => skillStub('demo')]);
+
+    File::ensureDirectoryExists($root.'/.claude/skills');
+    // Absoluto: funciona en esta máquina y en ninguna otra.
+    symlink($root.'/.agents/skills/demo', $root.'/.claude/skills/demo');
+
+    [$exit, $output] = archCheck($root, 'R49');
+
+    expect($exit)->toBe(1)->and($output)->toContain('tiene que apuntar a «../../.agents/skills/demo»');
+});
+
+it('R49 · falla cuando .claude/skills tiene algo que no existe en .agents/skills', function (): void {
+    $root = archFixture([
+        '.agents/skills/demo/SKILL.md' => skillStub('demo'),
+        '.claude/skills/huerfano/SKILL.md' => skillStub('huerfano'),
+    ]);
+
+    symlink('../../.agents/skills/demo', $root.'/.claude/skills/demo');
+
+    [$exit, $output] = archCheck($root, 'R49');
+
+    expect($exit)->toBe(1)->and($output)->toContain('«huerfano», que no existe en .agents/skills');
+});
+
+it('R49 · no dice nada cuando el proyecto no tiene skills', function (): void {
+    [$exit] = archCheck(archFixture([]), 'R49');
+
+    expect($exit)->toBe(0);
+});
+
+/*
+|--------------------------------------------------------------------------
+| R50 · AGENTS.md se genera desde CLAUDE.md
+|--------------------------------------------------------------------------
+*/
+
+it('R50 · falla cuando AGENTS.md no es lo que generaría el comando', function (): void {
+    $root = archFixture([
+        'CLAUDE.md' => "# Proyecto\n",
+        'AGENTS.md' => "# Proyecto\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R50');
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('R50')
+        ->and($output)->toContain('kore:agents:sync');
+});
+
+it('R50 · falla cuando AGENTS.md ni siquiera existe', function (): void {
+    $root = archFixture(['CLAUDE.md' => "# Proyecto\n"]);
+
+    [$exit] = archCheck($root, 'R50');
+
+    expect($exit)->toBe(1);
+});
+
+it('R50 · pasa después de correr kore:agents:sync', function (): void {
+    $root = archFixture(['CLAUDE.md' => "# Proyecto\n"]);
+
+    Artisan::call('kore:agents:sync', ['--root' => $root]);
+
+    [$exit] = archCheck($root, 'R50');
+
+    expect($exit)->toBe(0);
+});
+
+it('R50 · no dice nada en un proyecto sin CLAUDE.md', function (): void {
+    [$exit] = archCheck(archFixture([]), 'R50');
+
+    expect($exit)->toBe(0);
 });
 
 /*

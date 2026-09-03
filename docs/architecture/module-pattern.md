@@ -238,6 +238,6 @@ Tres opciones, de menor a mayor automatización:
 1. **Manual**: crea las carpetas (sólo las de la lista de R3), copia plantillas
    de arriba, registra el provider en `bootstrap/providers.php` y comprueba con
    `composer arch` + `composer analyse` antes del primer commit.
-2. **Con la AI** (Claude Code / Codex): pide "crear módulo {Domain}". El skill `module-scaffold` (`.claude/skills/module-scaffold/SKILL.md`) tiene las instrucciones detalladas.
+2. **Con la AI** (Claude Code / Codex): pide "crear módulo {Domain}". El skill `module-scaffold` (`.agents/skills/module-scaffold/SKILL.md`) tiene las instrucciones detalladas.
 3. **Como referencia**: lee `app/Modules/Users/` (CRUD completo con Form + Data
    + Actions + Events + Rules), `app/Modules/Auth/` o `app/Modules/Tenancy/`.
