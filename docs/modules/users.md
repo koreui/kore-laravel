@@ -307,7 +307,7 @@ y nunca el password.
 
 - **Agregar campo nuevo al usuario** (ej. `phone`):
   1. Migration que agrega la columna
-  2. Súmalo a `User::$fillable` (obligatorio: ya no hay `Model::unguard()` global)
+  2. Súmalo al `#[Fillable]` de `User` (obligatorio: ya no hay `Model::unguard()` global)
   3. Súmalo a `UserForm` (propiedad + rule + `toData()`) y a `UserData`
   4. Súmalo a `UserCreateAction` / `UserUpdateAction`
   5. Agrégalo a la vista `form-component.blade.php`

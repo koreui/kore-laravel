@@ -10,6 +10,191 @@ desde el upstream (`git remote add kore https://github.com/koreui/kore-laravel`)
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-03
+
+«Laravel 13 + Pest 5». Primer *major* del boilerplate: sube el framework, el
+runner de tests y tres paquetes con major nuevo, adopta los idiomas de Laravel
+13 (`#[Fillable]`, `#[Signature]`, `#[Description]`), activa el endurecimiento
+de serialización que trae el esqueleto 13 y añade **passkeys (WebAuthn)** como
+toggle `AUTH_PASSKEYS`. koreUi no necesitó ni una línea de código: sólo ampliar
+su constraint a `^12.0|^13.0` (v2.3.1), verificado con sus 2200 tests sobre
+Laravel 13.30 y con la suite E2E entera del boilerplate.
+
+La suite Pest pasa de 391 a **410** tests y la E2E de 57 a **63** (dos de los seis
+de passkeys firman con un autenticador WebAuthn virtual por CDP).
+
+### Cambiado
+
+- **Laravel 12.69 → 13.30** (`laravel/framework ^13.0`). Lo que hubo que tocar
+  en el boilerplate: **nada de código de aplicación**. `bootstrap/app.php`,
+  `config/cache.php` y `config/session.php` ya usaban el formato de prefijos con
+  guiones de 13 (así que **no se invalidan cachés ni cookies al subir**),
+  `config/permission.php` y la migración de permisos son idénticos al stub de
+  v8, y `tests/Pest.php` y los arch tests no cambian de API. Dos claves nuevas en
+  `lang/es.json` porque Laravel 13 cambió el asunto de dos notificaciones del
+  framework (`Reset your password`, `Verify your email address`; la segunda no
+  está en la guía de upgrade y la detectó `TranslationsTest`).
+- **Pest 3.8 → 5.1, PHPUnit 11.5 → 13.3**, `pest-plugin-laravel` 5. Sin cambios
+  en `tests/Pest.php`, `phpunit.xml` (`pest --migrate-configuration` no tiene
+  nada que migrar) ni en `tests/Arch/ArchitectureTest.php`: los presets `php()`,
+  `security()` y `laravel()->ignoring([...])` son los mismos. Ninguna regla se
+  relajó.
+- **`spatie/laravel-permission` 7.4 → 8.3** y **`laravel/tinker` 2 → 3**. Los
+  renombres de permission v8 (`PermissionAttached` → `PermissionAttachedEvent`,
+  `CacheReset` → `CacheResetCommand`) no tocan nada del proyecto; `Role`,
+  `ModulesSeeder` y `AuthorizationCatalog` quedan igual.
+- **Vite 7 → 8.2, `laravel-vite-plugin` 2 → 3.2**. `vite.config.js` sin cambios.
+- **Idiomas de Laravel 13 vía Rector** (`LaravelLevelSetList::UP_TO_LARAVEL_130`):
+  `#[Fillable]` y `#[Hidden]` en `User` y `Module` en vez de `$fillable` /
+  `$hidden`, y `#[Signature]` / `#[Description]` en todos los comandos (Core, Auth y Tenancy). R27
+  («mass assignment explícito») se cumple igual; el catálogo y
+  `module-pattern.md` lo dicen con el atributo.
+- **Endurecimiento del esqueleto 13**: `config/cache.php` →
+  `'serializable_classes' => false` (la caché deja de `unserialize()` objetos:
+  cierra cadenas de gadgets si se filtra `APP_KEY`) y `config/session.php` →
+  `'serialization' => 'json'` (una sesión manipulada no puede instanciar clases).
+  `PreventRequestForgery` ya viene en el grupo `web` de 13 sin tocar
+  `bootstrap/app.php`; `config/sanctum.php` conserva el alias que publica el
+  paquete.
+- **CI**: matriz PHP 8.4 / 8.5. `composer why-not php 8.5` no encuentra ningún
+  bloqueo y el `polyfill-php85` que arrastra Laravel 13 (`array_first()`,
+  `array_last()`) no choca con nada del proyecto.
+- **Boost**: guidelines regeneradas para Laravel 13 (`boost:install
+  --guidelines`) y `AGENTS.md` regenerado con `kore:agents:sync`. Los cuatro
+  skills propios declaran `compatibility: Laravel 13, Livewire 4, Pest 5`.
+- **Decisión: los atributos `#[Middleware]` / `#[Authorize]` de Laravel 13 no se
+  aplican.** Son de *controller*, no valen para Livewire (R23 se queda como
+  está: la autorización vive en el componente porque `/livewire/update` no pasa
+  por el middleware de la ruta), y en los tres controllers de rutas que tenemos
+  moverían la política de acceso fuera de `Routes/web.php`, que es donde hoy se
+  lee de un vistazo quién entra. Documentado en `authorization.md`.
+- **`stancl/tenancy` se queda en 3.10**: no hay v4 estable y 3.10 declara
+  Laravel 13. `tenancy.md` avisa del cambio de precedencia de rutas con dominio
+  de Laravel 13.
+
+### Añadido
+
+- **Passkeys (WebAuthn) detrás del toggle `AUTH_PASSKEYS`** (encendido por
+  defecto). Entrar con la huella, la cara o el PIN del dispositivo, sin
+  contraseña. La criptografía la ponen `laravel/passkeys` 0.2 y Fortify 1.39
+  (`Features::passkeys(['confirmPassword' => true])`); el boilerplate añade el
+  toggle, la pantalla, el botón del login y el rate limit.
+  - **Toggle**: `config/kore-app.php` → `auth.passkeys`. Décima —y por ahora
+    última— clave del archivo. Lo aplica
+    `FortifyServiceProvider::configurePasskeysFeature()` desde `register()`,
+    porque `config/fortify.php` no puede leer `kore-app` (R12): es la **variante
+    B** del patrón `docs/patterns/toggle-provider.md`, la misma que ya usaba el
+    2FA, repetida sin cambiarle una coma.
+  - **Pantalla `/user/passkeys`** (`passkeys.index`): componente Livewire
+    `App\Modules\Auth\Http\Livewire\Passkeys`, con alta, listado y revocación.
+    Enlazada desde el sidebar («Cuenta → Passkeys») y desde el dashboard.
+  - **Botón «Entrar con passkey»** en `/login`, sólo si la ruta
+    `passkey.login` existe. Los errores del navegador (cancelación, dispositivo
+    no soportado, dominio inválido) se pintan en un `<x-kore::alert>` sin
+    recargar, traducidos por `error.name` y no por su texto en inglés (R33).
+  - **Cliente JS oficial**: `@laravel/passkeys` (dependencia npm nueva), envuelto
+    en el componente Alpine `korePasskeys` de `resources/js/app.js`.
+  - **`config/fortify.php` → `passkeys`**: `relying_party_id` y
+    `allowed_origins` derivados de `APP_URL` con `env()` (nunca
+    `config('app.url')`: R12), `user_handle_secret` desde `APP_KEY` con
+    `PASSKEYS_USER_HANDLE_SECRET` como escape para rotarla, y `timeout` de 60 s.
+    `config/passkeys.php` **no** se publica: Fortify sobrescribe sus claves.
+  - **Rate limit `passkeys`** (R28): `fortify.limiters.passkeys`, 30/min por
+    usuario cuando lo hay y por IP cuando no (`POST /passkeys/login` es un login
+    sin contraseña). Cuelga de seis de las siete rutas que publica Fortify (la de borrado no lleva
+    throttle).
+  - **Tabla `passkeys`**: migración publicada del paquete y adaptada al
+    boilerplate (`declare(strict_types=1)` y docblock; el `down()` ya venía, R29). Se crea
+    aunque el toggle esté apagado: el toggle apaga rutas y UI, no el esquema.
+  - **Tests**: `PasskeysToggleTest` (9) y `PasskeysScreenTest` (10) en Pest, y
+    `tests/e2e/specs/auth/passkeys.spec.ts` (6) en Playwright, con un
+    **autenticador WebAuthn virtual por CDP** que firma de verdad: registrar →
+    cerrar sesión → entrar con passkey, sin ningún dispositivo real.
+
+### Cambiado
+
+- **`.env.e2e` usa `http://localhost:8010`** en vez de `http://127.0.0.1:8010`.
+  El *relying party id* de WebAuthn tiene que ser un dominio y los navegadores
+  rechazan los literales IP, así que con `127.0.0.1` la suite E2E no podría
+  ejercitar passkeys. `localhost` además cuenta como origen seguro sin TLS.
+  Arrastra dos ajustes menores: el `webServer` de Playwright arranca con
+  `--host=localhost` (sale de `APP_URL`) y `specs/auth/login.spec.ts` compara la
+  URL de la landing contra `localhost`.
+- **`app/Models/User`** implementa `Laravel\Fortify\Contracts\PasskeyUser` y usa
+  el trait `Laravel\Fortify\PasskeyAuthenticatable`.
+- **`LoginPage.submit`** (page object de E2E) pasa a `{ name: 'Entrar', exact: true }`:
+  sin `exact` también casaba el botón «Entrar con passkey» nuevo.
+
+### Seguridad
+
+- **La revocación de una passkey no la alcanza ni el superadmin.** El
+  `Gate::before` de `AuthModuleServiceProvider` devuelve `true` para ese rol ante
+  cualquier ability, así que una policy sola no bastaría: la credencial se busca
+  **dentro de `$user->passkeys()`** y un id ajeno es un 404, no una decisión del
+  Gate. `PasskeyPolicy` queda como segunda barrera y punto único de la regla
+  (R25). Una passkey es la llave de una persona, no un recurso administrable.
+- **La confirmación de contraseña se comprueba dos veces.** La pantalla lleva el
+  middleware `password.confirm` —así la confirmación ocurre **antes** de la
+  ceremonia y no a mitad, con la credencial recién creada perdida— y
+  `Passkeys::deletePasskey()` la vuelve a comprobar dentro, porque
+  `/livewire/update` no pasa por el middleware de la ruta (R23) y la ventana de
+  `auth.password_timeout` puede caducar con la pantalla abierta.
+
+### Migración desde 1.4.1
+
+Es un *major*: léelo entero antes de mergear.
+
+1. **PHP 8.4+ y koreUi ≥ 2.3.1** (la primera con `illuminate/* ^12.0|^13.0`).
+2. **Constraints** (`composer.json`): `laravel/framework ^13.0`,
+   `laravel/tinker ^3.0`, `spatie/laravel-permission ^8.0`, `pestphp/pest ^5.0`,
+   `pestphp/pest-plugin-laravel ^5.0`, `phpunit/phpunit ^13.0`,
+   `kore-ui/kore-ui ^2.3`. Después `composer update --with-all-dependencies`.
+   Lee la guía oficial de upgrade de Laravel 13 y la de Pest 5: lo que este
+   boilerplate no tocaba puede que tu derivado sí (por ejemplo `upsert()`,
+   `Js::from()` con unicode, o rutas con `->domain()`).
+3. **Cachés y sesiones**: si tu `config/cache.php` y `config/session.php` siguen
+   con los prefijos antiguos (`_cache_`, `_session`), al subir se invalidan; los
+   del boilerplate ya usaban guiones desde v1.0. **`session.serialization =
+   'json'` invalida todas las sesiones activas**: despliega en ventana de
+   mantenimiento o déjalo en `php` hasta la siguiente.
+4. **Traducciones**: añade a `lang/es.json` `"Reset your password"` y
+   `"Verify your email address"` (o corre `TranslationsTest`, que te lo dirá).
+5. **Rector**: `LaravelLevelSetList::UP_TO_LARAVEL_130` en `rector.php` y
+   `vendor/bin/rector process` para pasar a atributos. Revisa el diff: Rector
+   borra los docblocks de las propiedades que convierte.
+6. **npm**: `vite@^8`, `laravel-vite-plugin@^3`, `npm install`, `npm run build`.
+7. **CI**: matriz `['8.4', '8.5']`.
+8. **Boost**: `php artisan boost:install --guidelines` y `php artisan
+   kore:agents:sync`.
+
+**Passkeys** (llegan encendidas; con `AUTH_PASSKEYS=false` no se registra nada:
+ni rutas, ni pantalla, ni botón). Si las quieres:
+
+1. **`composer install`** (Fortify 1.39 arrastra `laravel/passkeys`) y
+   **`npm install`** (dependencia npm nueva: `@laravel/passkeys`).
+2. **`php artisan migrate`** — crea la tabla `passkeys`. Si tu proyecto ya tenía
+   una migración de passkeys publicada del paquete, quédate con una sola: la del
+   boilerplate se llama `2026_09_03_000000_create_passkeys_table.php`.
+3. **`App\Models\User`**: añade `implements PasskeyUser` y
+   `use PasskeyAuthenticatable` (los de `Laravel\Fortify`, no los de
+   `Laravel\Passkeys` — el trait de Fortify envuelve al del paquete).
+4. **`config/fortify.php`**: copia el bloque `passkeys` y la clave
+   `limiters.passkeys => 'passkeys'`. Si tu `config/fortify.php` está muy
+   tocado, sólo hacen falta esas dos cosas.
+5. **`APP_URL` tiene que ser el dominio real y con `https://`** (o `localhost` en
+   desarrollo). Es de donde sale el *relying party id*, y **cambiarlo después
+   invalida todas las passkeys registradas**: no hay migración, cada usuario
+   tiene que registrar la suya de nuevo. Si tu dominio aún puede cambiar,
+   despliega con `AUTH_PASSKEYS=false`.
+
+Dos avisos más:
+
+- Si algún día rotas `APP_KEY`, fija antes `PASSKEYS_USER_HANDLE_SECRET` con el
+  valor viejo: el user handle de WebAuthn se deriva de ahí y rotar sin fijarlo
+  invalida las credenciales.
+- Si tu suite E2E vive en `127.0.0.1`, cámbiala a `localhost` para poder probar
+  passkeys (ver el snippet de `docs/quality/e2e.md`).
+
 ### Corregido
 
 - **`withEnvironment()` repite `withoutVite()` tras cada `refreshApplication()`.**
@@ -1065,7 +1250,8 @@ scaffold, cifras inventadas en los docs).
   el paquete cambiara. Republicarlas es un `vendor:publish` cuando de verdad
   haya que personalizarlas.
 
-[Unreleased]: https://github.com/koreui/kore-laravel/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/koreui/kore-laravel/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/koreui/kore-laravel/compare/v1.4.1...v2.0.0
 [1.4.1]: https://github.com/koreui/kore-laravel/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/koreui/kore-laravel/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/koreui/kore-laravel/compare/v1.2.0...v1.3.0

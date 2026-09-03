@@ -4,7 +4,7 @@
 
 ## Por qué Playwright standalone y no el browser testing de Pest
 
-- El proyecto está en **Pest 3**; el browser testing llegó en Pest 4. Migrar el runner entero para tener E2E sería un cambio mucho mayor que el problema que resuelve.
+- Cuando se creó la suite (v1.0) el proyecto estaba en **Pest 3** y el browser testing llegó en Pest 4. Hoy el proyecto está en Pest 5, pero la suite se mantiene en Playwright a propósito por los dos motivos siguientes.
 - La suite E2E es **independiente del runner PHP**: se puede copiar tal cual a cualquier proyecto derivado del boilerplate, aunque cambie la versión de Pest o incluso el framework de la API.
 - Playwright trae de serie lo que hace útil un E2E cuando falla en CI: **trace viewer**, vídeo, screenshot, reporte HTML y `--ui` para depurar paso a paso.
 - Separación de responsabilidades: **Pest** prueba unidades, Actions, políticas y componentes Livewire aislados; **Playwright** prueba que el navegador, Livewire, Alpine y koreUi se entienden entre ellos.
@@ -33,7 +33,7 @@ No hay que copiar ningún `.env` ni generar ninguna clave: **`.env.e2e` está co
 
 ### El servidor y `APP_ENV=e2e`
 
-`playwright.config.ts` arranca `php artisan serve --host=127.0.0.1 --port=8010` con `env: { APP_ENV: 'e2e' }`. **`APP_ENV` está en `ServeCommand::$passthroughVariables`**, así que el proceso hijo (el servidor embebido de PHP) también lo recibe y carga `.env.e2e`. No hace falta ningún truco con `php -S`.
+`playwright.config.ts` arranca `php artisan serve --host=localhost --port=8010` con `env: { APP_ENV: 'e2e' }`. **`APP_ENV` está en `ServeCommand::$passthroughVariables`**, así que el proceso hijo (el servidor embebido de PHP) también lo recibe y carga `.env.e2e`. No hace falta ningún truco con `php -S`.
 
 Dos detalles del arranque:
 
@@ -81,17 +81,19 @@ tests/e2e/
 ├── fixtures/index.ts           # `test` extendido: opción `role` + fixtures asX
 ├── pages/                      # page objects
 │   ├── LoginPage.ts  RegisterPage.ts  ForgotPasswordPage.ts  MagicLinkPage.ts
-│   └── DashboardPage.ts  UsersIndexPage.ts  UserFormPage.ts  DocsPage.ts
+│   ├── DashboardPage.ts  UsersIndexPage.ts  UserFormPage.ts  DocsPage.ts
+│   └── PasskeysPage.ts
 ├── support/
 │   ├── env.ts                  # lee .env.e2e (baseURL, rutas)
 │   ├── users.ts                # cuentas sembradas + rutas de storageState
 │   ├── data.ts                 # uniqueEmail() / uniqueName()
 │   ├── actions.ts              # createUserViaUi()
 │   ├── livewire.ts             # espera de hidratación y de round-trip
-│   └── mail-log.ts             # lee el código OTP de storage/logs/laravel.log
+│   ├── mail-log.ts             # lee el código OTP de storage/logs/laravel.log
+│   └── webauthn.ts             # autenticador WebAuthn virtual (CDP)
 └── specs/
     ├── smoke/landing.spec.ts
-    ├── auth/{login,register,forgot-password,magic-link,protected-routes}.spec.ts
+    ├── auth/{login,register,forgot-password,magic-link,passkeys,protected-routes}.spec.ts
     ├── users/{index,create,edit,delete,dashboard}.spec.ts
     └── docs/{smoke,navigation,authorization}.spec.ts
 ```
@@ -127,11 +129,15 @@ Sin `test.use({ role })` el `page` es un **invitado**, que es lo que quieren lan
 
 ### Localizadores
 
-Por orden de preferencia: `getByRole` → `getByLabel` → `getByPlaceholder` → `getByText`. Tres trampas reales de este stack:
+Por orden de preferencia: `getByRole` → `getByLabel` → `getByPlaceholder` → `getByText`. Cuatro trampas reales de este stack:
 
 1. **`getByLabel` también mira `aria-label`.** El ojo de `<x-kore::password>` se llama "Mostrar la contraseña", así que `getByLabel('Contraseña')` devuelve 4 elementos. Usa `{ exact: true }`.
 2. **El asterisco de `required` va dentro del `<label>`.** En `/register` la etiqueta es literalmente `Contraseña *`.
 3. **Con expresión regular, `getByLabel` NO normaliza los espacios** (compara contra el `textContent` crudo, con sus saltos de línea). Prefiere cadena + `{ exact: true }`.
+4. **Un botón nuevo puede romper el locator de otro.** `getByRole('button',
+   { name: 'Entrar' })` empezó a devolver dos elementos el día que `/login`
+   ganó «Entrar con passkey»: `getByRole` casa por *substring*. Cuando el
+   nombre de un botón es prefijo de otro, `{ exact: true }` no es opcional.
 
 **No se tocan las vistas Blade para meter `data-testid`.** Si un elemento no se puede localizar de forma accesible, se usa un selector CSS estable, se comenta el porqué en el page object y se anota como candidato a mejora de accesibilidad.
 
@@ -143,6 +149,75 @@ Por orden de preferencia: `getByRole` → `getByLabel` → `getByPlaceholder` �
 - **Cada test crea sus propios datos** con `uniqueEmail()` / `uniqueName()`. La base sólo se resetea en `globalSetup`, así que ningún test puede depender del orden ni del estado que deje otro.
 - **Filtra antes de contar.** La tabla de usuarios pagina de 25 en 25 y ordena por `created_at desc`: los usuarios que otros specs crean en paralelo desplazan a los sembrados. Busca primero (`focusOnRow`, o por el dominio `e2e.test`) y cuenta después.
 - **Ojo con los rate limiters.** Fortify permite 5 logins por minuto y por `email|ip`; el broker de reset de contraseña, 1 cada 60 s por email; el OTP borra el código anterior al pedir uno nuevo. Los specs que se autentican o piden un enlace se fabrican su propia cuenta con email único para tener su propio cubo.
+
+Las rutas de passkeys tienen su propio limiter (`throttle:passkeys`, 30/min), y
+para un invitado la clave es la **IP**: el cubo lo comparten todos los workers.
+Con los dos specs de ceremonia que hay sobra de largo, pero un spec que
+repitiera el login con passkey en bucle lo agotaría.
+
+### WebAuthn: el autenticador virtual
+
+Las passkeys son el único flujo del boilerplate que **no se puede probar sin
+navegador y tampoco con uno normal**: la ceremonia la resuelve el sistema
+operativo (Touch ID, Windows Hello, una llave USB) y ese diálogo vive fuera de
+la página, donde Playwright no llega.
+
+La salida es el **autenticador virtual de Chrome DevTools Protocol**: un
+dispositivo de mentira que genera claves reales y firma de verdad. El servidor
+verifica la atestación exactamente igual que la de un dispositivo físico, así
+que el test ejercita el camino completo, no una simulación.
+
+Vive en `tests/e2e/support/webauthn.ts`:
+
+```ts
+const cdp = await page.context().newCDPSession(page);
+
+await cdp.send('WebAuthn.enable');
+await cdp.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+        protocol: 'ctap2',
+        transport: 'internal',
+        hasResidentKey: true,
+        hasUserVerification: true,
+        isUserVerified: true,
+        automaticPresenceSimulation: true,
+    },
+});
+```
+
+Los cuatro flags no son decorativos: `laravel/passkeys` pide
+`residentKey: required` y `userVerification: required`, así que sin
+`hasResidentKey` el registro falla con `NotSupportedError`, y sin
+`hasUserVerification` + `isUserVerified` el autenticador no puede afirmar que
+verificó a nadie. `automaticPresenceSimulation` sustituye al dedo que nadie va a
+poner.
+
+Tres cosas que hay que saber:
+
+- **El autenticador cuelga del target de esa `page`.** Sobrevive a las
+  navegaciones —registrar, cerrar sesión y volver a entrar con la passkey es un
+  solo test— y muere con ella. Un `page` nuevo (o una fixture `asX`, que abre su
+  propio contexto) necesita el suyo.
+- **`credentials()` es una aserción de verdad.** `WebAuthn.getCredentials`
+  devuelve lo que el autenticador guarda; comprobarlo distingue «la UI pintó una
+  fila» de «existe una credencial».
+- **El RP id manda sobre el `baseURL`.** Ver el punto siguiente.
+
+### Por qué `.env.e2e` usa `localhost` y no `127.0.0.1`
+
+El *relying party id* de WebAuthn tiene que ser un **dominio**, y Chrome rechaza
+los literales IP con `The relying party ID is not a registrable domain suffix
+of, nor equal to the current domain`. Con `APP_URL=http://127.0.0.1:8010` la
+suite no podría registrar ni usar una passkey.
+
+`.env.e2e` apunta por eso a `http://localhost:8010`, que además es un origen
+**potencialmente seguro** para el navegador: WebAuthn exige contexto seguro y
+`localhost` es la única excepción a `https://`, así que la suite funciona sin
+TLS. De ahí salen el `--host` y el `--port` del `webServer`
+(`tests/e2e/support/env.ts`), así que no hay nada más que cambiar.
+
+Si un derivado mueve la suite a otro host, la regla es la misma: **un dominio, y
+`https://` salvo `localhost`**.
 
 ### Qué debe cubrir un módulo nuevo
 
@@ -192,6 +267,8 @@ Es un workflow **aparte** de `ci.yml` (Pint · Larastan + PHPat + disallowed-cal
 | Todos los tests con rol fallan redirigiendo a `/login` | `storageState` caducado o de otra base. Borra `tests/e2e/.auth/` y vuelve a correr; `globalSetup` ya lo hace en cada corrida. |
 | `Too many login attempts` en el proyecto `setup` | Rate limiter de Fortify (5/min por `email\|ip`). Ocurre si corres la suite muchas veces seguidas con muchos workers; espera un minuto o baja `--workers`. |
 | Un test pasa suelto y falla en la suite | Casi siempre estado compartido: revisa que use `uniqueEmail()` y que filtre antes de contar filas. Repróducelo con `--repeat-each=2`. |
+| `SecurityError` o `InvalidDomainError` al registrar una passkey | El origen no sirve como *relying party id*: una IP (`127.0.0.1`) o un `http://` que no sea `localhost`. Revisa `APP_URL` en `.env.e2e`. |
+| El registro de passkey falla con `NotSupportedError` | Al autenticador virtual le falta `hasResidentKey: true` (el paquete pide credenciales descubribles) o `hasUserVerification: true`. Ver `support/webauthn.ts`. |
 
 ## Workaround vigente: confirmar una row action
 

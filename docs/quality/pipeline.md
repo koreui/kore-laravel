@@ -1,6 +1,6 @@
 # Pipeline de calidad
 
-**TL;DR**: Pint formatea, Larastan nivel 8 analiza los tipos, PHPat vigila el grafo de dependencias, `phpstan-disallowed-calls` prohíbe llamadas concretas, `kore:arch:check` hace los checks textuales, Rector refactoriza y Pest 3 testea. `igorsgm/laravel-git-hooks` reparte el trabajo entre pre-commit, commit-msg y pre-push, y GitHub Actions lo corre todo en cada PR y publica el release desde el CHANGELOG. El comando único es `composer ci`.
+**TL;DR**: Pint formatea, Larastan nivel 8 analiza los tipos, PHPat vigila el grafo de dependencias, `phpstan-disallowed-calls` prohíbe llamadas concretas, `kore:arch:check` hace los checks textuales, Rector refactoriza y Pest 5 testea. `igorsgm/laravel-git-hooks` reparte el trabajo entre pre-commit, commit-msg y pre-push, y GitHub Actions lo corre todo en cada PR y publica el release desde el CHANGELOG. El comando único es `composer ci`.
 
 El catálogo de reglas —qué se verifica, con qué herramienta y con qué severidad— vive en [`../architecture/rules.md`](../architecture/rules.md). Este documento explica cómo está montado el pipeline; aquel dice qué comprueba.
 
@@ -37,11 +37,11 @@ no verifica nada.
 | **commit-msg** | ~1 s | **0,3 s** | `ConventionalCommitMsgHook` — el asunto sigue Conventional Commits (R43) |
 | **pre-push** | ~30 s | **4 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
 | **`composer ci`** | ~90 s | **16 s** | `pint --test` (1,1) + `phpstan` (0,6 con caché, 2,0 en frío) + `composer arch` (0,2) + `rector --dry-run` (4,3) + `pest` (9,3, secuencial) |
-| **CI (GitHub)** | ~3 min | — | `composer ci` en PHP 8.4 + `composer audit` + `npm ci && npm run build` + E2E |
+| **CI (GitHub)** | ~3 min | — | `composer ci` en matriz PHP 8.4 / 8.5 + `composer audit` + `npm ci && npm run build` + E2E |
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + `softprops/action-gh-release` |
 
 Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v1.4.0 y
-391 tests Pest. La suite E2E —57 tests en 15 archivos— va aparte y tarda
+410 tests Pest. La suite E2E —63 tests en 16 archivos— va aparte y tarda
 19 s en local. Los tests nuevos de la v1.4.0 (los comandos de Core, el hook de
 `commit-msg`, el MCP `kore` y el módulo Docs) son los que explican el tiempo de
 más de `pest` respecto a la v1.3.0.
@@ -188,13 +188,13 @@ Sets aplicados:
 - `SetList::EARLY_RETURN` — early returns
 - `SetList::TYPE_DECLARATION` — tipos faltantes
 - `SetList::PRIVATIZATION` — `private` donde sea posible
-- `LaravelLevelSetList::UP_TO_LARAVEL_120` — patrones Laravel 12
+- `LaravelLevelSetList::UP_TO_LARAVEL_130` — patrones Laravel 13
 - `LaravelSetList::LARAVEL_CODE_QUALITY`
 - `LaravelSetList::LARAVEL_COLLECTION`
 
 Excluye: `database/migrations` y `app/Modules/*/Database/Migrations`.
 
-### Pest 3 — `tests/Pest.php`
+### Pest 5 — `tests/Pest.php`
 
 Aplica `Tests\TestCase` + `RefreshDatabase` a todos los Feature tests, incluyendo los de cada módulo:
 
@@ -355,7 +355,7 @@ php artisan git-hooks:register
 
 Job `quality`:
 
-- PHP 8.4 (la matriz 8.3/8.4 se retiró en la v1.4.1: el lock exige 8.4; 8.5 entrará en la v2.0)
+- Matrix PHP 8.4 / 8.5 (8.3 se retiró en la v1.4.1: el lock exige 8.4)
 - Pasos (en orden, fallan rápido):
   1. `composer install` (cache de `vendor/`)
   2. `composer audit` — advisories de seguridad, bloqueante
@@ -405,17 +405,17 @@ $ composer ci
 ✓ Larastan nivel 8 + PHPat + disallowed-calls: 0 errors
 ✓ kore:arch:check: sin violaciones
 ✓ Rector: nothing to refactor
-✓ Pest: 391 passed (927 assertions)
+✓ Pest: 410 passed (985 assertions)
 ```
 
-Reparto de los 391 tests: 21 arch (`tests/Arch`), 41 del módulo Auth, 48 del
+Reparto de los 410 tests: 21 arch (`tests/Arch`), 60 del módulo Auth, 48 del
 módulo Users, 3 de Tenancy, 43 del módulo Docs y 235 en `tests/Feature`
 (health, scheduler, Sentry, Pulse, Pennant, mass assignment, landing,
 traducciones, backup, cabeceras de seguridad, configuración de producción,
 logging, migraciones reversibles, instalación limpia, el MCP `kore` y —desde la
 v1.4.0— `kore:arch:check` con sus 83 casos, los hooks con 36, `kore:agents:sync`
 con 7 y `kore:changelog:section` con 9). Aparte, la suite E2E de Playwright
-(`npm run e2e`): 57 tests en 15 archivos —14 de spec más
+(`npm run e2e`): 63 tests en 16 archivos —15 de spec más
 `auth.setup.ts`, que hace el login por rol—.
 
 Actualiza esta cifra cuando cambie (R41). Un número inventado en los docs es

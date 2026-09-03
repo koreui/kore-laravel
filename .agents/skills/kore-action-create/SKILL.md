@@ -1,7 +1,7 @@
 ---
 name: kore-action-create
 description: Crear una Action (caso de uso) dentro de un módulo en app/Modules/{Domain}/Actions/. Úsalo cuando el usuario pida "crear una action", "implementar el caso de uso X" o agregar lógica de negocio que NO debe vivir en controller/Livewire.
-compatibility: "kore-laravel (Laravel 12, Livewire 4, Pest 3). Claude Code, Codex y cualquier cliente Agent Skills."
+compatibility: "kore-laravel (Laravel 13, Livewire 4, Pest 5). Claude Code, Codex y cualquier cliente Agent Skills."
 ---
 
 # Crear Action en kore-laravel

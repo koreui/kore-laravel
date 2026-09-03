@@ -188,3 +188,12 @@ Confirmar en `.env` del VPS que `TENANCY_ENABLED=true`, y en `config/tenancy.php
 
 - Docs oficiales: https://tenancyforlaravel.com/docs/v3/
 - Comparación con Spatie: https://tenancyforlaravel.com/docs/v3/package-comparison/
+
+## Nota Laravel 13 · precedencia de rutas con dominio
+
+Laravel 13 registra **antes** las rutas con dominio explícito (`->domain()`) que
+las que no lo tienen. `Routes/tenant.php` identifica el tenant por middleware
+(`InitializeTenancyByDomain`), no por `->domain()`, así que en principio no le
+afecta; pero es lo primero que hay que comprobar tras `kore:tenancy:enable` si
+alguna ruta central deja de resolver. `stancl/tenancy` 3.10 declara soporte de
+Laravel 13; no hay v4 estable (v2.0.0).

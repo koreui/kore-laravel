@@ -116,4 +116,19 @@ return [
 
     'prefix' => env('CACHE_PREFIX', Str::slug((string) env('APP_NAME', 'laravel')).'-cache-'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Serializable Classes (Laravel 13)
+    |--------------------------------------------------------------------------
+    |
+    | `false` desactiva `unserialize()` de objetos al leer de la caché: sólo se
+    | deserializan escalares y arrays. Cierra las cadenas de gadgets que un
+    | atacante con acceso al almacén (o a APP_KEY) podría explotar. Si de verdad
+    | cacheas objetos, pon aquí la lista de clases permitidas (R46/R47: la
+    | seguridad la fija la aplicación, no el hosting).
+    |
+    */
+
+    'serializable_classes' => false,
+
 ];

@@ -53,7 +53,7 @@
             </button>
         </form>
 
-        @if ((bool) config('kore-app.auth.magic_links') || (bool) config('kore-app.auth.social_login'))
+        @if (Route::has('passkey.login') || (bool) config('kore-app.auth.magic_links') || (bool) config('kore-app.auth.social_login'))
             <div class="relative my-5">
                 <div class="absolute inset-0 flex items-center">
                     <span class="w-full border-t border-kore-border"></span>
@@ -64,6 +64,41 @@
             </div>
 
             <div class="space-y-2">
+                {{-- Passkeys. `Route::has` en vez del toggle: es Fortify quien
+                     publica el endpoint, así que preguntar por la ruta cubre
+                     también el caso de que la feature se quite desde
+                     `fortify.features` sin tocar `kore-app`. --}}
+                @if (Route::has('passkey.login'))
+                    <div x-data="korePasskeys(@js([
+                        'cancelled' => __('Has cancelado la operación o el dispositivo no la ha confirmado.'),
+                        'unsupported' => __('Este navegador no admite passkeys.'),
+                        'exists' => __('Este dispositivo ya tiene una passkey registrada en tu cuenta.'),
+                        'domain' => __('Las passkeys no se pueden usar en este dominio.'),
+                        'failed' => __('No hemos podido completar la operación. Inténtalo de nuevo.'),
+                        'redirect' => route('dashboard'),
+                    ]))">
+                        <button type="button"
+                                x-on:click="signInWithPasskey()"
+                                x-bind:disabled="busy"
+                                class="flex w-full items-center justify-center gap-2 rounded-xl border border-kore-border bg-kore-bg px-4 py-2.5 text-sm font-medium transition-colors hover:bg-kore-muted disabled:opacity-50">
+                            <x-kore::icon name="key-round" class="h-4 w-4" />
+                            {{ __('Entrar con passkey') }}
+                        </button>
+
+                        {{-- El error se pinta sin recargar: cancelar el diálogo
+                             del sistema o usar un navegador sin WebAuthn no es
+                             un fallo del servidor y no tiene por qué costar una
+                             navegación. --}}
+                        <template x-if="error">
+                            <div class="mt-2">
+                                <x-kore::alert type="destructive" live="assertive">
+                                    <span x-text="error"></span>
+                                </x-kore::alert>
+                            </div>
+                        </template>
+                    </div>
+                @endif
+
                 @if ((bool) config('kore-app.auth.magic_links'))
                     <a href="{{ route('magic-link.request') }}"
                        class="flex w-full items-center justify-center gap-2 rounded-xl border border-kore-border bg-kore-bg px-4 py-2.5 text-sm font-medium transition-colors hover:bg-kore-muted">

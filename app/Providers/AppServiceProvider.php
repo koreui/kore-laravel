@@ -170,6 +170,7 @@ final class AppServiceProvider extends ServiceProvider
             'Tenancy' => fn (): string => $state(config('kore-app.tenancy.enabled')),
             'API' => fn (): string => $state(config('kore-app.api.enabled')),
             '2FA' => fn (): string => $state(config('kore-app.auth.two_factor')),
+            'Passkeys' => fn (): string => $state(config('kore-app.auth.passkeys')),
             'Magic links' => fn (): string => $state(config('kore-app.auth.magic_links')),
             'Social login' => fn (): string => $state(config('kore-app.auth.social_login')),
             'Social Google' => fn (): string => $state(config('kore-app.socialite.google')),

@@ -26,6 +26,7 @@ final class FortifyServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->configureTwoFactorFeature();
+        $this->configurePasskeysFeature();
     }
 
     public function boot(): void
@@ -67,6 +68,36 @@ final class FortifyServiceProvider extends ServiceProvider
         config(['fortify.features' => $features]);
     }
 
+    /**
+     * Hace real el toggle `kore-app.auth.passkeys`.
+     *
+     * Misma forma que el 2FA y por el mismo motivo (R12): `config/fortify.php`
+     * no puede leer `kore-app`, así que la feature se añade o se quita aquí,
+     * en el `register()`, antes del `boot()` en el que Fortify publica sus
+     * rutas leyendo `fortify.features`.
+     *
+     * `confirmPassword: true` es lo que hace que Fortify cuelgue
+     * `password.confirm` de sus rutas de gestión (`/user/passkeys*`): registrar
+     * o borrar una credencial es cambiar el segundo factor de la cuenta, y una
+     * sesión robada no debería poder hacerlo sin la contraseña.
+     */
+    private function configurePasskeysFeature(): void
+    {
+        $passkeys = Features::passkeys([
+            'confirmPassword' => true,
+        ]);
+
+        /** @var array<int, string> $features */
+        $features = (array) config('fortify.features', []);
+        $features = array_values(array_filter($features, fn (string $feature): bool => $feature !== $passkeys));
+
+        if ((bool) config('kore-app.auth.passkeys', true)) {
+            $features[] = $passkeys;
+        }
+
+        config(['fortify.features' => $features]);
+    }
+
     private function configureViews(): void
     {
         Fortify::loginView(fn (): Factory|View => view('auth::pages.login'));
@@ -87,5 +118,24 @@ final class FortifyServiceProvider extends ServiceProvider
         });
 
         RateLimiter::for('two-factor', fn (Request $request): Limit => Limit::perMinute(5)->by((string) $request->session()->get('login.id')));
+
+        /*
+         * R28 · `fortify.limiters.passkeys` apunta a este limiter y Fortify lo
+         * cuelga de seis de sus siete rutas de passkeys (la de borrado no), incluida `POST /passkeys/login`,
+         * que es un login **sin contraseña** y por tanto un endpoint de fuerza
+         * bruta como cualquier otro.
+         *
+         * La clave es el usuario cuando lo hay (gestión y confirmación) y la IP
+         * cuando no (login de invitado): un mismo navegador no puede quemar el
+         * cupo de todos los usuarios de una oficina, ni al revés.
+         *
+         * 30/min y no 5 como el login por dos motivos: una ceremonia WebAuthn
+         * gasta DOS peticiones (options + submit), y el cubo de los invitados
+         * lo comparte toda una oficina detrás del mismo NAT. Sigue siendo un
+         * freno duro —y aquí el límite no es la defensa principal: adivinar una
+         * firma WebAuthn no es cuestión de intentos—.
+         */
+        RateLimiter::for('passkeys', fn (Request $request): Limit => Limit::perMinute(30)
+            ->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
     }
 }

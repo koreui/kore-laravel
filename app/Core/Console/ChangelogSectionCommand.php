@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Core\Console;
 
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 /**
@@ -24,16 +26,12 @@ use Illuminate\Console\Command;
  *   php artisan kore:changelog:section v1.4.0
  *   php artisan kore:changelog:section 1.4.0 --root=/otro/repo
  */
+#[Description('Imprime la sección del CHANGELOG.md de una versión, o falla si no existe (R42)')]
+#[Signature('kore:changelog:section
+        {version : La versión o el tag, con o sin la v inicial (v1.4.0 o 1.4.0).}
+        {--root= : Raíz del proyecto. Por defecto la de la aplicación; los tests la usan para apuntar a un árbol temporal.}')]
 final class ChangelogSectionCommand extends Command
 {
-    /** @var string */
-    protected $signature = 'kore:changelog:section
-        {version : La versión o el tag, con o sin la v inicial (v1.4.0 o 1.4.0).}
-        {--root= : Raíz del proyecto. Por defecto la de la aplicación; los tests la usan para apuntar a un árbol temporal.}';
-
-    /** @var string */
-    protected $description = 'Imprime la sección del CHANGELOG.md de una versión, o falla si no existe (R42)';
-
     public function handle(): int
     {
         $root = $this->option('root');

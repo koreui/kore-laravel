@@ -119,6 +119,10 @@ return [
     'limiters' => [
         'login' => 'login',
         'two-factor' => 'two-factor',
+        // R28 · las rutas de passkeys son endpoints sensibles (una de ellas es
+        // un login sin contraseña). El limiter `passkeys` lo define
+        // FortifyServiceProvider::configureRateLimiting().
+        'passkeys' => 'passkeys',
     ],
 
     /*
@@ -136,6 +140,41 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Passkeys (WebAuthn)
+    |--------------------------------------------------------------------------
+    |
+    | Fortify envuelve a laravel/passkeys y copia estos valores a
+    | `config/passkeys.php` desde su propio `register()`, así que ésta es la
+    | única config que hay que tocar (no publiques la del paquete).
+    |
+    | R12 · aquí NO se puede hacer `config('app.url')` ni `config('app.key')`:
+    | un `config/*.php` no lee otro. El valor sale de `env()`, que es lo único
+    | legítimo dentro de `config/` (R17).
+    |
+    | `relying_party_id` es el DOMINIO (sin esquema ni puerto) al que quedan
+    | atadas las credenciales: cambiarlo invalida todas las passkeys ya
+    | registradas. `allowed_origins` son los orígenes completos que el
+    | navegador puede reportar. Ver docs/modules/auth.md.
+    |
+    */
+
+    'passkeys' => [
+        'relying_party_id' => parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST),
+
+        'allowed_origins' => [
+            (string) env('APP_URL', 'http://localhost'),
+        ],
+
+        // Deriva el user handle de WebAuthn. Se separa de APP_KEY para poder
+        // rotar la clave de la aplicación sin invalidar las passkeys.
+        // `?:` y no el default de env(): con la clave presente y vacía env() devuelve ''.
+        'user_handle_secret' => env('PASSKEYS_USER_HANDLE_SECRET') ?: env('APP_KEY'),
+
+        'timeout' => 60000,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Features
     |--------------------------------------------------------------------------
     |
@@ -143,12 +182,12 @@ return [
     | by removing them from this array. You're free to only remove some of
     | these features or you can even remove all of these if you need to.
     |
-    | El 2FA NO se lista aquí: lo añade o lo quita
+    | Ni el 2FA ni las passkeys se listan aquí: los añade o los quita
     | App\Modules\Auth\Providers\FortifyServiceProvider::register() según
-    | `config('kore-app.auth.two_factor')`. Los configs se cargan por orden
-    | alfabético (`fortify` antes que `kore-app`), así que este archivo no
-    | puede leer el toggle; el provider sí, y corre antes de que Fortify
-    | registre sus rutas en boot().
+    | `config('kore-app.auth.two_factor')` y `config('kore-app.auth.passkeys')`.
+    | Los configs se cargan por orden alfabético (`fortify` antes que
+    | `kore-app`), así que este archivo no puede leer el toggle; el provider sí,
+    | y corre antes de que Fortify registre sus rutas en boot().
     |
     */
 

@@ -1,6 +1,6 @@
 # kore-laravel
 
-Boilerplate Laravel 12 production-ready con Livewire 4, Tailwind v4, koreUi y herramientas AI-friendly.
+Boilerplate Laravel 13 production-ready con Livewire 4, Tailwind v4, koreUi y herramientas AI-friendly.
 
 > `AGENTS.md` **se genera desde este archivo** con `php artisan kore:agents:sync`
 > (R50). Edita aquí y regenera; no toques `AGENTS.md` a mano.
@@ -35,12 +35,12 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 
 ## Stack
 
-- PHP 8.4+ · Laravel 12 · Livewire 4 · Alpine.js · Tailwind CSS v4
+- PHP 8.4+ · Laravel 13 · Livewire 4 · Alpine.js · Tailwind CSS v4
 - Componentes UI: **koreUi** (`<x-kore::*>`), nunca Flux UI ni otras
-- Auth: Fortify + Sanctum (toggle) + spatie/laravel-permission
+- Auth: Fortify (2FA, passkeys WebAuthn, toggles) + Sanctum (toggle) + spatie/laravel-permission
 - DTOs: spatie/laravel-data
 - Feature flags: Laravel Pennant
-- Tests: Pest 3 (con arch tests en `tests/Arch/ArchitectureTest.php`)
+- Tests: Pest 5 (con arch tests en `tests/Arch/ArchitectureTest.php`)
 - E2E: Playwright standalone (TypeScript) en `tests/e2e/`, entorno aislado con `.env.e2e`
 - Calidad: Pint + Larastan nivel 8 + PHPat + `spaze/phpstan-disallowed-calls` + `kore:arch:check` + Rector
 - Observabilidad: Sentry · Laravel Pulse · spatie/laravel-health · spatie/laravel-activitylog · spatie/laravel-backup (toggle)
@@ -138,7 +138,7 @@ pone una persona, porque es quien responde cuando la fecha vence. Para PHPStan
 | commit-msg | ~1 s | `ConventionalCommitMsgHook` — Conventional Commits (R43) |
 | pre-push | ~30 s | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
 | `composer ci` | ~90 s | + `pint --test` + `composer arch` + `rector --dry-run` + `pest` |
-| CI (GitHub) | ~3 min | todo (PHP 8.4) + `composer audit` + `npm run build` + E2E |
+| CI (GitHub) | ~3 min | todo (matriz PHP 8.4/8.5) + `composer audit` + `npm run build` + E2E |
 | Release (GitHub) | — | al empujar un tag `v*`: `kore:changelog:section` + GitHub Release (R42) |
 
 Los hooks se instalan solos con `composer install`; se re-registran con
@@ -157,12 +157,13 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | `BACKUP_ENABLED`        | `false`          | spatie/laravel-backup (run+clean+monitor, zip cifrado, `BackupsCheck`) |
 | `DOCS_ENABLED`          | `false`          | Visor de `docs/` en `/docs` (local sí, producción no) |
 | `AUTH_2FA_ENABLED`      | `true`           | 2FA vía Fortify                     |
+| `AUTH_PASSKEYS`         | `true`           | Passkeys (WebAuthn) vía Fortify     |
 | `AUTH_MAGIC_LINKS`      | `true`           | spatie/laravel-one-time-passwords   |
 | `AUTH_SOCIAL_LOGIN`     | `false`          | Socialite                           |
 | `SOCIAL_GOOGLE`         | `false`          | proveedor Google de Socialite       |
 | `SOCIAL_GITHUB`         | `false`          | proveedor GitHub de Socialite       |
 
-Esas nueve claves son **todas** las de `config/kore-app.php`. Regla: un toggle
+Esas diez claves son **todas** las de `config/kore-app.php`. Regla: un toggle
 sólo existe si alguien lo lee. Reverb, Octane y Scout no son toggles sino
 módulos opcionales que se instalan bajo demanda; el modo `single-db`/`multi-db`
 de tenancy se elige en `config/tenancy.php` al correr `kore:tenancy:enable`.
@@ -173,7 +174,8 @@ Cuando un toggle está OFF, su `ServiceProvider` debe hacer `return` temprano y 
 
 ⚠️ Un `config/*.php` no puede leer otro: se cargan en orden alfabético. Si un
 paquete necesita reaccionar a `kore-app`, múta su config desde el `register()`
-del provider del módulo (ver `FortifyServiceProvider::configureTwoFactorFeature()`).
+del provider del módulo (ver `FortifyServiceProvider::configureTwoFactorFeature()`
+y `configurePasskeysFeature()`, que son el mismo patrón dos veces).
 
 ## Componentes UI
 
@@ -217,7 +219,7 @@ del provider del módulo (ver `FortifyServiceProvider::configureTwoFactorFeature
 composer dev
 
 # Tests
-composer test                       # Pest 3
+composer test                       # Pest 5
 ./vendor/bin/pest --parallel        # paralelo
 ./vendor/bin/pest --filter=TestName # filtrado
 ./vendor/bin/pest tests/Arch        # sólo arch tests
@@ -290,24 +292,11 @@ The Laravel Boost guidelines are specifically curated by Laravel maintainers for
 
 ## Foundational Context
 
-This application is a Laravel application and its main Laravel ecosystems package & versions are below. You are an expert with them all. Ensure you abide by these specific packages & versions.
+This application is a Laravel application running on PHP 8.4. You are an expert with the Laravel ecosystem. Always use the APIs that match the installed major version of each package — do not assume a version.
 
-- php - 8.4
-- laravel/framework (LARAVEL) - v12
-- laravel/pennant (PENNANT) - v1
-- laravel/prompts (PROMPTS) - v0
-- livewire/livewire (LIVEWIRE) - v4
-- laravel/boost (BOOST) - v2
-- laravel/mcp (MCP) - v0
-- laravel/pail (PAIL) - v1
-- laravel/pint (PINT) - v1
-- laravel/sail (SAIL) - v1
-- pestphp/pest (PEST) - v3
-- phpunit/phpunit (PHPUNIT) - v11
-
-## Skills Activation
-
-This project has domain-specific skills available in `**/skills/**`. You MUST activate the relevant skill whenever you work in that domain—don't wait until you're stuck.
+Before relying on a package's API, confirm its installed version:
+- PHP packages: run `composer show --direct` to list direct dependencies with versions, or `composer show <vendor/package>` for a single package.
+- JS packages: check `package.json` for the installed versions.
 
 ## Conventions
 
@@ -350,7 +339,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 ## Searching Documentation (IMPORTANT)
 
-- Always use `search-docs` before making code changes. Do not skip this step. It returns version-specific docs based on installed packages automatically.
+- Use `search-docs` before changes that depend on Laravel ecosystem APIs, behavior, configuration, or version-specific syntax. Skip it for copy-only edits and other changes where package documentation is irrelevant. Reuse sufficient results already in context instead of searching again.
 - Pass a `packages` array to scope results when you know which packages are relevant.
 - Use multiple broad, topic-based queries: `['rate limiting', 'routing rate limiting', 'routing']`. Expect the most relevant results first.
 - Do not add package names to queries because package info is already shared. Use `test resource table`, not `filament 4 test resource table`.
@@ -362,12 +351,16 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 3. Combine words and phrases for mixed queries: `middleware "rate limit"`.
 4. Use multiple queries for OR logic: `queries=["authentication", "middleware"]`.
 
+## Project Rules
+
+- This project contains committed, area-grouped rules in `.ai/rules` when that directory exists (settled decisions, non-obvious traps, standing constraints). Framework and package guidelines that only apply to specific paths (testing, frontend, components) also live there, under `.ai/rules/boost` — this is not just recorded decisions, it is load-bearing guidance you have not seen inline. Before you enter plan mode or create/edit any file, you MUST first: open @.ai/rules/index.md (it maps file globs to rule files), read every rule file whose globs cover the path(s) in scope, and run `grep -rin 'keyword' .ai/rules` to catch what a path match alone misses. Do not write code until you have read and are following every matching rule. If `.ai/rules` does not exist, continue without it.
+- Record durable rules with `record-rule` so the next agent or teammate inherits them instead of working them out again. Pass a `glob` (e.g. `app/Http/Controllers/**`), a short `title`, and a few-line `note`. Always use `record-rule`, never your native memory or notes tool — native memory is personal and session-scoped; only `.ai/rules` is shared with the team and persists in the repo.
+
 ## Artisan
 
 - Run Artisan commands directly via the command line (e.g., `php artisan route:list`). Use `php artisan list` to discover available commands and `php artisan [command] --help` to check parameters.
 - Inspect routes with `php artisan route:list`. Filter with: `--method=GET`, `--name=users`, `--path=api`, `--except-vendor`, `--only-vendor`.
 - Read configuration values using dot notation: `php artisan config:show app.name`, `php artisan config:show database.default`. Or read config files directly from the `config/` directory.
-- To check environment variables, read the `.env` file directly.
 
 ## Tinker
 
@@ -391,6 +384,15 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 # Deployment
 
 - Laravel can be deployed using [Laravel Cloud](https://cloud.laravel.com/), which is the fastest way to deploy and scale production Laravel applications.
+
+=== tests rules ===
+
+# Test Enforcement
+
+- Test every code change by adding or updating a test.
+- Run the affected tests and ensure they pass.
+- Test the changed behavior and its important failure modes, but do not add tests beyond them.
+- Read the `testing-best-practices` skill before writing tests.
 
 === laravel/core rules ===
 
@@ -422,36 +424,11 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 - If you receive an "Illuminate\Foundation\ViteException: Unable to locate file in Vite manifest" error, you can run `npm run build` or ask the user to run `npm run dev` or `composer run dev`.
 
-=== laravel/v12 rules ===
-
-# Laravel 12
-
-- CRITICAL: ALWAYS use `search-docs` tool for version-specific Laravel documentation and updated code examples.
-- Since Laravel 11, Laravel has a new streamlined file structure which this project uses.
-
-## Laravel 12 Structure
-
-- In Laravel 12, middleware are no longer registered in `app/Http/Kernel.php`.
-- Middleware are configured declaratively in `bootstrap/app.php` using `Application::configure()->withMiddleware()`.
-- `bootstrap/app.php` is the file to register middleware, exceptions, and routing files.
-- `bootstrap/providers.php` contains application specific service providers.
-- The `app/Console/Kernel.php` file no longer exists; use `bootstrap/app.php` or `routes/console.php` for console configuration.
-- Console commands in `app/Console/Commands/` are automatically available and do not require manual registration.
-
-## Database
-
-- When modifying a column, the migration must include all of the attributes that were previously defined on the column. Otherwise, they will be dropped and lost.
-- Laravel 12 allows limiting eagerly loaded records natively, without external packages: `$query->latest()->limit(10);`.
-
-### Models
-
-- Casts can and likely should be set in a `casts()` method on a model rather than the `$casts` property. Follow existing conventions from other models.
-
 === livewire/core rules ===
 
 # Livewire
 
-- Livewire allow to build dynamic, reactive interfaces in PHP without writing JavaScript.
+- Livewire allows you to build dynamic, reactive interfaces in PHP without writing JavaScript.
 - You can use Alpine.js for client-side interactions instead of JavaScript frameworks.
 - Keep state server-side so the UI reflects it. Validate and authorize in actions as you would in HTTP requests.
 
@@ -464,11 +441,18 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 === pest/core rules ===
 
-## Pest
+# Pest
 
-- This project uses Pest for testing. Create tests: `php artisan make:test --pest {name}`.
-- The `{name}` argument should not include the test suite directory. Use `php artisan make:test --pest SomeFeatureTest` instead of `php artisan make:test --pest Feature/SomeFeatureTest`.
-- Run tests: `php artisan test --compact` or filter: `php artisan test --compact --filter=testName`.
-- Do NOT delete tests without approval.
+- This project uses Pest. Create tests with `php artisan make:test --pest {name}`.
+- Do not include the test suite directory in `{name}`. Use `SomeFeatureTest`, not `Feature/SomeFeatureTest`.
+- Read the `testing-best-practices` skill for guidance on coverage, naming, structure, dependency isolation, and review.
+- Do not delete tests or test files without approval. They are part of the application.
+
+## Running Tests
+
+- Run the narrowest set of tests that covers the change. Pass a file path or `--filter=testName` to `php artisan test --compact`.
+- Rerun a test after each change to it.
+- Run `vendor/bin/pest` to call the test runner directly. It accepts the same file path and `--filter=testName` arguments.
+- After the feature tests pass, ask the user to run the complete suite with `php artisan test --compact`.
 
 </laravel-boost-guidelines>

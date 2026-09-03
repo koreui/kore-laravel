@@ -13,10 +13,11 @@
 | `AUTH_2FA_ENABLED`     | `true`        | Fortify `twoFactorAuthentication` (rutas + pantalla)| `FortifyServiceProvider::register()` |
 | `AUTH_MAGIC_LINKS`     | `true`        | OTP via spatie/laravel-one-time-passwords           | `Auth/Routes/web.php`, `login.blade.php` |
 | `AUTH_SOCIAL_LOGIN`    | `false`       | Socialite (con sub-toggles por proveedor)           | `Auth/Routes/web.php`, `login.blade.php` |
+| `AUTH_PASSKEYS`        | `true`        | Passkeys (WebAuthn) vía Fortify: rutas `passkey.*` + pantalla `/user/passkeys` | `FortifyServiceProvider::register()`, `Auth/Routes/web.php` |
 | `SOCIAL_GOOGLE`        | `false`       | proveedor Google de Socialite                       | `SocialiteController`, `login.blade.php` |
 | `SOCIAL_GITHUB`        | `false`       | proveedor GitHub de Socialite                       | `SocialiteController`, `login.blade.php` |
 
-Estas nueve son **todas** las claves de `config/kore-app.php`. La columna
+Estas diez son **todas** las claves de `config/kore-app.php`. La columna
 "quién lo lee" no es decorativa: es la regla. Un toggle que nadie lee es una
 mentira en la documentación, y por eso en la v1.0.0 se borraron
 `REVERB_ENABLED`, `OCTANE_ENABLED`/`OCTANE_SERVER`, `SCOUT_ENABLED`/`SCOUT_DRIVER`,
@@ -76,6 +77,11 @@ if ((bool) config('kore-app.api.enabled')) {
 - ❌ **No bypasear** los toggles con código directo (`if (env('TENANCY_ENABLED'))` o ENV reads ad-hoc). El boilerplate debe ser reusable.
 - ❌ **No leer `env()` fuera de configs** — siempre `config()`. Los `.env` reads en code se rompen con `config:cache` (que se hace en producción).
 - ✅ **Sí** agregar nuevos toggles a `config/kore-app.php` cuando una feature deba ser opt-in. Documenta la nueva variable en `.env.example` y aquí.
+- ℹ️ **Un toggle apaga rutas y UI, no el esquema.** `AUTH_PASSKEYS=false` deja de
+  registrar la feature de Fortify y la pantalla, pero la tabla `passkeys` se
+  migra igual: una migración condicional produciría bases distintas según el
+  `.env` del día en que se migró, y un boilerplate reutilizable no puede
+  permitírselo.
 - ⚠️ **Un config no puede leer otro config.** Laravel carga `config/*.php` en orden alfabético, así que `config/fortify.php` NO puede hacer `config('kore-app.auth.two_factor')`: cuando se evalúa, `kore-app` todavía no existe. La salida es mutar la config del paquete desde el `register()` del provider del módulo, que corre después de cargar toda la config y antes del `boot()` que registra las rutas. Es exactamente lo que hace `FortifyServiceProvider::configureTwoFactorFeature()`.
 
 ## Pennant para rollouts graduales

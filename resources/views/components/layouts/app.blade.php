@@ -61,6 +61,18 @@
                     </x-kore::sidebar.group>
                 @endcan
 
+                {{-- La ruta sólo existe con AUTH_PASSKEYS=true (R10), así que el
+                     enlace se pregunta por ella y no por el toggle. --}}
+                @if (Route::has('passkeys.index'))
+                    <x-kore::sidebar.group label="{{ __('Cuenta') }}">
+                        <x-kore::sidebar.item
+                            label="{{ __('Passkeys') }}"
+                            icon="key-round"
+                            route="passkeys.index"
+                            match="passkeys.*" />
+                    </x-kore::sidebar.group>
+                @endif
+
                 {{-- Card de usuario: avatar + nombre/email, tema y logout. Al colapsar el
                      sidebar, `kore-sidebar-link` centra el avatar/icono y `kore-sidebar-label`
                      oculta el texto y el theme-switch (modo iconos). --}}

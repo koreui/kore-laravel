@@ -46,6 +46,20 @@
             </a>
         @endcan
 
+        @if (Route::has('passkeys.index'))
+            <a href="{{ route('passkeys.index') }}"
+               class="group flex items-start justify-between gap-4 rounded-xl border border-kore-border bg-kore-surface p-5 transition-colors hover:border-kore-primary/50">
+                <div>
+                    <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-kore-primary/10">
+                        <x-kore::icon name="key-round" class="h-5 w-5 text-kore-primary" />
+                    </div>
+                    <h3 class="mt-3 font-semibold">{{ __('Passkeys') }}</h3>
+                    <p class="mt-1 text-sm text-kore-muted-fg">{{ __('Entra con la huella, la cara o el PIN del dispositivo, sin contraseña.') }}</p>
+                </div>
+                <x-kore::icon name="arrow-up-right" class="h-4 w-4 text-kore-muted-fg transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+            </a>
+        @endif
+
         <a href="https://github.com/koreui/kore-laravel/tree/main/docs"
            class="group flex items-start justify-between gap-4 rounded-xl border border-kore-border bg-kore-surface p-5 transition-colors hover:border-kore-primary/50">
             <div>

@@ -1,13 +1,13 @@
 # Arquitectura — visión general
 
-**TL;DR**: Modular Monolith + Action Pattern sobre Laravel 12. Cada dominio vive aislado en `app/Modules/{Domain}/`, conecta con otros sólo vía Events/Contracts, y la lógica de negocio se concentra en clases Action de un solo método.
+**TL;DR**: Modular Monolith + Action Pattern sobre Laravel 13. Cada dominio vive aislado en `app/Modules/{Domain}/`, conecta con otros sólo vía Events/Contracts, y la lógica de negocio se concentra en clases Action de un solo método.
 
 ## Stack
 
 | Capa            | Tecnología                                  |
 |-----------------|---------------------------------------------|
 | Lenguaje        | PHP 8.4+                                    |
-| Framework       | Laravel 12                                  |
+| Framework       | Laravel 13                                  |
 | UI              | Livewire 4 + Alpine.js + Tailwind CSS v4    |
 | Componentes     | [koreUi](https://packagist.org/packages/kore-ui/kore-ui) — `<x-kore::*>` |
 | Auth            | Fortify + Sanctum (toggle) + spatie/laravel-permission |
@@ -15,7 +15,7 @@
 | Feature flags   | Laravel Pennant                             |
 | Tenancy         | stancl/tenancy v3 (toggle)                  |
 | Queues          | driver `database` (`queue:listen` en `composer dev`, `queue:work` en Docker) |
-| Tests           | Pest 3 + arch tests (`tests/Arch/`) + E2E Playwright (`tests/e2e/`) |
+| Tests           | Pest 5 + arch tests (`tests/Arch/`) + E2E Playwright (`tests/e2e/`) |
 | Calidad         | Pint + Larastan (larastan 3, nivel 8) + PHPat + `spaze/phpstan-disallowed-calls` + `kore:arch:check` + Rector |
 | Observabilidad  | Sentry · Pulse · spatie/laravel-health · spatie/laravel-activitylog |
 | AI              | Laravel Boost MCP + MCP propio `kore` + CLAUDE.md (AGENTS.md generado) + skills en `.agents/skills/` |

@@ -56,7 +56,7 @@ falla ante cualquier nombre que no esté en esta lista.
 | `Forms/` | Livewire Form Objects: `rules()` + `toData()`, sin persistencia | R4, R24 |
 | `Http/` | sólo `Controllers/`, `Livewire/`, `Requests/` y `Middleware/` | R3, R23 |
 | `Listeners/` | reacciones a eventos de otros módulos | R3 |
-| `Models/` | Eloquent, con `$fillable` explícito | R27 |
+| `Models/` | Eloquent, con `#[Fillable]` explícito (Laravel 13; antes `$fillable`) | R27 |
 | `Policies/` | `final`, sufijo `Policy` | Pest arch (R25) |
 | `Providers/` | `final`, sufijo `ServiceProvider` | Pest arch (R9) |
 | `Resources/` | sólo `views/` y `lang/` | R3 |

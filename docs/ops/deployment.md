@@ -196,6 +196,14 @@ AUTH_SOCIAL_LOGIN=false
 # devuelve 404 para un proveedor cuyo sub-toggle esté apagado.
 SOCIAL_GOOGLE=false
 SOCIAL_GITHUB=false
+# Passkeys (WebAuthn). El «relying party id» sale de APP_URL, así que esta
+# variable no se toca sola: lee la nota de abajo antes de encenderla.
+AUTH_PASSKEYS=true
+
+# Opcional, y sólo si algún día vas a rotar APP_KEY: el user handle de WebAuthn
+# se deriva de la clave de la aplicación. Fija este secreto ANTES de rotar y las
+# passkeys sobreviven; rota sin fijarlo y quedan todas invalidadas.
+# PASSKEYS_USER_HANDLE_SECRET=<openssl rand -base64 32, guardado fuera del VPS>
 
 # Observabilidad
 SENTRY_LARAVEL_DSN=
@@ -230,6 +238,30 @@ mal copiado no da ninguna otra señal hasta que alguien ve el volcado. Si el
 contenedor arranca y muere con ese mensaje en `docker compose logs app`, el
 arreglo es poner `APP_DEBUG=false` y volver a cachear la config
 (`php artisan config:cache`).
+
+**`APP_URL` es el dominio de las passkeys, y ese dominio es para siempre.**
+Con `AUTH_PASSKEYS=true` (el default), `config/fortify.php` deriva de `APP_URL`
+el *relying party id* de WebAuthn —el host, sin esquema ni puerto— y la lista de
+orígenes permitidos. Tres consecuencias que hay que aceptar antes del primer
+despliegue:
+
+1. **Cambiar de dominio invalida todas las passkeys registradas.** Pasar de
+   `app.tu-dominio.com` a `tu-dominio.com` no es una migración: es empezar de
+   cero, y cada usuario tiene que volver a registrar la suya desde
+   `/user/passkeys`. Si el dominio definitivo no está decidido, despliega con
+   `AUTH_PASSKEYS=false` y enciéndelo cuando lo esté.
+2. **`https://` obligatorio.** WebAuthn sólo funciona en contexto seguro; la
+   única excepción es `localhost`. Un `APP_URL` con IP no vale: el relying party
+   id tiene que ser un dominio y los navegadores rechazan los literales IP.
+3. **Un origen extra se añade en el config, no en el `.env`.** Si sirves el
+   mismo sitio con y sin `www`, el origen que no esté en
+   `config/fortify.php` → `passkeys.allowed_origins` falla la ceremonia. Va en
+   el config por lo mismo que la CSP va en `config/security.php` (R46): así
+   aparece en el diff y lo ve el review.
+
+No hay que publicar `config/passkeys.php`: Fortify sobrescribe sus claves desde
+su propio `register()`, y un archivo publicado sólo serviría para mentir sobre
+lo que está activo.
 
 ### Generar `APP_KEY`
 
@@ -376,6 +408,10 @@ curl -sI https://tu-dominio.com | grep -iE "content-security|strict-transport|x-
 # Si sale Content-Security-Policy a secas, alguien ya puso CSP_REPORT_ONLY=false.
 # Si salen las dos, hay una CSP colada en el Nginx del host: quítala.
 curl -sI https://tu-dominio.com | grep -ci "content-security-policy"   # debe ser 1
+
+# Las rutas de passkeys existen y el relying party id es el dominio real
+docker compose -f docker-compose.prod.yml exec app php artisan route:list --name=passkey
+docker compose -f docker-compose.prod.yml exec app php artisan config:show fortify.passkeys
 
 # .env y vendor/ no accesibles (deben retornar 404)
 curl -s -o /dev/null -w "%{http_code}\n" https://tu-dominio.com/.env

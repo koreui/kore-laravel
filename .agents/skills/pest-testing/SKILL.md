@@ -1,6 +1,6 @@
 ---
 name: pest-testing
-description: "Use this skill for Pest PHP testing in Laravel projects only. Trigger whenever any test is being written, edited, fixed, or refactored — including fixing tests that broke after a code change, adding assertions, converting PHPUnit to Pest, adding datasets, and TDD workflows. Always activate when the user asks how to write something in Pest, mentions test files or directories (tests/Feature, tests/Unit) or architecture tests. Covers: test()/it()/expect() syntax, datasets, mocking, browser testing, arch(), Livewire component tests, RefreshDatabase, and all Pest 3 features. Do not use for editing factories, seeders, migrations, controllers, models, or non-test PHP code."
+description: "Use this skill for Pest PHP testing in Laravel projects only. Trigger whenever any test is being written, edited, fixed, or refactored — including fixing tests that broke after a code change, adding assertions, converting PHPUnit to Pest, adding datasets, and TDD workflows. Always activate when the user asks how to write something in Pest, mentions test files or directories (tests/Feature, tests/Unit) or architecture tests. Covers: test()/it()/expect() syntax, datasets, mocking, browser testing, arch(), Livewire component tests, RefreshDatabase, and all Pest 5 features. Do not use for editing factories, seeders, migrations, controllers, models, or non-test PHP code."
 license: MIT
 metadata:
   author: laravel
@@ -10,7 +10,7 @@ metadata:
 
 ## Documentation
 
-Use `search-docs` for detailed Pest 3 patterns and documentation.
+Use `search-docs` for detailed Pest 5 patterns and documentation.
 
 ## Basic Usage
 
@@ -82,11 +82,11 @@ it('has emails', function (string $email) {
 ]);
 ```
 
-## Pest 3 Features
+## Pest 5 Features
 
 ### Architecture Testing
 
-Pest 3 includes architecture testing to enforce code conventions:
+Pest 5 includes architecture testing to enforce code conventions:
 
 <!-- Architecture Test Example -->
 ```php
@@ -106,7 +106,7 @@ arch('no debugging')
 
 ### Type Coverage
 
-Pest 3 provides improved type coverage analysis. Run with `--type-coverage` flag.
+Pest 5 provides improved type coverage analysis. Run with `--type-coverage` flag.
 
 ## Common Pitfalls
 

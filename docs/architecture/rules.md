@@ -498,7 +498,8 @@ mismo no tenía— y entrar con ella. Lo cierran `GrantablePermission` y
 `GrantableRole`.
 
 ### R27 · Mass assignment explícito
-Sin `Model::unguard()` global. Cada modelo declara su `$fillable`.
+Sin `Model::unguard()` global. Cada modelo declara su lista blanca con el
+atributo `#[Fillable]` de Laravel 13 (antes la propiedad `$fillable`).
 > Enforcement: disallowed-calls (`kore.r27`) · `composer analyse` · **Error** · + `MassAssignmentTest` · `composer test` · **Error**
 > Escape: ninguna
 
@@ -1027,11 +1028,11 @@ con `--no-verify`, y entonces no verifica nada.
 | **commit-msg** | ~1 s | **0,3 s** | `ConventionalCommitMsgHook` — el asunto sigue Conventional Commits (R43) |
 | **pre-push** | ~30 s | **4 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
 | **`composer ci`** | ~90 s | **16 s** | `pint --test` (1,1) + `phpstan` (0,6 con caché, 2,0 en frío) + `composer arch` (0,2) + `rector --dry-run` (4,3) + `pest` (9,3, secuencial) |
-| **CI (GitHub)** | ~3 min | — | `composer ci` en PHP 8.4 + `composer audit` + `npm ci && npm run build` + E2E (57 tests en 15 archivos) |
+| **CI (GitHub)** | ~3 min | — | `composer ci` en matriz PHP 8.4 / 8.5 + `composer audit` + `npm ci && npm run build` + E2E (63 tests en 16 archivos) |
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + GitHub Release (R42) |
 
 Medido en un MacBook (Apple Silicon, PHP 8.4) sobre el repositorio a fecha de
-la v1.4.0, con 391 tests Pest y una suite E2E de 57 tests en 15 archivos
+la v1.4.0, con 410 tests Pest y una suite E2E de 63 tests en 16 archivos
 (19 s aparte). Las cuatro primeras capas caben holgadamente en su
 presupuesto: el margen es para que un proyecto derivado pueda crecer sin tener
 que rediseñar el pipeline.

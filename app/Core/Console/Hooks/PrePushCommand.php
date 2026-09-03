@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core\Console\Hooks;
 
 use Igorsgm\GitHooks\Console\Commands\PrePush;
+use Illuminate\Console\Attributes\Signature;
 
 /**
  * Sustituye a `git-hooks:pre-push` de igorsgm/laravel-git-hooks 2.1.
@@ -19,8 +20,5 @@ use Igorsgm\GitHooks\Console\Commands\PrePush;
  *
  * Ver docs/quality/pipeline.md §Hooks.
  */
-final class PrePushCommand extends PrePush
-{
-    /** @var string */
-    protected $signature = 'git-hooks:pre-push {remote?} {url?}';
-}
+#[Signature('git-hooks:pre-push {remote?} {url?}')]
+final class PrePushCommand extends PrePush {}

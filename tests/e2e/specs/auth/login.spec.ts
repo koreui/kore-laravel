@@ -51,7 +51,7 @@ test.describe('Login', () => {
 
         await dashboard.logOut();
 
-        await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/$/);
+        await expect(page).toHaveURL(/localhost:\d+\/$/);
 
         await page.goto('/dashboard');
         await expect(page).toHaveURL(/\/login$/);

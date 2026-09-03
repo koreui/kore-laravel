@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Core\Console;
 
 use App\Core\Support\AgentsFile;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 /**
@@ -22,16 +24,12 @@ use Illuminate\Console\Command;
  * El `--check` es lo que corren `kore:arch:check --rule=R50` y el pre-commit:
  * un hook no escribe archivos, sólo dice que hay que regenerarlo.
  */
+#[Description('Genera AGENTS.md desde CLAUDE.md (R50)')]
+#[Signature('kore:agents:sync
+        {--check : No escribe nada; devuelve exit 1 si AGENTS.md no coincide con lo que se generaría.}
+        {--root= : Raíz del proyecto. Por defecto la de la aplicación; los tests la usan para apuntar a un árbol temporal.}')]
 final class AgentsSyncCommand extends Command
 {
-    /** @var string */
-    protected $signature = 'kore:agents:sync
-        {--check : No escribe nada; devuelve exit 1 si AGENTS.md no coincide con lo que se generaría.}
-        {--root= : Raíz del proyecto. Por defecto la de la aplicación; los tests la usan para apuntar a un árbol temporal.}';
-
-    /** @var string */
-    protected $description = 'Genera AGENTS.md desde CLAUDE.md (R50)';
-
     public function handle(): int
     {
         $root = $this->option('root');

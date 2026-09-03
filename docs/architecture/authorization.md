@@ -338,3 +338,18 @@ Los roles del sistema NO se crean con la factory: los siembra `ModulesSeeder`.
 ## Recursos
 
 - spatie/laravel-permission: https://spatie.be/docs/laravel-permission/v6/introduction
+
+## Nota Laravel 13 · `#[Middleware]` y `#[Authorize]`
+
+Laravel 13 permite declarar middleware y autorización como atributos del
+controller (`Illuminate\Routing\Attributes\Controllers\{Middleware, Authorize}`).
+El boilerplate **no los usa**, por dos razones:
+
+- No valen para Livewire: los componentes no son controllers y `/livewire/update`
+  no pasa por el middleware de la ruta. R23 sigue siendo la regla: la
+  autorización se decide **dentro** del componente.
+- En los controllers de rutas (`SocialiteController`, `DocsController`), la
+  política de acceso vive en `Routes/web.php`, donde se lee de un vistazo quién
+  entra a qué. Moverla a atributos repartiría esa lectura por varios archivos.
+
+Si un derivado los adopta para controllers puros, que sea en todos o en ninguno.

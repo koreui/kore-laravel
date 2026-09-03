@@ -6,6 +6,8 @@ namespace App\Core\Console;
 
 use App\Core\Support\AgentsFile;
 use Carbon\CarbonImmutable;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Arr;
 use Symfony\Component\Finder\Finder;
@@ -29,6 +31,11 @@ use Symfony\Component\Finder\Finder;
  *
  * Cada check cita la regla de docs/architecture/rules.md que implementa.
  */
+#[Description('Checks textuales de las reglas de docs/architecture/rules.md')]
+#[Signature('kore:arch:check
+        {--files= : Lista de archivos separada por comas (la usa el hook de pre-commit). Por defecto se revisa todo el repositorio.}
+        {--rule= : Corre sólo una regla, por ejemplo --rule=R29.}
+        {--root= : Raíz del proyecto a revisar. Por defecto la de la aplicación; los tests la usan para apuntar a un árbol de fixtures.}')]
 final class ArchCheckCommand extends Command
 {
     /**
@@ -74,15 +81,6 @@ final class ArchCheckCommand extends Command
      *     final de frase (`… ver R12.`) sí cuenta como cita.
      */
     private const string RULE_CITATION = '/(?<![A-Za-z0-9_$\/-])R\d{1,3}(?![A-Za-z0-9_\/-])(?!\.\d)/u';
-
-    /** @var string */
-    protected $signature = 'kore:arch:check
-        {--files= : Lista de archivos separada por comas (la usa el hook de pre-commit). Por defecto se revisa todo el repositorio.}
-        {--rule= : Corre sólo una regla, por ejemplo --rule=R29.}
-        {--root= : Raíz del proyecto a revisar. Por defecto la de la aplicación; los tests la usan para apuntar a un árbol de fixtures.}';
-
-    /** @var string */
-    protected $description = 'Checks textuales de las reglas de docs/architecture/rules.md';
 
     /** @var array<int, array{rule: string, file: string, line: int, message: string}> */
     private array $violations = [];

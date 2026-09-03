@@ -216,4 +216,17 @@ return [
 
     'partitioned' => env('SESSION_PARTITIONED_COOKIE', false),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Session Serialization (Laravel 13)
+    |--------------------------------------------------------------------------
+    |
+    | `json` en vez de `php`: los datos de sesión no pasan por `unserialize()`,
+    | así que una sesión manipulada no puede instanciar clases arbitrarias.
+    | Cambiarlo en una aplicación en marcha invalida las sesiones activas.
+    |
+    */
+
+    'serialization' => 'json',
+
 ];

@@ -1,15 +1,15 @@
 # kore-laravel
 
-Boilerplate Laravel 12 production-ready con Livewire 4, Tailwind CSS v4, koreUi y stack AI-friendly.
+Boilerplate Laravel 13 production-ready con Livewire 4, Tailwind CSS v4, koreUi y stack AI-friendly.
 
 ## Stack
 
-- **PHP** 8.4+ · **Laravel** 12
+- **PHP** 8.4+ · **Laravel** 13
 - **UI** Livewire 4 + Alpine.js + Tailwind CSS v4 + [koreUi](https://github.com/koreui/kore-ui)
 - **Auth** Fortify + Sanctum (toggle) + spatie/laravel-permission
 - **DTOs** spatie/laravel-data
 - **Feature flags** Laravel Pennant
-- **Tests** Pest 3 + arch tests (`tests/Arch/`) + E2E Playwright (`tests/e2e/`)
+- **Tests** Pest 5 + arch tests (`tests/Arch/`) + E2E Playwright (`tests/e2e/`)
 - **Calidad** Pint + Larastan nivel 8 + PHPat + `spaze/phpstan-disallowed-calls` + `kore:arch:check` + Rector
 - **Multi-tenancy** stancl/tenancy v3 (toggle)
 - **Observabilidad** Sentry + Laravel Pulse + spatie/laravel-health + spatie/laravel-activitylog
@@ -64,7 +64,7 @@ Con `DOCS_ENABLED=true` (el default de `.env.example`) todo esto se lee también
 en **`/docs`**, servido por la propia aplicación: mismos archivos, enlaces entre
 documentos reescritos y la UI del proyecto. En producción se deja apagado.
 
-> `koreUi` se consume desde Packagist (`kore-ui/kore-ui ^2.2`). No hay path repository; un `composer install` lo instala como cualquier otra dependencia. Código fuente: [github.com/koreui/kore-ui](https://github.com/koreui/kore-ui).
+> `koreUi` se consume desde Packagist (`kore-ui/kore-ui ^2.3`). No hay path repository; un `composer install` lo instala como cualquier otra dependencia. Código fuente: [github.com/koreui/kore-ui](https://github.com/koreui/kore-ui).
 
 ## Toggles (`.env`)
 
@@ -92,7 +92,7 @@ ejecutar `kore:tenancy:enable`, no por `.env`.
 
 ```bash
 composer dev            # arranca todo (server + queue + logs + vite)
-composer test           # corre Pest 3
+composer test           # corre Pest 5
 ./vendor/bin/pest --parallel
 ./vendor/bin/pest --filter=NombreTest
 

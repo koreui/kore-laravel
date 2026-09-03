@@ -52,6 +52,13 @@ return [
         'two_factor' => (bool) env('AUTH_2FA_ENABLED', true),
         'magic_links' => (bool) env('AUTH_MAGIC_LINKS', true),
         'social_login' => (bool) env('AUTH_SOCIAL_LOGIN', false),
+
+        // Passkeys (WebAuthn) vía Fortify + laravel/passkeys. Encendido por
+        // defecto: es la dirección a la que va la industria y no cuesta nada
+        // mientras nadie registre una. Sus lectores son
+        // `FortifyServiceProvider::register()` (añade o quita la feature) y
+        // `Auth/Routes/web.php` (la pantalla `/user/passkeys`).
+        'passkeys' => (bool) env('AUTH_PASSKEYS', true),
     ],
 
 ];

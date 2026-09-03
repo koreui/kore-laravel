@@ -9,7 +9,9 @@ use App\Models\User;
 use App\Modules\Auth\Console\Commands\RegeneratePermissionsCommand;
 use App\Modules\Auth\Http\Livewire\Dashboard;
 use App\Modules\Auth\Http\Livewire\MagicLink;
+use App\Modules\Auth\Http\Livewire\Passkeys;
 use App\Modules\Auth\Models\Role;
+use App\Modules\Auth\Policies\PasskeyPolicy;
 use App\Modules\Auth\Support\AuthorizationCatalog;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
@@ -18,6 +20,7 @@ use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Passkeys\Passkey;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use Livewire\Livewire;
 use Override;
@@ -34,6 +37,7 @@ final class AuthModuleServiceProvider extends ServiceProvider
     private const array LIVEWIRE_COMPONENTS = [
         'auth.dashboard' => Dashboard::class,
         'auth.magic-link' => MagicLink::class,
+        'auth.passkeys' => Passkeys::class,
     ];
 
     #[Override]
@@ -54,6 +58,7 @@ final class AuthModuleServiceProvider extends ServiceProvider
         $this->configureApiRateLimiting();
         $this->registerSuperadminGate();
         $this->registerObservabilityGates();
+        $this->registerPasskeyPolicy();
 
         if ($this->app->runningInConsole()) {
             $this->commands([
@@ -75,6 +80,21 @@ final class AuthModuleServiceProvider extends ServiceProvider
 
             return null;
         });
+    }
+
+    /**
+     * `Laravel\Passkeys\Passkey` es un modelo de vendor: no lo alcanza el
+     * auto-descubrimiento de policies (que busca `App\Policies\{Modelo}Policy`),
+     * así que se registra a mano.
+     *
+     * Se registra siempre, también con `AUTH_PASSKEYS=false`: una policy no es
+     * una capacidad observable —sin rutas ni pantalla no hay nada que
+     * autorizar—, y dejar la regla fuera del alcance del toggle evita que una
+     * credencial creada cuando estaba encendido quede sin dueño al apagarlo.
+     */
+    private function registerPasskeyPolicy(): void
+    {
+        Gate::policy(Passkey::class, PasskeyPolicy::class);
     }
 
     private function loadModule(): void
@@ -113,7 +133,7 @@ final class AuthModuleServiceProvider extends ServiceProvider
     /**
      * Limiter del grupo `api` (bootstrap/app.php hace `throttleApi()`).
      *
-     * Laravel 12 NO trae un `RateLimiter::for('api')` por defecto; sin él,
+     * Laravel (12 y 13) NO trae un `RateLimiter::for('api')` por defecto; sin él,
      * `throttle:api` degradaría a `maxAttempts = (int) 'api' = 0` y bloquearía
      * todas las peticiones. Por eso se registra siempre, incluso con
      * `API_ENABLED=false`: el toggle sólo decide si se cargan las rutas.

@@ -11,7 +11,7 @@ nada.
 
 El boilerplate tiene capacidades que un proyecto derivado puede no querer:
 multi-tenancy, backups, 2FA, login social. Todas se controlan desde
-`config/kore-app.php` (nueve claves hoy) y todas se apagan por defecto o casi.
+`config/kore-app.php` (diez claves hoy) y todas se apagan por defecto o casi.
 
 Dos restricciones marcan la forma:
 
@@ -154,6 +154,14 @@ así el resultado no depende de lo que `config/fortify.php` trajera de fábrica.
 | 1 | `TenancyModuleServiceProvider` | v1.0.0 | La forma base y la excepción del comando de activación: sin `kore:tenancy:enable` disponible con el toggle apagado, `TENANCY_ENABLED=false` sería un callejón sin salida. `TenancyToggleTest` blinda las dos mitades. |
 | 2 | `FortifyServiceProvider::configureTwoFactorFeature()` | v1.0.0 | El caso en que el early return no basta: Fortify lee `fortify.features` en su `boot()`, así que el toggle se aplica mutando esa config desde `register()`. Es la cicatriz de R12 y de R17 —`config/fortify.php` llamaba a `env('AUTH_2FA_ENABLED')` y el toggle sólo *parecía* funcionar—. |
 | 3 | `BackupServiceProvider` | v1.3.0 | La tercera aparición, tres releases después, sin que nadie coordinara la forma: mismo early return en los dos métodos, mismo método privado de lectura, mismo `dont-discover`. Añadió la pieza que faltaba —el `if` del scheduler— porque `Schedule::command()` no falla aunque el comando no exista. |
+| 4 | `FortifyServiceProvider::configurePasskeysFeature()` | v2.0.0 | La variante B por segunda vez, sin cambiarle una coma: quitar la feature y volver a añadirla si toca, la lectura del toggle en un método privado, y el `register()` como único sitio que corre antes del `boot()` de Fortify. Que el patrón se aplicara solo —mismo provider, misma forma, cuatro releases después— es la prueba de que estaba bien escrito. |
+
+La variante se estrenó con el 2FA y se repitió tal cual con las passkeys
+(v2.0.0). Lo único que cambia entre las dos es el nombre de la feature y sus
+opciones: `['confirm' => true, 'confirmPassword' => true]` en una,
+`['confirmPassword' => true]` en la otra. Si algún día hay una tercera, el
+método privado se puede extraer; con dos, duplicarlo se lee mejor que
+abstraerlo.
 
 ### Variante C · el namespace de vistas
 

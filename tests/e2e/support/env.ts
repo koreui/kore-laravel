@@ -64,7 +64,7 @@ function parseEnvFile(file: string): Record<string, string> {
 export const e2eEnv = parseEnvFile(envFile);
 
 /** URL base de la app bajo test, tal y como la declara `.env.e2e`. */
-export const baseURL = (e2eEnv.APP_URL ?? 'http://127.0.0.1:8010').replace(/\/+$/, '');
+export const baseURL = (e2eEnv.APP_URL ?? 'http://localhost:8010').replace(/\/+$/, '');
 
 const url = new URL(baseURL);
 

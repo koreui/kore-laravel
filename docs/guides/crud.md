@@ -206,7 +206,7 @@ final readonly class UserCreated
 ```
 
 El listener vive en `App\Modules\{Otro}\Listeners\` y sólo depende del evento.
-Laravel 12 los descubre solo; no hace falta registrarlos.
+Laravel los descubre solo; no hace falta registrarlos.
 
 ---
 

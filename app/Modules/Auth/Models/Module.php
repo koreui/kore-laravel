@@ -7,6 +7,7 @@ namespace App\Modules\Auth\Models;
 use App\Modules\Auth\Database\Factories\ModuleFactory;
 use App\Modules\Auth\Models\Collections\ModulesCollection;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -32,15 +33,13 @@ use Override;
  * @property-read array<int, array{value: string, label: string}> $permissions
  */
 #[CollectedBy(ModulesCollection::class)]
+#[Fillable(['name', 'slug', 'roles', 'active'])]
 final class Module extends Model
 {
     /** @use HasFactory<ModuleFactory> */
     use HasFactory;
 
     use SoftDeletes;
-
-    /** @var list<string> */
-    protected $fillable = ['name', 'slug', 'roles', 'active'];
 
     /** @return array<string, string> */
     #[Override]

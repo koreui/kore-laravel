@@ -281,7 +281,7 @@ letra; una ruta absoluta funciona en tu máquina y en ninguna otra.
 ---
 name: mi-skill
 description: Cuándo usarlo (la AI lee esto para decidir activarlo)
-compatibility: "kore-laravel (Laravel 12, Livewire 4, Pest 3). Claude Code, Codex y cualquier cliente Agent Skills."
+compatibility: "kore-laravel (Laravel 13, Livewire 4, Pest 5). Claude Code, Codex y cualquier cliente Agent Skills."
 ---
 
 # Título

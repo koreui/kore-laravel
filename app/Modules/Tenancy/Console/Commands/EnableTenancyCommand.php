@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace App\Modules\Tenancy\Console\Commands;
 
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Symfony\Component\Process\Process;
 
+#[Description('Activa el módulo de multi-tenancy (stancl/tenancy) y publica todos los assets necesarios.')]
+#[Signature('kore:tenancy:enable
+                            {--force : Reescribe configs y migraciones aunque ya existan}')]
 final class EnableTenancyCommand extends Command
 {
-    protected $signature = 'kore:tenancy:enable
-                            {--force : Reescribe configs y migraciones aunque ya existan}';
-
-    protected $description = 'Activa el módulo de multi-tenancy (stancl/tenancy) y publica todos los assets necesarios.';
-
     public function handle(): int
     {
         $this->info('Activando módulo Tenancy...');

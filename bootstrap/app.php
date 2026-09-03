@@ -32,7 +32,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // rutas de API devuelven JSON a un cliente que no tiene CSP ni frames.
         $middleware->web(append: [SecurityHeaders::class]);
 
-        // El grupo `api` del esqueleto de Laravel 12 no trae throttle. El
+        // El grupo `api` del esqueleto de Laravel no trae throttle. El
         // limiter `api` se define en AuthModuleServiceProvider.
         $middleware->throttleApi();
 

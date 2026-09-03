@@ -10,6 +10,7 @@ use Igorsgm\GitHooks\Exceptions\HookFailException;
 use Igorsgm\GitHooks\Git\ChangedFiles;
 use Igorsgm\GitHooks\Git\CommitMessage;
 use Igorsgm\GitHooks\Git\Log;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Console\OutputStyle;
 use Illuminate\Support\Facades\Artisan;
@@ -41,11 +42,8 @@ use Symfony\Component\Console\Output\BufferedOutput;
  */
 function hookCommand(int $exitCode = Command::SUCCESS): Command
 {
-    $command = new class($exitCode) extends Command
+    $command = new #[Signature('test:hook-host')] class($exitCode) extends Command
     {
-        /** @var string */
-        protected $signature = 'test:hook-host';
-
         /** @var array<int, array{0: string, 1: array<string, mixed>}> */
         public array $calls = [];
 

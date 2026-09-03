@@ -8,6 +8,8 @@ use App\Models\User;
 use App\Modules\Auth\Database\Seeders\ModulesSeeder;
 use App\Modules\Auth\Models\Module;
 use App\Modules\Auth\Models\Role;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 /**
@@ -15,12 +17,10 @@ use Illuminate\Console\Command;
  * Administradores los permisos vigentes. Útil al agregar un módulo nuevo
  * o cambiar el set de permisos.
  */
+#[Description('Regenera modules/permissions y sincroniza permisos a todos los Administradores')]
+#[Signature('kore:regenerate-permissions')]
 final class RegeneratePermissionsCommand extends Command
 {
-    protected $signature = 'kore:regenerate-permissions';
-
-    protected $description = 'Regenera modules/permissions y sincroniza permisos a todos los Administradores';
-
     public function handle(): int
     {
         $this->call(ModulesSeeder::class);
