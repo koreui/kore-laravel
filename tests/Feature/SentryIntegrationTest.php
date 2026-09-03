@@ -16,7 +16,7 @@ it('keeps the sentry channel out of the default stack', function (): void {
 });
 
 it('registers the sentry reportable callback on the exception handler', function (): void {
-    $handler = app(ExceptionHandler::class);
+    $handler = resolve(ExceptionHandler::class);
 
     $reportCallbacks = (new ReflectionObject($handler))
         ->getProperty('reportCallbacks')
@@ -34,7 +34,7 @@ it('registers the sentry reportable callback on the exception handler', function
 
     expect($fromSentry)->not->toBeEmpty();
 })->skip(
-    fn (): bool => ! property_exists(app(ExceptionHandler::class), 'reportCallbacks'),
+    fn (): bool => ! property_exists(resolve(ExceptionHandler::class), 'reportCallbacks'),
     'El handler de excepciones no expone reportCallbacks en esta versión de Laravel.',
 );
 

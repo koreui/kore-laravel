@@ -19,7 +19,7 @@ use Spatie\Permission\PermissionRegistrar;
  * 2. Si tiene permisos no-CRUD, añadelos a Module::specialPermissions()
  * 3. Corre `php artisan kore:regenerate-permissions` (seeder + sync a admins)
  */
-class ModulesSeeder extends Seeder
+final class ModulesSeeder extends Seeder
 {
     public function run(): void
     {
@@ -81,7 +81,7 @@ class ModulesSeeder extends Seeder
     {
         $allPermissions = Permission::all();
 
-        // Superadmin: bypass total via Gate::before en AppServiceProvider.
+        // Superadmin: bypass total via Gate::before en AuthModuleServiceProvider.
         // Igual sincronizamos los permisos para que @can siga funcionando si
         // alguien quita el Gate::before accidentalmente.
         $superadmin = SpatieRole::firstOrCreate(

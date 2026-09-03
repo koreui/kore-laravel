@@ -11,7 +11,7 @@ it('registers the api rate limiter', function (): void {
 });
 
 it('applies throttle:api to the api middleware group', function (): void {
-    $group = app('router')->getMiddlewareGroups()['api'] ?? [];
+    $group = resolve('router')->getMiddlewareGroups()['api'] ?? [];
 
     expect($group)->toContain('throttle:api');
 });

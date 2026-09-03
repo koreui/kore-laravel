@@ -9,6 +9,10 @@ use Tests\TestCase;
 |--------------------------------------------------------------------------
 | Test Case
 |--------------------------------------------------------------------------
+|
+| `Tests\TestCase::setUp()` ya llama a `withoutVite()`, así que los tests no
+| necesitan assets compilados. No lo repitas aquí con un `beforeEach`.
+|
 */
 
 pest()->extend(TestCase::class)
@@ -26,26 +30,5 @@ pest()->extend(TestCase::class)
 pest()->extend(TestCase::class)
     ->in(__DIR__.'/../app/Modules/*/Tests/Unit');
 
-// Evita romper tests cuando Vite no ha compilado assets.
-beforeEach(function (): void {
-    $this->withoutVite();
-});
-
-/*
-|--------------------------------------------------------------------------
-| Expectations
-|--------------------------------------------------------------------------
-*/
-
-expect()->extend('toBeOne', fn () => $this->toBe(1));
-
-/*
-|--------------------------------------------------------------------------
-| Functions
-|--------------------------------------------------------------------------
-*/
-
-function something(): void
-{
-    // Helper functions for tests can go here.
-}
+// tests/Arch no extiende TestCase: los arch tests son estáticos, no bootean la
+// aplicación ni tocan la base de datos.

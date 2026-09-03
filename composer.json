@@ -77,6 +77,9 @@
             "@php artisan config:clear --ansi",
             "@php vendor/bin/pest --coverage --min=80"
         ],
+        "e2e": [
+            "npm run e2e"
+        ],
         "lint": [
             "@php vendor/bin/pint"
         ],

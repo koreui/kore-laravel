@@ -4,23 +4,33 @@
 
 ## Tabla de toggles
 
-| Variable               | Default       | Activa                                              |
-|------------------------|---------------|-----------------------------------------------------|
-| `API_ENABLED`          | `true`        | Sanctum stateful middleware + rutas API (`/api/*`)  |
-| `TENANCY_ENABLED`      | `false`       | Módulo Tenancy completo (stancl/tenancy)            |
-| `TENANCY_MODE`         | `single-db`   | `single-db` o `multi-db`                            |
-| `REVERB_ENABLED`       | `false`       | Laravel Reverb (websockets) — paquete no incluido por defecto |
-| `OCTANE_ENABLED`       | `false`       | Octane / FrankenPHP — paquete no incluido por defecto |
-| `OCTANE_SERVER`        | `frankenphp`  | servidor Octane                                     |
-| `SCOUT_ENABLED`        | `false`       | Scout + Meilisearch — paquete no incluido por defecto |
-| `SCOUT_DRIVER`         | `meilisearch` | driver Scout                                        |
-| `AUTH_2FA_ENABLED`     | `true`        | Fortify TwoFactorAuthentication                     |
-| `AUTH_MAGIC_LINKS`     | `true`        | OTP via spatie/laravel-one-time-passwords           |
-| `AUTH_SOCIAL_LOGIN`    | `false`       | Socialite (con sub-toggles por proveedor)           |
-| `SOCIAL_GOOGLE`        | `false`       | proveedor Google de Socialite                       |
-| `SOCIAL_GITHUB`        | `false`       | proveedor GitHub de Socialite                       |
-| `SENTRY_LARAVEL_DSN`   | (vacío)       | Sentry — sin DSN, el SDK es no-op                   |
-| `PULSE_ENABLED`        | `false`       | Laravel Pulse                                       |
+| Variable               | Default       | Activa                                              | Quién lo lee |
+|------------------------|---------------|-----------------------------------------------------|--------------|
+| `API_ENABLED`          | `true`        | Sanctum stateful middleware + rutas API (`/api/*`)  | `AuthModuleServiceProvider`, `routes/console.php` |
+| `TENANCY_ENABLED`      | `false`       | Módulo Tenancy completo (stancl/tenancy)            | `TenancyModuleServiceProvider` |
+| `AUTH_2FA_ENABLED`     | `true`        | Fortify `twoFactorAuthentication` (rutas + pantalla)| `FortifyServiceProvider::register()` |
+| `AUTH_MAGIC_LINKS`     | `true`        | OTP via spatie/laravel-one-time-passwords           | `Auth/Routes/web.php`, `login.blade.php` |
+| `AUTH_SOCIAL_LOGIN`    | `false`       | Socialite (con sub-toggles por proveedor)           | `Auth/Routes/web.php`, `login.blade.php` |
+| `SOCIAL_GOOGLE`        | `false`       | proveedor Google de Socialite                       | `SocialiteController`, `login.blade.php` |
+| `SOCIAL_GITHUB`        | `false`       | proveedor GitHub de Socialite                       | `SocialiteController`, `login.blade.php` |
+
+Estas siete son **todas** las claves de `config/kore-app.php`. La columna
+"quién lo lee" no es decorativa: es la regla. Un toggle que nadie lee es una
+mentira en la documentación, y por eso en la v1.0.0 se borraron
+`REVERB_ENABLED`, `OCTANE_ENABLED`/`OCTANE_SERVER`, `SCOUT_ENABLED`/`SCOUT_DRIVER`,
+`TENANCY_MODE`, `SENTRY_ENABLED` y el bloque `observability.*`.
+
+### Lo que NO es un toggle
+
+| Tema | Cómo se controla de verdad |
+|------|----------------------------|
+| Reverb (websockets) | Módulo opcional. No está instalado; se añade con `composer require laravel/reverb` y su propia config. |
+| Octane / FrankenPHP | Módulo opcional. `composer require laravel/octane`. |
+| Scout + Meilisearch | Módulo opcional. `composer require laravel/scout`. |
+| Modo de tenancy (`single-db` / `multi-db`) | Se decide al ejecutar `php artisan kore:tenancy:enable`, en `config/tenancy.php` (bootstrappers de stancl). Nunca fue una variable de entorno funcional. |
+| Sentry | `SENTRY_LARAVEL_DSN`. Sin DSN el SDK es no-op; no hay booleano aparte. |
+| Pulse | `PULSE_ENABLED`, que lee `config/pulse.php` (del paquete), no `kore-app`. |
+| Health | Siempre activo. Rutas en `HealthServiceProvider`; `/health/json` pide `HEALTH_SECRET_TOKEN`. |
 
 ## Patrón en código
 
@@ -56,6 +66,7 @@ if ((bool) config('kore-app.api.enabled')) {
 - ❌ **No bypasear** los toggles con código directo (`if (env('TENANCY_ENABLED'))` o ENV reads ad-hoc). El boilerplate debe ser reusable.
 - ❌ **No leer `env()` fuera de configs** — siempre `config()`. Los `.env` reads en code se rompen con `config:cache` (que se hace en producción).
 - ✅ **Sí** agregar nuevos toggles a `config/kore-app.php` cuando una feature deba ser opt-in. Documenta la nueva variable en `.env.example` y aquí.
+- ⚠️ **Un config no puede leer otro config.** Laravel carga `config/*.php` en orden alfabético, así que `config/fortify.php` NO puede hacer `config('kore-app.auth.two_factor')`: cuando se evalúa, `kore-app` todavía no existe. La salida es mutar la config del paquete desde el `register()` del provider del módulo, que corre después de cargar toda la config y antes del `boot()` que registra las rutas. Es exactamente lo que hace `FortifyServiceProvider::configureTwoFactorFeature()`.
 
 ## Pennant para rollouts graduales
 

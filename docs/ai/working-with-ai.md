@@ -8,11 +8,11 @@
 |--------------------------------|-----------------------------------------------------|
 | `CLAUDE.md`                    | reglas globales — Claude Code lo lee al inicio      |
 | `AGENTS.md`                    | mismas reglas, formato Codex/agnóstico              |
-| `.mcp.json`                    | declara el MCP server `laravel-boost`               |
+| `.mcp.json`                    | declara los MCP servers `laravel-boost` y `kore-ui` |
 | `boost.json`                   | metadata de Boost                                   |
 | `.claude/skills/`              | skills propios + skills de Boost (laravel, livewire, pennant, pest) |
-| `.agents/skills/`              | skills agnósticos (mismo set, otro formato)         |
-| `.codex/config.toml`           | config para Codex                                   |
+| `.agents/skills/`              | **copia** del mismo set, para Codex y otros agentes |
+| `.codex/config.toml`           | config para Codex — espejo de `.mcp.json`, sin rutas absolutas |
 
 ## Laravel Boost MCP
 
@@ -48,7 +48,18 @@ Después del `<laravel-boost-guidelines>`, Boost inyecta las guidelines oficiale
 
 ## Skills propios
 
-Vive cada uno en `.claude/skills/{nombre}/SKILL.md` (también copiados a `.agents/skills/`).
+Vive cada uno en `.claude/skills/{nombre}/SKILL.md`, con una **copia byte a byte**
+en `.agents/skills/{nombre}/SKILL.md`. Son copias y no symlinks porque Codex no
+resuelve enlaces simbólicos dentro del repo. La contrapartida es que hay que
+copiar a mano al editar un skill:
+
+```bash
+cp -R .claude/skills/mi-skill .agents/skills/
+diff -r .claude/skills .agents/skills   # debe salir vacío
+```
+
+La v1.4.0 del roadmap unifica ambas carpetas en una sola con frontmatter
+`compatibility`.
 
 | Skill                  | Cuándo                                                          |
 |------------------------|------------------------------------------------------------------|
@@ -89,7 +100,9 @@ Se actualizan con `php artisan boost:install --skills`.
 
 ```bash
 mkdir -p .claude/skills/mi-skill
-mkdir -p .agents/skills/mi-skill   # opcional, para Codex/etc.
+# ...escribe el SKILL.md y luego replícalo (no es opcional: README y este doc
+# afirman que los dos sets son idénticos, y hay que sostenerlo)
+cp -R .claude/skills/mi-skill .agents/skills/
 ```
 
 `.claude/skills/mi-skill/SKILL.md`:
@@ -111,7 +124,8 @@ description: Cuándo usarlo (la AI lee esto para decidir activarlo)
 
 ### Agregar un MCP server adicional
 
-Edita `.mcp.json` y agrega tu server. Ejemplo: agregar el MCP de kore-ui:
+Edita `.mcp.json` **y** `.codex/config.toml`: las dos herramientas deben ver los
+mismos servidores. El de kore-ui ya viene declarado y sirve de ejemplo:
 
 ```json
 {
@@ -121,12 +135,25 @@ Edita `.mcp.json` y agrega tu server. Ejemplo: agregar el MCP de kore-ui:
       "args": ["artisan", "boost:mcp"]
     },
     "kore-ui": {
-      "command": "node",
-      "args": ["../koreUi/kore-ui-mcp/dist/index.js"]
+      "type": "http",
+      "url": "https://kore-ui-mcp.ovilla.dev/mcp"
     }
   }
 }
 ```
+
+El equivalente en `.codex/config.toml`:
+
+```toml
+[features]
+experimental_use_rmcp_client = true   # servidores por HTTP
+
+[mcp_servers.kore-ui]
+url = "https://kore-ui-mcp.ovilla.dev/mcp"
+```
+
+Nada de `cwd` con rutas absolutas: Codex ya arranca desde la raíz del proyecto y
+una ruta absoluta rompe el repo para cualquier otro clon.
 
 ### Refrescar guidelines de Boost
 

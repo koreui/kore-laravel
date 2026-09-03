@@ -45,17 +45,27 @@ El módulo deja de bootear. Las migraciones publicadas y `config/tenancy.php` qu
 
 ## Modos
 
+> **No hay `TENANCY_MODE` en `.env`.** El único toggle del boilerplate es
+> `TENANCY_ENABLED`. El modo se decide al ejecutar `kore:tenancy:enable`, que
+> publica `config/tenancy.php`: es la lista de `bootstrappers` de stancl la que
+> determina si cada tenant tiene su propia base de datos o si comparten una.
+> Existió una clave `kore-app.tenancy.mode` que no leía nadie; se borró en v1.0.0.
+
 ### single-db (default — row-based)
 
-`TENANCY_MODE=single-db`. Todos los tenants comparten la misma DB; las filas se scopean por `tenant_id`. Ventajas: cheap, simple. Desventaja: bugs de scoping son catastróficos (data leak).
+Todos los tenants comparten la misma DB; las filas se scopean por `tenant_id`.
+Ventajas: barato, simple. Desventaja: los bugs de scoping son catastróficos (data leak).
 
+Es lo que obtienes si dejas `config/tenancy.php` sin el `DatabaseTenancyBootstrapper`.
 Aplicas el trait `BelongsToTenant` (de stancl) en cada modelo de negocio.
 
 ### multi-db
 
-`TENANCY_MODE=multi-db`. Cada tenant tiene su propia base de datos. Ventajas: isolation total, backups por tenant, compliance. Desventaja: muchas conexiones, costo, deploys más cuidadosos.
+Cada tenant tiene su propia base de datos. Ventajas: aislamiento total, backups
+por tenant, compliance. Desventaja: muchas conexiones, costo, deploys más cuidadosos.
 
-Configurar en `config/tenancy.php` después de activar.
+Se activa dejando `Stancl\Tenancy\Bootstrappers\DatabaseTenancyBootstrapper`
+en `config/tenancy.php` (`bootstrappers`) y configurando `tenancy.database`.
 
 ## Modelo Tenant
 
@@ -144,7 +154,7 @@ docker compose -f docker-compose.prod.yml exec app php artisan migrate --force
 docker compose -f docker-compose.prod.yml restart app queue scheduler
 ```
 
-Confirmar en `.env` del VPS que `TENANCY_ENABLED=true` y `TENANCY_MODE` esté bien.
+Confirmar en `.env` del VPS que `TENANCY_ENABLED=true`, y en `config/tenancy.php` que los `bootstrappers` son los del modo que quieres.
 
 ## Recursos
 

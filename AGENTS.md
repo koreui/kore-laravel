@@ -33,7 +33,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - Auth: Fortify + Sanctum (toggle) + spatie/laravel-permission
 - DTOs: spatie/laravel-data
 - Feature flags: Laravel Pennant
-- Tests: Pest 3 (con arch tests)
+- Tests: Pest 3 (con arch tests en `tests/Arch/ArchitectureTest.php`)
 - Calidad: Pint + Larastan nivel 8 + Rector
 - Observabilidad: Sentry · Laravel Pulse · spatie/laravel-health · spatie/laravel-activitylog
 - AI: Laravel Boost MCP + skills propios en `.claude/skills/` (module-scaffold, kore-action-create, kore-livewire-create)
@@ -87,18 +87,23 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | ----------------------- | ---------------- | ----------------------------------- |
 | `API_ENABLED`           | `true`           | Sanctum + rutas API                 |
 | `TENANCY_ENABLED`       | `false`          | Módulo Tenancy (stancl/tenancy)     |
-| `TENANCY_MODE`          | `single-db`      | `single-db` o `multi-db`            |
-| `REVERB_ENABLED`        | `false`          | Laravel Reverb (websockets)         |
-| `OCTANE_ENABLED`        | `false`          | Octane / FrankenPHP                 |
-| `SCOUT_ENABLED`         | `false`          | Scout + Meilisearch                 |
 | `AUTH_2FA_ENABLED`      | `true`           | 2FA vía Fortify                     |
 | `AUTH_MAGIC_LINKS`      | `true`           | spatie/laravel-one-time-passwords   |
 | `AUTH_SOCIAL_LOGIN`     | `false`          | Socialite                           |
 | `SOCIAL_GOOGLE/GITHUB`  | `false`          | Proveedor específico                |
-| `SENTRY_ENABLED`        | `false`          | Sentry                              |
-| `PULSE_ENABLED`         | `false`          | Laravel Pulse                       |
+
+Esas siete claves son **todas** las de `config/kore-app.php`. Regla: un toggle
+sólo existe si alguien lo lee. Reverb, Octane y Scout no son toggles sino
+módulos opcionales que se instalan bajo demanda; el modo `single-db`/`multi-db`
+de tenancy se elige en `config/tenancy.php` al correr `kore:tenancy:enable`.
+Sentry se activa con `SENTRY_LARAVEL_DSN` y Pulse con `PULSE_ENABLED`
+(`config/pulse.php`), fuera de `kore-app`.
 
 Cuando un toggle está OFF, su `ServiceProvider` debe hacer `return` temprano y no registrar nada (ni rutas, ni middleware, ni vistas).
+
+⚠️ Un `config/*.php` no puede leer otro: se cargan en orden alfabético. Si un
+paquete necesita reaccionar a `kore-app`, múta su config desde el `register()`
+del provider del módulo (ver `FortifyServiceProvider::configureTwoFactorFeature()`).
 
 ## Componentes UI
 
@@ -123,6 +128,9 @@ composer dev
 composer test                       # Pest 3
 ./vendor/bin/pest --parallel        # paralelo
 ./vendor/bin/pest --filter=TestName # filtrado
+./vendor/bin/pest tests/Arch        # sólo arch tests
+
+composer e2e                        # suite E2E (ver docs/quality/e2e.md)
 
 # Calidad (configurada en Fase 3)
 composer lint                       # Pint

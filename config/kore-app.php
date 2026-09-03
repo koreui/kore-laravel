@@ -14,6 +14,11 @@ return [
     | in/out without code changes. For per-user / per-team gradual rollouts
     | use Laravel Pennant features in app/Providers/AppServiceProvider.
     |
+    | REGLA: aquí sólo viven toggles que algún archivo lee de verdad. Si una
+    | capacidad no está instalada (Reverb, Octane, Scout...) no lleva toggle:
+    | es un módulo opcional que se instala bajo demanda. Los toggles fantasma
+    | mienten sobre lo que el boilerplate hace.
+    |
     */
 
     'api' => [
@@ -22,22 +27,6 @@ return [
 
     'tenancy' => [
         'enabled' => (bool) env('TENANCY_ENABLED', false),
-        // single-db (row-based) | multi-db (database per tenant)
-        'mode' => env('TENANCY_MODE', 'single-db'),
-    ],
-
-    'reverb' => [
-        'enabled' => (bool) env('REVERB_ENABLED', false),
-    ],
-
-    'octane' => [
-        'enabled' => (bool) env('OCTANE_ENABLED', false),
-        'server' => env('OCTANE_SERVER', 'frankenphp'),
-    ],
-
-    'search' => [
-        'enabled' => (bool) env('SCOUT_ENABLED', false),
-        'driver' => env('SCOUT_DRIVER', 'meilisearch'),
     ],
 
     'socialite' => [
@@ -49,11 +38,6 @@ return [
         'two_factor' => (bool) env('AUTH_2FA_ENABLED', true),
         'magic_links' => (bool) env('AUTH_MAGIC_LINKS', true),
         'social_login' => (bool) env('AUTH_SOCIAL_LOGIN', false),
-    ],
-
-    'observability' => [
-        'sentry' => (bool) env('SENTRY_ENABLED', false),
-        'pulse' => (bool) env('PULSE_ENABLED', false),
     ],
 
 ];

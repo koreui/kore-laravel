@@ -54,7 +54,7 @@
             </a>
         @endcan
 
-        <a href="/docs"
+        <a href="https://github.com/koreui/kore-laravel/tree/main/docs"
            class="group flex items-start justify-between gap-4 rounded-xl border border-kore-border bg-kore-surface p-5 transition-colors hover:border-kore-primary/50">
             <div>
                 <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-kore-primary/10">

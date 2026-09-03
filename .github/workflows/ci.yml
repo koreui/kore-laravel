@@ -39,6 +39,9 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
 
+      - name: Composer audit (advisories de seguridad)
+        run: composer audit --no-interaction
+
       - name: Pint (lint)
         run: ./vendor/bin/pint --test --format=checkstyle
 
@@ -52,3 +55,24 @@ jobs:
         env:
           APP_ENV: testing
         run: ./vendor/bin/pest --parallel --compact
+
+  # Los tests corren con withoutVite(), así que un build de assets roto pasaría
+  # verde por el job de calidad. Este job es el que lo cachea.
+  assets:
+    name: Assets (Vite build)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build

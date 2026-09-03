@@ -30,7 +30,7 @@ use Override;
  * @property-read array<int, array{value: string, label: string}> $permissions
  */
 #[CollectedBy(ModulesCollection::class)]
-class Module extends Model
+final class Module extends Model
 {
     use SoftDeletes;
 

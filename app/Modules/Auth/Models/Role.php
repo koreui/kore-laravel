@@ -23,7 +23,7 @@ use Spatie\Permission\Models\Role as SpatieRole;
  * Para agregar más roles: añade la constante, súmala a allRoles() y crea
  * la lógica de syncPermissions correspondiente en ModulesSeeder.
  */
-class Role extends SpatieRole
+final class Role extends SpatieRole
 {
     use LogsActivity;
 

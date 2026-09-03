@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Collection;
 /**
  * @extends Collection<int, Module>
  */
-class ModulesCollection extends Collection
+final class ModulesCollection extends Collection
 {
     /**
      * Estructura completa para el editor de permisos en la UI.

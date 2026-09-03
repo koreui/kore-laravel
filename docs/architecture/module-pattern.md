@@ -119,6 +119,7 @@ return [
     App\Providers\HealthServiceProvider::class,
     App\Modules\Auth\Providers\AuthModuleServiceProvider::class,
     App\Modules\Tenancy\Providers\TenancyModuleServiceProvider::class,
+    App\Modules\Users\Providers\UsersModuleServiceProvider::class,
     App\Modules\{Tudominio}\Providers\{TuDominio}ModuleServiceProvider::class,
 ];
 ```

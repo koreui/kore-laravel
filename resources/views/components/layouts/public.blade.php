@@ -24,9 +24,9 @@
             </a>
 
             <nav class="hidden items-center gap-6 text-sm md:flex">
-                <a href="/docs" class="text-kore-muted-fg transition-colors hover:text-kore-fg">{{ __('Documentación') }}</a>
+                <a href="https://github.com/koreui/kore-laravel/tree/main/docs" class="text-kore-muted-fg transition-colors hover:text-kore-fg">{{ __('Documentación') }}</a>
                 <a href="/#features" class="text-kore-muted-fg transition-colors hover:text-kore-fg">{{ __('Características') }}</a>
-                <a href="https://github.com" class="text-kore-muted-fg transition-colors hover:text-kore-fg">GitHub</a>
+                <a href="https://github.com/koreui/kore-laravel" class="text-kore-muted-fg transition-colors hover:text-kore-fg">GitHub</a>
             </nav>
 
             <div class="flex items-center gap-3">

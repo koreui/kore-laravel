@@ -96,6 +96,6 @@ final class MagicLink extends Component
 
     private function throttleKey(): string
     {
-        return 'magic-link:'.Str::transliterate(Str::lower($this->email)).'|'.(string) request()->ip();
+        return 'magic-link:'.Str::transliterate(Str::lower($this->email)).'|'.request()->ip();
     }
 }

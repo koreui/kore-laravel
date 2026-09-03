@@ -14,8 +14,8 @@
 | DTOs            | spatie/laravel-data                         |
 | Feature flags   | Laravel Pennant                             |
 | Tenancy         | stancl/tenancy v3 (toggle)                  |
-| Queues          | Redis + Horizon (en `composer dev`)         |
-| Tests           | Pest 3                                      |
+| Queues          | driver `database` (`queue:listen` en `composer dev`, `queue:work` en Docker) |
+| Tests           | Pest 3 + arch tests (`tests/Arch/`)         |
 | Calidad         | Pint + Larastan 8 + Rector                  |
 | Observabilidad  | Sentry · Pulse · spatie/laravel-health · spatie/laravel-activitylog |
 | AI              | Laravel Boost MCP + CLAUDE.md/AGENTS.md     |

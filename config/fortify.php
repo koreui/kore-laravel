@@ -143,18 +143,21 @@ return [
     | by removing them from this array. You're free to only remove some of
     | these features or you can even remove all of these if you need to.
     |
+    | El 2FA NO se lista aquí: lo añade o lo quita
+    | App\Modules\Auth\Providers\FortifyServiceProvider::register() según
+    | `config('kore-app.auth.two_factor')`. Los configs se cargan por orden
+    | alfabético (`fortify` antes que `kore-app`), así que este archivo no
+    | puede leer el toggle; el provider sí, y corre antes de que Fortify
+    | registre sus rutas en boot().
+    |
     */
 
-    'features' => array_values(array_filter([
+    'features' => [
         Features::registration(),
         Features::resetPasswords(),
         Features::emailVerification(),
         Features::updateProfileInformation(),
         Features::updatePasswords(),
-        env('AUTH_2FA_ENABLED', true) ? Features::twoFactorAuthentication([
-            'confirm' => true,
-            'confirmPassword' => true,
-        ]) : null,
-    ])),
+    ],
 
 ];

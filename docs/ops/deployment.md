@@ -164,9 +164,6 @@ TRUSTED_PROXIES=*
 # Toggles del boilerplate (kore-app)
 API_ENABLED=true
 TENANCY_ENABLED=false
-REVERB_ENABLED=false
-OCTANE_ENABLED=false
-SCOUT_ENABLED=false
 
 # Auth
 AUTH_2FA_ENABLED=true
@@ -177,6 +174,10 @@ AUTH_SOCIAL_LOGIN=false
 SENTRY_LARAVEL_DSN=
 SENTRY_TRACES_SAMPLE_RATE=0.1
 PULSE_ENABLED=true
+
+# Health: /health/json exige este token en la cabecera X-Secret-Token.
+# Si lo dejas vacío, el endpoint queda ABIERTO.
+HEALTH_SECRET_TOKEN=<openssl rand -hex 32>
 ```
 
 ### Generar `APP_KEY`
@@ -308,8 +309,9 @@ nc -zv <IP-del-VPS> 3306
 # Redis no acepta conexiones externas (debe fallar)
 nc -zv <IP-del-VPS> 6379
 
-# Endpoint health (spatie/laravel-health)
-curl -s https://tu-dominio.com/health/json | jq .
+# Endpoint health (spatie/laravel-health). /health/json exige el token;
+# /health es HTML y pide sesión + rol superadmin.
+curl -s -H "X-Secret-Token: $HEALTH_SECRET_TOKEN" https://tu-dominio.com/health/json | jq .
 ```
 
 ---
@@ -322,7 +324,9 @@ docker compose -f docker-compose.prod.yml exec app php artisan migrate --force
 docker compose -f docker-compose.prod.yml restart app queue scheduler
 ```
 
-Editar `.env` para confirmar `TENANCY_ENABLED=true` y `TENANCY_MODE=single-db|multi-db`.
+Editar `.env` para confirmar `TENANCY_ENABLED=true`. El modo single-db / multi-db
+no es una variable de entorno: se decide en los `bootstrappers` de `config/tenancy.php`
+(ver [`../modules/tenancy.md`](../modules/tenancy.md)).
 
 ---
 

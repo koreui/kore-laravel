@@ -35,7 +35,12 @@ final class TenancyModuleServiceProvider extends ServiceProvider
 
         $base = __DIR__.'/..';
 
-        $this->loadMigrationsFrom("{$base}/Database/Migrations");
+        // `kore:tenancy:enable` publica aquí las migraciones de stancl. En un
+        // clon fresco la carpeta puede no existir todavía (sólo lleva .gitkeep),
+        // y loadMigrationsFrom() con una ruta inexistente revienta al migrar.
+        if (is_dir($migrations = "{$base}/Database/Migrations")) {
+            $this->loadMigrationsFrom($migrations);
+        }
 
         if (file_exists($routes = "{$base}/Routes/tenant.php")) {
             $this->loadRoutesFrom($routes);

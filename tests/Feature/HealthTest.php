@@ -52,7 +52,7 @@ it('serves the html health page to the superadmin', function (): void {
 });
 
 it('registers the maintenance commands on the scheduler', function (string $needle): void {
-    $scheduled = collect(app(Schedule::class)->events())
+    $scheduled = collect(resolve(Schedule::class)->events())
         ->map(fn (object $event): string => (string) $event->command)
         ->contains(fn (string $command): bool => str_contains($command, $needle));
 

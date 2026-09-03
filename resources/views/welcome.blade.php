@@ -23,7 +23,7 @@
             <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-kore-border bg-kore-surface px-4 py-1.5 text-sm">
                 <span class="flex h-2 w-2 animate-pulse rounded-full bg-kore-success"></span>
                 <span class="text-kore-muted-fg">v1.0 disponible</span>
-                <a href="/docs" class="font-medium text-kore-primary">{{ __('Ver docs') }} &rarr;</a>
+                <a href="https://github.com/koreui/kore-laravel/tree/main/docs" class="font-medium text-kore-primary">{{ __('Ver docs') }} &rarr;</a>
             </div>
 
             <h1 class="mx-auto max-w-4xl text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
@@ -68,7 +68,7 @@
         <div class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
             <div class="grid grid-cols-2 gap-6 sm:grid-cols-4">
                 @foreach ([
-                    ['value' => '32', 'label' => __('Tests Pest')],
+                    ['value' => __('Pest'), 'label' => __('Suite de tests')],
                     ['value' => '8.3+', 'label' => 'PHP'],
                     ['value' => 'L8', 'label' => 'PHPStan'],
                     ['value' => 'MIT', 'label' => __('Licencia')],
@@ -176,12 +176,12 @@
                     <span class="text-sm text-kore-muted-fg">{{ config('app.name') }} &copy; {{ now()->year }}. MIT License.</span>
                 </div>
                 <div class="flex items-center gap-4 text-sm">
-                    <a href="/docs" class="text-kore-muted-fg transition-colors hover:text-kore-fg">{{ __('Docs') }}</a>
+                    <a href="https://github.com/koreui/kore-laravel/tree/main/docs" class="text-kore-muted-fg transition-colors hover:text-kore-fg">{{ __('Docs') }}</a>
                     <a href="/up" class="inline-flex items-center gap-1.5 text-kore-muted-fg transition-colors hover:text-kore-fg">
                         <span class="h-1.5 w-1.5 rounded-full bg-kore-success"></span>
                         {{ __('Estado') }}
                     </a>
-                    <a href="https://github.com" class="text-kore-muted-fg transition-colors hover:text-kore-fg">GitHub</a>
+                    <a href="https://github.com/koreui/kore-laravel" class="text-kore-muted-fg transition-colors hover:text-kore-fg">GitHub</a>
                 </div>
             </div>
         </div>

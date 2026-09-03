@@ -1,4 +1,28 @@
+# Configuración de Codex para kore-laravel.
+#
+# Espejo de .mcp.json (el equivalente de Claude Code). Si añades un servidor
+# aquí, añádelo también allí: las dos herramientas deben ver lo mismo.
+#
+# Sin `cwd`: Codex lanza los servidores desde la raíz del proyecto. La ruta
+# absoluta que había aquí sólo funcionaba en la máquina del autor original y
+# rompía el repo para cualquier otro clon.
+
+# Habilita el cliente rmcp, necesario para servidores MCP por HTTP en versiones
+# de Codex donde el soporte todavía es experimental. En versiones recientes es
+# redundante pero inofensivo.
+[features]
+experimental_use_rmcp_client = true
+
 [mcp_servers.laravel-boost]
 command = "php"
 args = ["artisan", "boost:mcp"]
-cwd = "/Volumes/OvillaHome/ovilla/Personal/Proyectos/kore-laravel"
+
+# Documentación de los componentes koreUi (list-components, get-component-docs...).
+# Misma URL que .mcp.json.
+[mcp_servers.kore-ui]
+url = "https://kore-ui-mcp.ovilla.dev/mcp"
+
+# Fallback si tu versión de Codex no habla HTTP nativo (necesita Node):
+# [mcp_servers.kore-ui]
+# command = "npx"
+# args = ["-y", "mcp-remote", "https://kore-ui-mcp.ovilla.dev/mcp"]

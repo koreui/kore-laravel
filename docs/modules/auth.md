@@ -86,7 +86,17 @@ Componentes koreUi usados: `<x-kore::input>`, `<x-kore::password>`, `<x-kore::bu
 Ver tabla completa en [`../architecture/toggles.md`](../architecture/toggles.md). Resumen relevante:
 
 - **`API_ENABLED`** (default `true`): registra middleware `EnsureFrontendRequestsAreStateful` en grupo `api` y carga `Routes/api.php`.
-- **`AUTH_2FA_ENABLED`** (default `true`): Fortify activa la feature `twoFactorAuthentication([confirm + confirmPassword])`. Ruta `/two-factor-challenge` con `<x-kore::input-otp />`.
+- **`AUTH_2FA_ENABLED`** (default `true`): activa la feature
+  `twoFactorAuthentication([confirm + confirmPassword])` de Fortify. Ruta
+  `/two-factor-challenge` con `<x-kore::input-otp />`.
+
+  Quien añade o quita esa feature es `FortifyServiceProvider::register()`,
+  leyendo `config('kore-app.auth.two_factor')`; `config/fortify.php` NO la
+  lista. No es un capricho: los archivos de config se cargan por orden
+  alfabético y `fortify` va antes que `kore-app`, así que desde `fortify.php`
+  el toggle todavía no existe. El `register()` de los providers, en cambio,
+  corre con toda la config ya cargada y antes del `boot()` en el que Fortify
+  publica sus rutas leyendo `fortify.features`.
 - **`AUTH_MAGIC_LINKS`** (default `true`): registra `/magic-link` (Livewire). El componente envía OTP de 6 dígitos via `User::sendOneTimePassword()` y autentica con `attemptLoginUsingOneTimePassword`. Ver [Magic links](#magic-links-otp) para el detalle de anti-enumeración y throttle.
 - **`AUTH_SOCIAL_LOGIN`** (default `false`): registra rutas socialite. Cada proveedor se controla por separado (`SOCIAL_GOOGLE`, `SOCIAL_GITHUB`); el controller `abort(404)` si el proveedor consultado no está habilitado en `config('kore-app.socialite.{provider}')`.
 
@@ -177,12 +187,19 @@ Route::middleware(['api', 'auth:sanctum'])
 
 `app/Modules/Auth/Tests/Feature/`:
 
-- `LoginTest` — página, login válido, login inválido, logout
-- `RegisterTest` — página, registro exitoso, email duplicado
-- `PasswordResetTest` — página, envío de notificación de reset
-- `ApiTokenTest` — `/api/user` con `Sanctum::actingAs`
+| Archivo | Qué cubre | Tests |
+|---------|-----------|-------|
+| `LoginTest` | página, login válido, login inválido, logout | 4 |
+| `RegisterTest` | página, registro exitoso, email duplicado | 3 |
+| `PasswordResetTest` | página, envío de notificación de reset | 2 |
+| `ApiTokenTest` | `/api/user` con `Sanctum::actingAs` | 1 |
+| `ApiRateLimitTest` | `throttle:api` en el grupo y limiter `api` registrado | 3 |
+| `MagicLinkTest` | envío, rate limit, anti-enumeración, login con código | 6 |
+| `AuthorizationSeederTest` | módulos, permisos y roles que siembra `ModulesSeeder` | 7 |
+| `TwoFactorToggleTest` | el toggle `AUTH_2FA_ENABLED` añade/quita la feature y sus rutas | 5 |
 
-Total Auth: **10 tests / 22 assertions**.
+Total Auth: **31 tests / 78 assertions**. (Cifra real de
+`./vendor/bin/pest app/Modules/Auth/Tests --compact`; actualízala cuando cambie.)
 
 ## Cómo extender
 

@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Rector\CodeQuality\Rector\Class_\InlineConstructorDefaultToPropertyRector;
 use Rector\Config\RectorConfig;
 use Rector\Set\ValueObject\LevelSetList;
 use Rector\Set\ValueObject\SetList;
@@ -33,9 +32,6 @@ return RectorConfig::configure()
         LaravelLevelSetList::UP_TO_LARAVEL_120,
         LaravelSetList::LARAVEL_CODE_QUALITY,
         LaravelSetList::LARAVEL_COLLECTION,
-    ])
-    ->withRules([
-        InlineConstructorDefaultToPropertyRector::class,
     ])
     ->withImportNames(removeUnusedImports: true)
     ->withParallel();

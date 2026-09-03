@@ -63,7 +63,7 @@ Excluye: `database/migrations` y `app/Modules/*/Database/Migrations`.
 
 ### Pest 3 — `tests/Pest.php`
 
-Aplica `Tests\TestCase` + `RefreshDatabase` a todos los Feature tests, incluyendo módulos:
+Aplica `Tests\TestCase` + `RefreshDatabase` a todos los Feature tests, incluyendo los de cada módulo:
 
 ```php
 pest()->extend(TestCase::class)
@@ -71,11 +71,60 @@ pest()->extend(TestCase::class)
     ->in('Feature');
 
 pest()->extend(TestCase::class)
+    ->in('Unit');
+
+// Tests dentro de cada módulo (app/Modules/{X}/Tests/{Feature|Unit})
+pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->in(__DIR__.'/../app/Modules/*/Tests/Feature');
+
+pest()->extend(TestCase::class)
+    ->in(__DIR__.'/../app/Modules/*/Tests/Unit');
 ```
 
-`tests/TestCase.php` ejecuta `withoutVite()` en setUp para que los tests no requieran assets compilados.
+`tests/Arch/` no aparece: los arch tests son estáticos, no bootean la aplicación
+ni tocan la base de datos, así que no necesitan `TestCase` ni `RefreshDatabase`.
+
+`tests/TestCase.php` ejecuta `withoutVite()` en `setUp()` para que los tests no
+requieran assets compilados. Está **sólo** ahí: el `beforeEach` que lo repetía en
+`tests/Pest.php` se quitó en la v1.0.0.
+
+Las suites las declara `phpunit.xml`: `Arch` (`tests/Arch`), `Unit`
+(`tests/Unit`), `Feature` (`tests/Feature`) y `Modules` (`app/Modules/*/Tests`).
+
+### Arch tests — `tests/Arch/ArchitectureTest.php`
+
+Las reglas de oro de `CLAUDE.md` dejaron de ser prosa y fallan el build:
+
+| Regla | Expectativa |
+|-------|-------------|
+| preset `php()` | buenas prácticas base de PHP |
+| preset `security()` | sin `md5`, `sha1`, `eval`, `extract`, `mt_rand`... |
+| preset `laravel()` | convenciones del framework, **ignorando `App\Modules`** |
+| Regla 5 | `declare(strict_types=1)` en todo `App` |
+| — | sin `dd`, `dump`, `var_dump`, `ray` ni `env()` dentro de `App` |
+| Regla 1 | `App\Modules\*\Actions` son `final` y con sufijo `Action` |
+| Regla 6 | `App\Modules\*\Policies` son `final` y con sufijo `Policy` |
+| — | `App\Modules\*\Providers` son `final` y con sufijo `ServiceProvider` |
+
+Los namespaces usan comodín (`App\Modules\*\Actions`), así que un módulo nuevo
+queda cubierto sin tocar el archivo.
+
+Dos excepciones documentadas en el propio archivo:
+
+- El preset `laravel()` se aplica con `->ignoring('App\Modules')`. El preset
+  asume el layout plano del framework (sólo `App\Http\Controllers` puede tener
+  sufijo `Controller`, sólo `App\Models` puede extender `Model`...), que es
+  justo lo contrario de un modular monolith. Sigue vigilando `App\Core`,
+  `App\Models` y `App\Providers`; las reglas equivalentes para los módulos se
+  escriben a mano debajo.
+- `App\Modules\Auth\Actions\Fortify` queda fuera de la regla de Actions: son
+  los stubs que publica Fortify (`CreateNewUser`, `PasswordValidationRules`...),
+  cuyos nombres los fija el paquete. La v1.1 los revisará.
+
+La regla "sin imports cruzados entre módulos" está **escrita y comentada** con un
+`TODO v1.1`: hoy fallaría porque Users importa `Auth\Models\{Role, Module}`.
+Activarla es borrar los comentarios cuando la v1.1 mueva esos modelos.
 
 ## Pre-commit hooks
 
@@ -100,13 +149,20 @@ php artisan git-hooks:register   # re-registra el hook si fue borrado
 
 `.github/workflows/ci.yml`:
 
+Job `quality`:
+
 - Matrix PHP 8.3 / 8.4
-- Jobs (en orden, fallan rápido):
+- Pasos (en orden, fallan rápido):
   1. `composer install` (cache de `vendor/`)
-  2. `vendor/bin/pint --test --format=checkstyle`
-  3. `vendor/bin/phpstan analyse --no-progress --memory-limit=2G`
-  4. `vendor/bin/rector process --dry-run --no-progress-bar`
-  5. `vendor/bin/pest --parallel --compact`
+  2. `composer audit` — advisories de seguridad, bloqueante
+  3. `vendor/bin/pint --test --format=checkstyle`
+  4. `vendor/bin/phpstan analyse --no-progress --memory-limit=2G`
+  5. `vendor/bin/rector process --dry-run --no-progress-bar`
+  6. `vendor/bin/pest --parallel --compact`
+
+Job `assets`: Node 20, `npm ci`, `npm run build`. Los tests corren con
+`withoutVite()`, así que sin este job un build de Vite roto pasaría verde.
+
 - Trigger: `push` a `main` y todo `pull_request` contra `main`
 - Concurrency: cancela ejecuciones previas del mismo branch
 
@@ -117,8 +173,16 @@ $ composer ci
 ✓ Pint passed
 ✓ Larastan nivel 8: 0 errors
 ✓ Rector: nothing to refactor
-✓ Pest: 15 passed (28 assertions)
+✓ Pest: 100 passed (230 assertions)
 ```
+
+Reparto de los 100 tests: 9 arch (`tests/Arch`), 31 del módulo Auth, 26 del
+módulo Users, 3 de Tenancy y 31 en `tests/Feature` (health, scheduler, Sentry,
+Pulse, Pennant, mass assignment, landing).
+
+Actualiza esta cifra cuando cambie. Un número inventado en los docs es peor que
+no ponerlo: la auditoría de septiembre de 2026 encontró aquí «15 tests» cuando
+había 32.
 
 ## Cómo subir el listón
 
@@ -127,7 +191,7 @@ $ composer ci
 | Larastan nivel 8 → 9          | strict, harder, prepara baseline             |
 | Pest coverage min 80% → 90%   | test:coverage exige más cobertura            |
 | Agregar mutation testing      | `composer require --dev pestphp/pest-plugin-mutate` |
-| Agregar arch tests            | `pest()->test('arch')->expect(...)->in(...)` para reglas de capas |
+| Activar la regla de imports cruzados | descomentar el bloque `TODO v1.1` de `tests/Arch/ArchitectureTest.php` cuando Users deje de importar `Auth\Models` |
 
 Antes de subir el nivel, agrega un baseline para no romper nada existente:
 

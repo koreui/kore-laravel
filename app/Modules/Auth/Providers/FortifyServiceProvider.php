@@ -16,10 +16,18 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Laravel\Fortify\Actions\RedirectIfTwoFactorAuthenticatable;
+use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
+use Override;
 
 final class FortifyServiceProvider extends ServiceProvider
 {
+    #[Override]
+    public function register(): void
+    {
+        $this->configureTwoFactorFeature();
+    }
+
     public function boot(): void
     {
         Fortify::createUsersUsing(CreateNewUser::class);
@@ -30,6 +38,33 @@ final class FortifyServiceProvider extends ServiceProvider
 
         $this->configureViews();
         $this->configureRateLimiting();
+    }
+
+    /**
+     * Hace real el toggle `kore-app.auth.two_factor`.
+     *
+     * `config/fortify.php` no puede leerlo: los archivos de config se cargan en
+     * orden alfabético y `fortify` va antes que `kore-app`, así que allí el
+     * valor todavía no existe. Aquí sí, porque este `register()` corre después
+     * de bootear la config y ANTES del `boot()` del provider de Fortify, que es
+     * donde se registran las rutas leyendo `fortify.features`.
+     */
+    private function configureTwoFactorFeature(): void
+    {
+        $twoFactor = Features::twoFactorAuthentication([
+            'confirm' => true,
+            'confirmPassword' => true,
+        ]);
+
+        /** @var array<int, string> $features */
+        $features = (array) config('fortify.features', []);
+        $features = array_values(array_filter($features, fn (string $feature): bool => $feature !== $twoFactor));
+
+        if ((bool) config('kore-app.auth.two_factor', true)) {
+            $features[] = $twoFactor;
+        }
+
+        config(['fortify.features' => $features]);
     }
 
     private function configureViews(): void

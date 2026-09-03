@@ -14,10 +14,10 @@ use Livewire\Form;
 /**
  * Livewire Form Object para crear/editar usuarios.
  *
- * Convención del boilerplate (ver docs/guides/crud/livewire-form.md):
- * - $id nullable se usa para updateOrCreate
+ * Convención del boilerplate (ver docs/guides/crud.md):
+ * - $id nullable distingue "crear" de "editar"
  * - rules() devuelve array (no atributos)
- * - store() ejecuta updateOrCreate y retorna el modelo
+ * - store() resuelve el modelo, lo guarda y lo retorna
  *
  * Aparte del modelo, el form maneja role (string) y permissions (array)
  * que se aplican post-save via syncRoles + syncPermissions.
@@ -28,7 +28,7 @@ use Livewire\Form;
  * permisos incluidos). El candado sólo bloquea escrituras del cliente: el
  * mount() del componente sigue pudiendo asignarlo vía fill() (data_set).
  */
-class UserForm extends Form
+final class UserForm extends Form
 {
     #[Locked]
     public ?int $id = null;
