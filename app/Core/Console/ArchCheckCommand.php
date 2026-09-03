@@ -19,7 +19,8 @@ use Symfony\Component\Finder\Finder;
  * dependencias; disallowed-calls mira llamadas concretas. Ninguna de las tres
  * ve lo que este comando ve: un atributo `#[Locked]` que falta, una migración
  * sin `down()`, un `authorize()` ausente, una válvula de escape caducada, un
- * `data-testid` en una blade o un toggle que no lee nadie.
+ * `data-testid` en una blade, un toggle que no lee nadie o una pantalla que no
+ * entró en el mapa de acceso de los E2E.
  *
  * Todo por lectura de archivos: no toca la base de datos ni bootea rutas, así
  * que corre en milisegundos y cabe en un pre-commit.
@@ -124,6 +125,7 @@ final class ArchCheckCommand extends Command
             'R45' => 'checkBaselineExpiry',
             'R49' => 'checkSkillsAreLinked',
             'R50' => 'checkAgentsFileIsGenerated',
+            'R52' => 'checkRoutesAreInAccessMap',
         ];
 
         if ($only !== null && ! isset($checks[$only])) {
@@ -1044,6 +1046,225 @@ final class ArchCheckCommand extends Command
             AgentsFile::GENERATED.' no coincide con '.AgentsFile::SOURCE
             .': corre `php artisan kore:agents:sync` y vuelve a añadir '.AgentsFile::GENERATED.' al commit',
         );
+    }
+
+    /*
+    |----------------------------------------------------------------------
+    | R52 · toda pantalla nueva entra en el mapa de acceso de los E2E
+    |----------------------------------------------------------------------
+    */
+
+    /**
+     * Cada ruta `GET` con nombre tiene su entrada en
+     * `tests/e2e/fixtures/access-map.ts`.
+     *
+     * El mapa es la tabla «quién puede ver qué» de la suite E2E: por cada
+     * pantalla, qué roles entran y cuáles se llevan un 403. Una pantalla que no
+     * está en el mapa no es que falle su test: es que **no tiene** test de
+     * autorización, y eso no se ve en ningún sitio.
+     *
+     * Se lee el texto de los archivos de rutas y no `Route::getRoutes()` a
+     * propósito: así el check corre con `--root` sobre un árbol de fixtures y
+     * en un pre-commit, sin bootear la aplicación ni depender de qué toggles
+     * estén encendidos en la máquina que lo corre.
+     *
+     * Límites, escritos porque son los que hay que conocer antes de fiarse:
+     *
+     *   - Sólo `GET` con `->name(...)`: lo que un navegador puede abrir. Un
+     *     `POST` no es una pantalla.
+     *   - Las rutas con parámetro (`/users/{user}/edit`) quedan fuera: su
+     *     `path` depende de un id y no se puede escribir literal en el mapa.
+     *   - Las del harness (`/__e2e__/...`) también: existen sólo para la suite.
+     */
+    private function checkRoutesAreInAccessMap(): void
+    {
+        $files = $this->globFiles(['routes/web.php', 'app/Modules/*/Routes/web.php']);
+
+        if ($files === []) {
+            return;
+        }
+
+        $map = $this->root.'/tests/e2e/fixtures/access-map.ts';
+        $mapContents = is_file($map) ? $this->contents($map) : null;
+
+        $routes = [];
+
+        foreach ($files as $path) {
+            foreach ($this->namedGetRoutes($path) as $route) {
+                $routes[] = [...$route, 'file' => $path];
+            }
+        }
+
+        if ($routes === []) {
+            return;
+        }
+
+        // El mapa lo aporta la suite E2E y puede no existir todavía (un
+        // proyecto derivado que aún no la tiene, o el commit que la introduce).
+        // Se avisa una vez y no se falla: R52 exige que la pantalla esté en el
+        // mapa, no que el proyecto tenga E2E.
+        if ($mapContents === null) {
+            $this->components->warn(
+                'R52: no hay tests/e2e/fixtures/access-map.ts, así que las '
+                .count($routes).' ruta(s) GET con nombre no se comprueban. Ver docs/architecture/rules.md',
+            );
+
+            return;
+        }
+
+        foreach ($routes as $route) {
+            foreach (["path: '{$route['path']}'", "path: \"{$route['path']}\"", "path: `{$route['path']}`"] as $needle) {
+                if (str_contains($mapContents, $needle)) {
+                    continue 2;
+                }
+            }
+
+            if ($this->hasValveOnLine($route['file'], $route['line'], 'R52')) {
+                continue;
+            }
+
+            $this->violation(
+                'R52',
+                $route['file'],
+                $route['line'],
+                "la ruta {$route['path']} no está en tests/e2e/fixtures/access-map.ts: una pantalla fuera del mapa no tiene test de autorización por rol, y eso no lo delata nada",
+            );
+        }
+    }
+
+    /**
+     * Rutas `GET` con nombre declaradas en un archivo de rutas, con el prefijo
+     * de sus grupos ya compuesto.
+     *
+     * @return array<int, array{path: string, line: int}>
+     */
+    private function namedGetRoutes(string $path): array
+    {
+        $lines = $this->lines($path);
+
+        $routes = [];
+        /** @var list<string> $prefixes pila de prefijos, uno por nivel de grupo abierto */
+        $prefixes = [];
+        $pending = null;
+        $inBlockComment = false;
+
+        foreach ($lines as $index => $line) {
+            $trimmed = ltrim($line);
+
+            if ($inBlockComment) {
+                $inBlockComment = ! str_contains($line, '*/');
+
+                continue;
+            }
+
+            if (str_starts_with($trimmed, '/*')) {
+                $inBlockComment = ! str_contains($line, '*/');
+
+                continue;
+            }
+
+            if (str_starts_with($trimmed, '//') || str_starts_with($trimmed, '*')) {
+                continue;
+            }
+
+            if (preg_match("/->prefix\(\s*'([^']*)'/", $line, $matched) === 1) {
+                $pending = trim($matched[1], '/');
+            }
+
+            if (preg_match("/(?:Route::|->)get\(\s*'([^']*)'/", $line, $matched) === 1
+                && ! str_contains($matched[1], '{')
+                && str_contains($this->statementFrom($lines, $index), '->name(')) {
+                $composed = $this->composeRoutePath($prefixes, $matched[1]);
+
+                if (! str_starts_with($composed, '/__e2e__')) {
+                    $routes[] = ['path' => $composed, 'line' => $index + 1];
+                }
+            }
+
+            // Profundidad de llaves, sin contar las que van dentro de un
+            // literal (`'/{user}/edit'`) ni las de un comentario de línea.
+            $code = (string) preg_replace(['/\'[^\']*\'|"[^"]*"/', '#//.*$#'], ['', ''], $line);
+            $delta = substr_count($code, '{') - substr_count($code, '}');
+
+            for ($opened = 0; $opened < $delta; $opened++) {
+                $prefixes[] = $pending ?? '';
+                $pending = null;
+            }
+
+            for ($closed = 0; $closed > $delta; $closed--) {
+                array_pop($prefixes);
+            }
+        }
+
+        return $routes;
+    }
+
+    /**
+     * La sentencia que empieza en esta línea, hasta el `;` que la cierra.
+     *
+     * Se corta a diez líneas: una cadena de ruta más larga que eso no existe, y
+     * el tope evita recorrer el archivo entero si alguien olvida el punto y
+     * coma.
+     *
+     * @param array<int, string> $lines
+     */
+    private function statementFrom(array $lines, int $index): string
+    {
+        $statement = '';
+
+        for ($i = $index; $i < min($index + 10, count($lines)); $i++) {
+            $statement .= $lines[$i];
+
+            if (str_contains($lines[$i], ';')) {
+                break;
+            }
+        }
+
+        return $statement;
+    }
+
+    /**
+     * Junta los prefijos de los grupos abiertos con la ruta declarada.
+     *
+     * @param list<string> $prefixes
+     */
+    private function composeRoutePath(array $prefixes, string $route): string
+    {
+        $segments = [...$prefixes, trim($route, '/')];
+
+        $path = implode('/', array_filter($segments, static fn (string $segment): bool => $segment !== ''));
+
+        return '/'.$path;
+    }
+
+    /**
+     * ¿Hay una válvula para esta regla en esta línea o en el comentario que la
+     * precede?
+     *
+     * A diferencia de `hasValve()`, que exime el archivo entero, aquí la
+     * válvula es de línea: un archivo de rutas declara muchas pantallas y una
+     * excepción para una no puede tapar a las demás.
+     */
+    private function hasValveOnLine(string $path, int $number, string $rule): bool
+    {
+        $lines = $this->lines($path);
+
+        for ($i = $number - 1; $i >= 0; $i--) {
+            $line = trim($lines[$i] ?? '');
+
+            // Sólo se mira la línea de la ruta y los comentarios pegados
+            // encima. El corte va **antes** de buscar la válvula: si no, la
+            // válvula al final de la ruta anterior eximiría también a ésta.
+            if ($i !== $number - 1 && ! str_starts_with($line, '//') && ! str_starts_with($line, '*') && ! str_starts_with($line, '/*')) {
+                return false;
+            }
+
+            if (preg_match('/arch-(exception|accepted):\s*'.preg_quote($rule, '/').'\b/', $line, $kind) === 1) {
+                return $this->valveFormIsAllowed($rule, $kind[1]);
+            }
+        }
+
+        return false;
     }
 
     /*

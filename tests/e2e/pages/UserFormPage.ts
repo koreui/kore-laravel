@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 
-import { waitForLivewireReady, withLivewireRoundTrip } from '../support/livewire';
+import { waitForLivewireReady, withLivewireRoundTrip } from '../fixtures/livewire';
 
 /**
  * `/users/create` y `/users/{id}/edit` — componente Livewire
@@ -95,7 +95,32 @@ export class UserFormPage {
         });
     }
 
+    /**
+     * KORE-E2E-007 · Espera a que el formulario esté vivo.
+     *
+     * Los inputs se renderizan **sin `value`**: es Livewire quien los rellena
+     * desde el snapshot al hidratar. Antes de eso el formulario se ve en
+     * blanco y, sobre todo, `wire:submit` no está enganchado — así que un
+     * click en «Guardar» dispara el envío NATIVO del `<form>`, que es un GET
+     * con todos los campos (contraseña incluida) en la barra de direcciones.
+     *
+     * Es lo que se llevaba por delante `specs/users/edit.spec.ts` una de cada
+     * pocas corridas, y sólo con `--repeat-each`.
+     */
+    async waitUntilReady(): Promise<void> {
+        await waitForLivewireReady(this.page);
+    }
+
+    /**
+     * Envía el formulario.
+     *
+     * La espera de hidratación va **dentro**, y no en cada spec: llegar aquí
+     * por la fila de la tabla (`clickRowAction('Editar')`) es una navegación
+     * como cualquier otra, y nadie se acuerda de esperar después de una
+     * navegación. Ver `waitUntilReady()`.
+     */
     async save(): Promise<void> {
+        await this.waitUntilReady();
         await this.submit.click();
     }
 }

@@ -67,6 +67,26 @@ return [
             'replace_placeholders' => true,
         ],
 
+        /*
+         * Buzón de la suite E2E.
+         *
+         * Con `MAIL_MAILER=log` cada correo se escribe entero en un canal de
+         * log. Apuntándolo aquí (`MAIL_LOG_CHANNEL=e2e_mail` en `.env.e2e`,
+         * que `config/mail.php` lee en `mailers.log.channel`) los mensajes van
+         * a su propio archivo y la suite puede leer el último —el enlace de
+         * reset, el código de un solo uso— sin rascar entre el ruido de
+         * `laravel.log`.
+         *
+         * Lo parsea `App\Modules\E2E\Support\MailLog` y lo sirve
+         * `GET /__e2e__/mail/last`. Ver `docs/modules/e2e.md`.
+         */
+        'e2e_mail' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/e2e-mail.log'),
+            'level' => 'debug',
+            'replace_placeholders' => true,
+        ],
+
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),

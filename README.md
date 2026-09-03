@@ -51,9 +51,9 @@ Para desactivarlo, `TENANCY_ENABLED=false` en `.env` y todo el módulo deja de b
 
 Reglas vivas y resúmenes en `CLAUDE.md` / `AGENTS.md`. Detalles en [`docs/`](docs/README.md):
 
-- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **las 50 reglas del boilerplate** (`R1..R50`), cada una con su verificador, su severidad y la cicatriz que la originó
+- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **las 53 reglas del boilerplate** (`R1..R53`), cada una con su verificador, su severidad y la cicatriz que la originó
 - [`docs/architecture/`](docs/architecture/) — overview, module-pattern, toggles, authorization
-- [`docs/modules/`](docs/modules/) — auth, tenancy, users, docs
+- [`docs/modules/`](docs/modules/) — auth, tenancy, users, docs, e2e
 - [`docs/ops/`](docs/ops/) — deployment, observability
 - [`docs/quality/`](docs/quality/) — pipeline (Pint, Larastan, PHPat, disallowed-calls, `kore:arch:check`, Rector, Pest, hooks, CI) y E2E
 - [`docs/ai/`](docs/ai/) — trabajar con la AI (Boost, MCP `kore`, skills)
@@ -140,7 +140,7 @@ Detalles completos (firewall, SSH, fail2ban, server block del Nginx del host, de
 
 ## Trabajar con la AI
 
-Este repo incluye `CLAUDE.md`, `.mcp.json` (con `laravel-boost`, `kore-ui` y el MCP propio `kore`) y ocho skills. Cualquier asistente compatible (Claude Code, Codex, etc.) los detecta automáticamente.
+Este repo incluye `CLAUDE.md`, `.mcp.json` (con `laravel-boost`, `kore-ui` y el MCP propio `kore`) y nueve skills. Cualquier asistente compatible (Claude Code, Codex, etc.) los detecta automáticamente.
 
 Dos detalles del montaje, y los dos son reglas del catálogo:
 
@@ -152,6 +152,7 @@ Dos detalles del montaje, y los dos son reglas del catálogo:
 - `kore-action-create` — crear una Action (caso de uso) siguiendo `{Domain}{Object}{Verb}Action`
 - `kore-livewire-create` — crear un componente Livewire 4 con vistas koreUi y registro en provider
 - `kore-e2e-test` — crear o ampliar un spec de Playwright en `tests/e2e/`
+- `kore-migration-change` — modificar una columna existente sin perder sus atributos (R53)
 
 Skills oficiales (de Laravel Boost): `laravel-best-practices`, `livewire-development`, `pennant-development`, `pest-testing`.
 

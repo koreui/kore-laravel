@@ -44,12 +44,22 @@ final class PhpatArchitecture
     }
 
     /**
-     * R5 · Sin imports cruzados entre módulos, en todos los sentidos.
+     * R5 · Sin imports cruzados entre módulos, en todos los sentidos, **salvo
+     * los eventos**.
      *
      * Las reglas se generan a partir de las carpetas reales de `app/Modules`,
-     * así que un módulo nuevo queda cubierto sin tocar este archivo. Se ignora
-     * `Tests`: los tests montan el mundo real (seeders, roles de otro módulo)
-     * y no son código de producción.
+     * así que un módulo nuevo queda cubierto sin tocar este archivo.
+     *
+     * Dos excepciones, y las dos por namespace del módulo destino:
+     *
+     *   - `Tests`: los tests montan el mundo real (seeders, roles de otro
+     *     módulo) y no son código de producción.
+     *   - `Events`: `{Domain}\Events\` es la **frontera pública** de un módulo,
+     *     el canal que `module-pattern.md` lleva recomendando desde el
+     *     principio. Un listener tiene que poder tipar el evento que escucha;
+     *     sin esta exclusión, la única forma de cumplir R5 sería registrar los
+     *     listeners con el nombre del evento en un string, que es exactamente
+     *     la dependencia de siempre pero sin que la vea ninguna herramienta.
      *
      * @return iterable<string, Rule>
      */
@@ -67,6 +77,13 @@ final class PhpatArchitecture
                 continue;
             }
 
+            $excluded = [];
+
+            foreach ($targets as $module) {
+                $excluded[] = Selector::inNamespace('App\Modules\\'.$module.'\Tests');
+                $excluded[] = Selector::inNamespace('App\Modules\\'.$module.'\Events');
+            }
+
             yield $subject => PHPat::rule()
                 ->classes(Selector::inNamespace('App\Modules\\'.$subject))
                 ->excluding(Selector::inNamespace('App\Modules\\'.$subject.'\Tests'))
@@ -76,11 +93,8 @@ final class PhpatArchitecture
                     static fn (string $module): ClassNamespace => Selector::inNamespace('App\Modules\\'.$module),
                     $targets,
                 ))
-                ->excluding(...array_map(
-                    static fn (string $module): ClassNamespace => Selector::inNamespace('App\Modules\\'.$module.'\Tests'),
-                    $targets,
-                ))
-                ->because('R5: '.$subject.' habla con los demás módulos por App\Core\Contracts, eventos o DTOs de Core (docs/architecture/rules.md)');
+                ->excluding(...$excluded)
+                ->because('R5: '.$subject.' habla con los demás módulos por App\Core\Contracts, los eventos de {Otro}\Events o DTOs de Core (docs/architecture/rules.md)');
         }
     }
 

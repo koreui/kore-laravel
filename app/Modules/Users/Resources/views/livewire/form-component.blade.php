@@ -83,7 +83,14 @@
                 <x-kore::button :href="route('users.index')" variant="ghost">
                     {{ __('Cancelar') }}
                 </x-kore::button>
+                {{-- KORE-E2E-007: hasta que Livewire hidrata, `wire:submit` no está
+                     enganchado y un clic enviaría el <form> nativo como GET con la
+                     contraseña en la URL. Alpine arranca con Livewire, así que el
+                     botón nace deshabilitado y se habilita cuando ya hay quien
+                     escuche el submit. --}}
                 <x-kore::button type="submit" icon="check"
+                    x-data="{ hidratado: false }" x-init="hidratado = true"
+                    x-bind:disabled="!hidratado"
                     wire:loading.attr="disabled" wire:target="save">
                     {{ __('Guardar') }}
                 </x-kore::button>

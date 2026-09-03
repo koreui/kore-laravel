@@ -1,6 +1,6 @@
 # Trabajar con la AI
 
-**TL;DR**: dos MCP servers. Laravel Boost expone 11 herramientas sobre el *framework* (schema, queries, docs, logs, tinker, etc.) y `kore` expone 5 sobre *este proyecto* (módulos, toggles, permisos, reglas, `kore:arch:check`). `CLAUDE.md` es el archivo que se edita y `AGENTS.md` **se genera desde él** con `php artisan kore:agents:sync` (R50); los dos resumen las reglas y enlazan el catálogo [`docs/architecture/rules.md`](../architecture/rules.md), que es la fuente de verdad y numera cada regla como `R{n}`. Ocho skills viven en `.agents/skills/` —cuatro propios y cuatro de Boost— y `.claude/skills/` son symlinks a esa carpeta (R49).
+**TL;DR**: dos MCP servers. Laravel Boost expone 11 herramientas sobre el *framework* (schema, queries, docs, logs, tinker, etc.) y `kore` expone 5 sobre *este proyecto* (módulos, toggles, permisos, reglas, `kore:arch:check`). `CLAUDE.md` es el archivo que se edita y `AGENTS.md` **se genera desde él** con `php artisan kore:agents:sync` (R50); los dos resumen las reglas y enlazan el catálogo [`docs/architecture/rules.md`](../architecture/rules.md), que es la fuente de verdad y numera cada regla como `R{n}`. Nueve skills viven en `.agents/skills/` —cinco propios y cuatro de Boost— y `.claude/skills/` son symlinks a esa carpeta (R49).
 
 ## Archivos
 
@@ -11,8 +11,8 @@
 | `.mcp.json`                    | declara los MCP servers `laravel-boost`, `kore-ui` y `kore` |
 | `routes/ai.php`                | registra los MCP servers propios (`Mcp::local('kore', …)`) |
 | `boost.json`                   | metadata de Boost                                   |
-| `.agents/skills/`              | **la carpeta real** de los ocho skills (4 propios + 4 de Boost), en el formato del estándar Agent Skills |
-| `.claude/skills/`              | ocho **symlinks relativos** a `../../.agents/skills/{nombre}`, uno por skill (R49) |
+| `.agents/skills/`              | **la carpeta real** de los nueve skills (5 propios + 4 de Boost), en el formato del estándar Agent Skills |
+| `.claude/skills/`              | nueve **symlinks relativos** a `../../.agents/skills/{nombre}`, uno por skill (R49) |
 | `.codex/config.toml`           | config para Codex — espejo de `.mcp.json`, sin rutas absolutas |
 
 ## Laravel Boost MCP
@@ -61,7 +61,7 @@ lo declaran en `.mcp.json` y `.codex/config.toml`.
 | `kore-list-modules` | inventario de `app/Modules/*`: provider, si está registrado en `bootstrap/providers.php`, carpetas de la lista cerrada (R3), nº de Actions, nº de componentes Livewire, rutas `web`/`api` y nº de tests | «¿existe ya un módulo para facturación?», «¿el módulo Users tiene rutas de API?», «¿cuántas Actions tiene Auth?» |
 | `kore-list-toggles` | los toggles de `config/kore-app.php` con su variable de `.env`, su valor por defecto, su valor actual y **qué archivos los leen**; más las claves que encienden capacidades sin ser toggles (`pulse.enabled`, `sentry.dsn`, `health.secret_token`) | «¿qué apaga `TENANCY_ENABLED` exactamente?», «¿quién lee `kore-app.backup.enabled`?», «¿está Sentry configurado?» |
 | `kore-list-permissions` | roles del sistema (`SystemRole`), roles asignables, la matriz de módulos con sus permisos `{slug}.{accion}`, los permisos de cada rol y —si la base responde— cuáles están sembrados. Todo vía `App\Core\Contracts\AuthorizationCatalog` | «¿qué permiso necesito para el listado de usuarios?», «¿qué le llega al rol `Usuario`?», «¿existe `invoices.approve`?» |
-| `kore-get-rule` | una regla del catálogo por número (`R24`) con su enunciado, enforcement, severidad, válvula y cicatriz; sin parámetro, la tabla resumen de las 50 | «¿qué dice R24?», «¿qué válvula admite R20?», «dame el índice de reglas» |
+| `kore-get-rule` | una regla del catálogo por número (`R24`) con su enunciado, enforcement, severidad, válvula y cicatriz; sin parámetro, la tabla resumen de las 53 | «¿qué dice R24?», «¿qué válvula admite R20?», «dame el índice de reglas» |
 | `kore-arch-check` | ejecuta `php artisan kore:arch:check` (opcionalmente `--rule` o `--files`) y devuelve salida y código de salida | «¿rompí algo con lo que acabo de escribir?» |
 
 Las cinco están anotadas como `readOnlyHint` e `idempotentHint`.
@@ -133,7 +133,7 @@ Es **la fuente de verdad** del proyecto y el doc que más le importa a un agente
 
 Cuatro cosas que hay que saber antes de tocar código:
 
-1. **Las reglas están numeradas `R1..R50` y se citan por número.** En un review,
+1. **Las reglas están numeradas `R1..R53` y se citan por número.** En un review,
    en un mensaje de commit, en un comentario del código o al pedirle algo a la
    AI, «esto rompe R24» es una frase completa. Cada regla lleva su enunciado,
    quién la verifica y con qué comando, la severidad, la válvula que admite, por
@@ -209,11 +209,11 @@ real tiene que ser la que él lee; Claude Code sí los sigue, así que su espejo
 resuelve solo. Git versiona los enlaces (modo `120000`), de modo que la
 estructura viaja en el commit y en un clon nuevo no hay nada que reinstalar.
 
-Los cuatro skills propios declaran además `compatibility:` en su frontmatter —un
+Los cinco skills propios declaran además `compatibility:` en su frontmatter —un
 campo del estándar que Claude Code acepta e ignora— para que un cliente ajeno
 sepa a qué stack pertenecen.
 
-Hasta la v1.3.0 los ocho skills estaban duplicados byte a byte y este doc pedía
+Hasta la v1.3.0 los skills estaban duplicados byte a byte y este doc pedía
 mantenerlos con `cp -R` y `diff -r`. Eso es hoy R49, y lo verifica
 `composer arch`.
 
@@ -223,6 +223,7 @@ mantenerlos con `cp -R` y `diff -r`. Eso es hoy R49, y lo verifica
 | `kore-action-create`   | el usuario pide implementar un caso de uso / mover lógica        | R1, R2, R4, R5, R8, R13, R14, R19–R21, R35, R44 |
 | `kore-livewire-create` | el usuario pide componente reactivo / página interactiva         | R4, R13–R15, R22–R24, R30–R32 |
 | `kore-e2e-test`        | el usuario pide un spec de Playwright / probar un flujo en el navegador | R36–R39 |
+| `kore-migration-change`| el usuario pide modificar una columna existente (`->change()`, `renameColumn`) | R3, R21, R29, R41, R44, R53 |
 
 Que cada `R{n}` citada exista de verdad en el catálogo lo verifica `composer arch`
 (R40) sobre `.agents/skills/`, que desde la v1.4.0 es el único set real.

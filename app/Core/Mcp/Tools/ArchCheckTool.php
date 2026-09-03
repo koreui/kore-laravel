@@ -37,7 +37,7 @@ final class ArchCheckTool extends Tool
 
     protected string $title = 'Checks textuales de arquitectura';
 
-    protected string $description = 'Ejecuta `php artisan kore:arch:check`, el verificador textual de las reglas de docs/architecture/rules.md (R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50): un #[Locked] que falta, un authorize() ausente, una migración sin down(), Eloquent en una Blade, un data-testid, un toggle que no lee nadie, un doc sin enlazar, una válvula caducada, un skill copiado en vez de enlazado o un AGENTS.md viejo. Devuelve la salida y el código de salida (0 = sin violaciones). Córrela después de tocar código, antes de dar el cambio por terminado.';
+    protected string $description = 'Ejecuta `php artisan kore:arch:check`, el verificador textual de las reglas de docs/architecture/rules.md (R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50, R52): un #[Locked] que falta, un authorize() ausente, una migración sin down(), Eloquent en una Blade, un data-testid, un toggle que no lee nadie, un doc sin enlazar, una válvula caducada, un skill copiado en vez de enlazado, un AGENTS.md viejo o una pantalla que no entró en el mapa de acceso. Devuelve la salida y el código de salida (0 = sin violaciones). Córrela después de tocar código, antes de dar el cambio por terminado.';
 
     /**
      * @return array<string, Type>

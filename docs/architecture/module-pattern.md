@@ -11,13 +11,16 @@ app/Modules/{Domain}/
 ├── Actions/                       # 1 clase = 1 caso de uso (handle())
 ├── Console/Commands/              # comandos artisan del dominio
 ├── Data/                          # DTOs (final, extienden App\Core\Data\Data)
+├── Enums/                         # enums backed del dominio
 ├── Events/                        # lo que otros módulos pueden escuchar
+├── Exports/                       # salida hacia fuera: Excel, CSV, PDF
 ├── Forms/                         # Livewire Form Objects (validación + toData())
 ├── Http/
 │   ├── Controllers/
 │   ├── Livewire/                  # registrados explícitamente en el provider
 │   ├── Middleware/
-│   └── Requests/
+│   ├── Requests/
+│   └── Resources/                 # API Resources (extienden JsonResource)
 ├── Listeners/                     # reacciones a eventos de otros módulos
 ├── Models/
 ├── Policies/
@@ -52,9 +55,12 @@ falla ante cualquier nombre que no esté en esta lista.
 | `Console/` | comandos artisan del dominio, registrados por el provider | R3 |
 | `Data/` | DTOs `final` que extienden `App\Core\Data\Data` y sólo dependen de datos | Pest arch + PHPat (R8) |
 | `Database/` | sólo `Migrations/`, `Factories/` y `Seeders/` | R3, R29 |
-| `Events/` | lo que otros módulos pueden escuchar: `final readonly` | Pest arch (R5) |
+| `Enums/` | enums **backed** (`string` o `int`) del dominio | Pest arch: «los Enums de módulo son enums backed» (R3) |
+| `Events/` | lo que otros módulos pueden escuchar: `final readonly`. Es la **frontera pública**: otro módulo sí puede importarlos | Pest arch (R5) |
+| `Exports/` | salida hacia fuera de la aplicación: Excel, CSV, PDF | R3 — lo de dentro lo fija el paquete de exportación |
 | `Forms/` | Livewire Form Objects: `rules()` + `toData()`, sin persistencia | R4, R24 |
-| `Http/` | sólo `Controllers/`, `Livewire/`, `Requests/` y `Middleware/` | R3, R23 |
+| `Http/` | sólo `Controllers/`, `Livewire/`, `Requests/`, `Middleware/` y `Resources/` | R3, R23 |
+| `Http/Resources/` | API Resources que extienden `Illuminate\Http\Resources\Json\JsonResource` | Pest arch: «los Http/Resources de módulo extienden JsonResource» (R3) |
 | `Listeners/` | reacciones a eventos de otros módulos | R3 |
 | `Models/` | Eloquent, con `#[Fillable]` explícito (Laravel 13; antes `$fillable`) | R27 |
 | `Policies/` | `final`, sufijo `Policy` | Pest arch (R25) |
@@ -66,9 +72,9 @@ falla ante cualquier nombre que no esté en esta lista.
 | `Tests/` | `Feature/` y `Unit/`; es lo único que puede cruzar módulos | R5 |
 | `Fortify/` | **caso especial**: adaptadores de un paquete cuyo nombre y firma fija un tercero | R3 |
 
-Dentro de `Models/`, `Support/` o `Actions/` cada módulo se organiza como
-quiera: sólo se comprueban las subcarpetas de `Database/`, `Http/` y
-`Resources/`, que son las tres con estructura fija.
+Dentro de `Models/`, `Support/`, `Actions/`, `Enums/` o `Exports/` cada módulo se
+organiza como quiera: sólo se comprueban las subcarpetas de `Database/`, `Http/`
+y `Resources/`, que son las tres con estructura fija.
 
 ### Cómo pedir una carpeta nueva
 
@@ -80,11 +86,21 @@ Una carpeta nueva es una capa nueva, así que no se añade «probando a ver»:
 2. **Si de verdad es una capa nueva**, se decide con el equipo y se actualiza
    **en el mismo commit**: esta tabla, el `$allowed` del arch test
    (`tests/Arch/ArchitectureTest.php`) y, si aporta reglas propias, `rules.md`.
+   Y si la carpeta tiene una forma verificable —«esto son enums backed», «esto
+   extiende `JsonResource`»—, entra con su arch test: una carpeta permitida sin
+   nada que la defina vuelve a ser el cajón de sastre que R3 quería cerrar.
 3. **Si es un adaptador de un paquete** cuyo contrato no puedes cumplir (nombres
    y firmas impuestos, como los stubs de Fortify), **no** lo metas en `Actions/`:
    sigue el precedente de `app/Modules/Auth/Fortify/` y documenta por qué.
 
 No hay válvula de escape para R3: la lista es la lista.
+
+**`Services/` sigue fuera a propósito**, y es el ejemplo de qué cuesta abrir la
+lista sin pensarlo: en Notarium acabó siendo un `ExpedienteService` de 1.147
+líneas. El caso legítimo existe (asper-server tiene un motor de formularios con
+estado propio en `Formats/Services/`), pero es la excepción que hay que
+justificar delante del equipo, no el atajo por defecto. La cicatriz completa
+está en R3 (`rules.md`).
 
 ## Service Provider del módulo
 
@@ -165,10 +181,10 @@ Ejemplo real: `app/Modules/Auth/Database/Factories/{RoleFactory, ModuleFactory}.
 (R5). Lo comprueban dos arch tests de Pest (`tests/Arch/ArchitectureTest.php`) y,
 sobre todo, PHPat: `tests/Arch/PhpatArchitecture.php` genera la regla para **cada
 par** de módulos a partir de `glob(app/Modules/*)`, así que tu módulo nuevo queda
-cubierto sin tocar nada. En los dos casos se ignoran sólo las carpetas `Tests/`.
+cubierto sin tocar nada.
 
 ✅ **SÍ**:
-- **Events** — el módulo origen dispara, el destino escucha. Los events viven en `App\Modules\Origen\Events\` y los listeners en `App\Modules\Destino\Listeners\`.
+- **Events** — el módulo origen dispara, el destino escucha. Los events viven en `App\Modules\Origen\Events\` y los listeners en `App\Modules\Destino\Listeners\`. **`{Otro}\Events\` es la única parte del módulo vecino que se puede importar**: PHPat lo excluye del destino prohibido, para que el listener pueda tipar el evento y el provider cablearlo con `Event::listen(Evento::class, Listener::class)` en vez de con el nombre en un string. Las otras dos exclusiones son las carpetas `Tests/` de los dos lados.
 - **Contracts** — define una interfaz en `app/Core/Contracts/` y bind la implementación en el provider correspondiente. El módulo cliente type-hint la interfaz.
 - **Enums / DTOs en Core** — para valores compartidos (roles, estados) que no son de nadie en particular.
 - **Actions públicas vía interfaz** — exponer una API mínima del dominio.

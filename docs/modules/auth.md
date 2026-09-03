@@ -417,8 +417,9 @@ Route::middleware(['api', 'auth:sanctum'])
 | `FactoryResolutionTest` | los modelos del módulo resuelven su factory dentro del módulo | 4 |
 | `PasskeysToggleTest` | el toggle `AUTH_PASSKEYS` añade/quita la feature, sus rutas y su limiter | 9 |
 | `PasskeysScreenTest` | acceso a `/user/passkeys`, listado por dueño y revocación | 10 |
+| `DevAccountSwitcherTest` | el switcher `/dev/switch-account` sólo existe en `local` y sólo entra en cuentas de dominios reservados | 16 |
 
-Total Auth: **60 tests / 169 assertions**. (Cifra real de
+Total Auth: **76 tests / 204 assertions**. (Cifra real de
 `./vendor/bin/pest app/Modules/Auth --compact`; actualízala cuando cambie.)
 
 ## Cómo extender

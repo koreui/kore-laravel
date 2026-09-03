@@ -26,11 +26,15 @@
 app/
 ├── Core/                          # kernel compartido, NO negocio
 │   ├── Actions/Action.php         # base abstracta para Actions
-│   ├── Concerns/                  # traits compartidos (hoy vacía)
+│   ├── Concerns/                  # traits compartidos
+│   │   ├── HandlesDeleteConfirmation.php  # confirmar → borrar, con el id #[Locked]
+│   │   ├── HasPublicUuid.php      # identidad pública opt-in, PK entera
+│   │   └── RedirectsWithToast.php # toast en sesión + redirect
 │   ├── Console/                   # comandos transversales
 │   │   ├── ArchCheckCommand.php   # kore:arch:check
 │   │   ├── AgentsSyncCommand.php  # kore:agents:sync
 │   │   ├── ChangelogSectionCommand.php  # kore:changelog:section
+│   │   ├── Concerns/SupportsDryRun.php   # opción --dry-run + helpers
 │   │   └── Hooks/                 # hooks de git (pre-commit, commit-msg, pre-push)
 │   ├── Contracts/                 # interfaces (puentes entre módulos)
 │   │   └── AuthorizationCatalog.php
@@ -80,7 +84,7 @@ la cicatriz real que la originó. Este resumen sólo da el titular.
 | [R35](rules.md) | un test Pest por Action, componente Livewire y ruta |
 
 Ver detalle en:
-- [`rules.md`](rules.md) — **el catálogo completo `R1..R50`** (fuente de verdad)
+- [`rules.md`](rules.md) — **el catálogo completo `R1..R53`** (fuente de verdad)
 - [`module-pattern.md`](module-pattern.md) — cómo se construye un módulo
 - [`toggles.md`](toggles.md) — `config/kore-app.php`
 - [`../quality/pipeline.md`](../quality/pipeline.md) — pipeline que hace cumplir esto

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Auth\Http\Controllers\SocialiteController;
 use App\Modules\Auth\Http\Livewire\Dashboard;
+use App\Modules\Auth\Http\Livewire\DevAccountSwitcher;
 use App\Modules\Auth\Http\Livewire\MagicLink;
 use App\Modules\Auth\Http\Livewire\Passkeys;
 use Illuminate\Support\Facades\Route;
@@ -39,6 +40,22 @@ Route::middleware('web')->group(function (): void {
 Route::middleware(['web', 'auth', 'verified'])->group(function (): void {
     Route::get('/dashboard', Dashboard::class)->name('dashboard');
 });
+
+/*
+ * Switcher de cuentas de demostración: entrar como cualquiera de las cuentas
+ * sembradas para ver la aplicación con sus permisos.
+ *
+ * Sólo en `local`, y la comprobación va aquí —no dentro de la pantalla— para
+ * que fuera de local la ruta **no exista**: `Route::has('dev.switch-account')`
+ * es `false` y la URL responde 404, en vez de un 403 que delataría que hay
+ * algo detrás. La misma forma que usan `magic-link` y `passkeys` arriba, con
+ * el entorno en lugar de un toggle.
+ */
+if (app()->environment('local')) {
+    Route::middleware(['web', 'auth'])->group(function (): void {
+        Route::get('/dev/switch-account', DevAccountSwitcher::class)->name('dev.switch-account');
+    });
+}
 
 /*
  * Pantalla de gestión de passkeys. Los endpoints de la ceremonia WebAuthn

@@ -23,6 +23,13 @@ Artisan::command('inspire', function (): void {
 |
 | (En Docker lo hace el servicio `scheduler` de docker-compose.prod.yml.)
 |
+| Toda tarea lleva `->sentryMonitor()`, la macro de sentry-laravel que abre un
+| check-in al empezar y lo cierra al terminar. Es lo que convierte «el cron dejó
+| de correr» en una alerta: sin monitor, un scheduler parado no produce ningún
+| error —no hay excepción que reportar— y se descubre el día que hace falta el
+| backup. Sin `SENTRY_LARAVEL_DSN` la macro sigue existiendo y el check-in se
+| va por un `return` temprano, así que en local y en los tests no cuesta nada.
+|
 */
 
 // Health checks. `health:check` almacena los resultados que sirven /health y
@@ -32,20 +39,24 @@ Artisan::command('inspire', function (): void {
 Schedule::command(RunHealthChecksCommand::class)
     ->everyMinute()
     ->withoutOverlapping()
-    ->onOneServer();
+    ->onOneServer()
+    ->sentryMonitor();
 
 Schedule::command(ScheduleCheckHeartbeatCommand::class)
     ->everyMinute()
-    ->onOneServer();
+    ->onOneServer()
+    ->sentryMonitor();
 
 // Mantenimiento de colas.
 Schedule::command('queue:prune-batches')
     ->daily()
-    ->onOneServer();
+    ->onOneServer()
+    ->sentryMonitor();
 
 Schedule::command('queue:prune-failed --hours=168')
     ->daily()
-    ->onOneServer();
+    ->onOneServer()
+    ->sentryMonitor();
 
 // Purga del audit log. La retención es `activitylog.clean_after_days`, que el
 // propio paquete registra (365 días por defecto): aquí no se publica
@@ -54,13 +65,15 @@ Schedule::command('queue:prune-failed --hours=168')
 Schedule::command('activitylog:clean')
     ->daily()
     ->withoutOverlapping()
-    ->onOneServer();
+    ->onOneServer()
+    ->sentryMonitor();
 
 // Tokens de Sanctum caducados: sólo tiene sentido con la API encendida.
 if ((bool) config('kore-app.api.enabled')) {
     Schedule::command('sanctum:prune-expired --hours=24')
         ->daily()
-        ->onOneServer();
+        ->onOneServer()
+        ->sentryMonitor();
 }
 
 // Backups (spatie/laravel-backup): sólo con BACKUP_ENABLED=true, porque con el
@@ -72,19 +85,22 @@ if ((bool) config('kore-app.api.enabled')) {
 if ((bool) config('kore-app.backup.enabled')) {
     Schedule::command('backup:clean')
         ->dailyAt('01:00')
-        ->onOneServer();
+        ->onOneServer()
+        ->sentryMonitor();
 
     Schedule::command('backup:run')
         ->dailyAt('02:00')
         ->withoutOverlapping()
-        ->onOneServer();
+        ->onOneServer()
+        ->sentryMonitor();
 
     Schedule::command('backup:monitor')
         ->dailyAt('03:00')
-        ->onOneServer();
+        ->onOneServer()
+        ->sentryMonitor();
 }
 
 // `model:prune` se deja fuera a propósito: hoy ningún modelo del boilerplate
 // usa el trait Prunable / MassPrunable, y el comando aborta si no encuentra
 // ninguno. Descoméntalo cuando añadas el primero.
-// Schedule::command('model:prune')->daily()->onOneServer();
+// Schedule::command('model:prune')->daily()->onOneServer()->sentryMonitor();

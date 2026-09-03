@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 
-import { waitForLivewireReady } from '../support/livewire';
+import { waitForLivewireReady } from '../fixtures/livewire';
 
 /**
  * `/user/passkeys` — componente Livewire `App\Modules\Auth\Http\Livewire\Passkeys`.
@@ -30,7 +30,7 @@ export class PasskeysPage {
         this.register = page.getByRole('button', { name: 'Registrar passkey' });
         this.emptyState = page.getByText('Todavía no tienes passkeys');
         this.errorAlert = page.getByRole('alert');
-        // CANDIDATO A MEJORA DE ACCESIBILIDAD: `getByLabel('Contraseña')` es
+        // KORE-E2E-005 · CANDIDATO A MEJORA DE ACCESIBILIDAD: `getByLabel('Contraseña')` es
         // ambiguo en esta pantalla — casa el input (nombre accesible
         // «Contraseña *») y el botón de ver/ocultar de <x-kore::password>, cuyo
         // aria-label es «Mostrar la contraseña». Hasta que ese botón se llame

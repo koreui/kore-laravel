@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Users\Http\Livewire;
 
+use App\Core\Concerns\HandlesDeleteConfirmation;
 use App\Core\Contracts\AuthorizationCatalog;
 use App\Core\Data\Authorization\RoleOptionData;
 use App\Core\Enums\SystemRole;
@@ -24,24 +25,8 @@ use Override;
 
 final class TableUsers extends KoreDataTable
 {
+    use HandlesDeleteConfirmation;
     use InteractsWithFeedback;
-
-    /**
-     * Workaround koreUi 2.2: `RowAction::confirm()` arma el diálogo en el
-     * cliente y, al aceptar, `handleConfirmCallback()` sólo ejecuta métodos
-     * presentes en `$koreConfirmable`, lista que únicamente rellena
-     * `Confirm::send()` (camino que las row actions no recorren, a diferencia
-     * de las bulk actions). Sin esto `confirmDelete()` nunca se invoca.
-     * `hydrate()` corre tras restaurar las propiedades del snapshot, justo
-     * antes de despachar el listener. Quitar cuando koreUi autorice las row
-     * actions por sí mismo.
-     */
-    public function hydrate(): void
-    {
-        if (! in_array('confirmDelete', $this->koreConfirmable, true)) {
-            $this->koreConfirmable[] = 'confirmDelete';
-        }
-    }
 
     /** @return Builder<User> */
     public function query(): Builder
@@ -136,15 +121,18 @@ final class TableUsers extends KoreDataTable
      * por el middleware `permission:*` de las rutas del módulo, así que la
      * autorización real tiene que hacerse aquí.
      *
+     * Éste es el hook de `HandlesDeleteConfirmation`: el trait recibe el id del
+     * `RowAction` en `confirmDelete()`, lo guarda con `#[Locked]` y llama aquí.
+     *
      * La Action se resuelve a mano y NO por inyección de método: cuando el
      * diálogo de confirmación acepta, quien invoca es
      * `InteractsWithFeedback::handleConfirmCallback()` de koreUi, que hace
      * `$this->{$method}(...$params)` directo, sin pasar por el contenedor. Un
      * parámetro extra tipado reventaría ahí con ArgumentCountError (los tests
      * de Livewire sí usan el contenedor, así que el fallo sólo aparece en el
-     * navegador). Ver el workaround de `hydrate()` más arriba.
+     * navegador).
      */
-    public function confirmDelete(int $id): void
+    public function deleteAuthorized(int $id): void
     {
         $user = User::find($id);
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Core\Actions\Action;
 use App\Core\Data\Data;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Http\Resources\Json\JsonResource;
 
 /*
 |--------------------------------------------------------------------------
@@ -110,30 +111,36 @@ arch('R9 · los Providers de módulo llevan sufijo ServiceProvider')
     ->toHaveSuffix('ServiceProvider');
 
 /*
- * R5 · sin imports cruzados entre módulos.
+ * R5 · sin imports cruzados entre módulos, salvo los eventos.
  *
  * Users habla con Auth por `App\Core\Contracts\AuthorizationCatalog` y por el
  * enum `App\Core\Enums\SystemRole`; Auth no conoce Users en absoluto (si
  * algún día necesita reaccionar, escucha los eventos de `Users\Events`).
  *
- * Los tests SÍ pueden cruzar módulos: montan el mundo real (seeders, roles) y
- * no son código de producción.
+ * Tres namespaces quedan fuera:
+ *
+ *   - los `Tests/` del módulo que mira (montan el mundo real y no son código
+ *     de producción),
+ *   - los `Tests/` del módulo mirado,
+ *   - y los `Events/` del módulo mirado, que son su frontera pública: un
+ *     listener tiene que poder tipar el evento que escucha.
  *
  * PHPat genera esta misma regla para TODO par de módulos a partir de
  * `app/Modules/*`, así que un módulo nuevo queda cubierto sin tocar nada; los
- * dos `arch()` de abajo se quedan como red de seguridad legible.
+ * dos `arch()` de abajo se quedan como red de seguridad legible, y
+ * `PhpatArchitectureTest` comprueba la forma de la regla generada.
  */
 // R5
 arch('R5 · sin imports cruzados entre módulos')
     ->expect('App\Modules\Users')
     ->not->toUse('App\Modules\Auth')
-    ->ignoring('App\Modules\Users\Tests');
+    ->ignoring(['App\Modules\Users\Tests', 'App\Modules\Auth\Events']);
 
 // R5
 arch('R5 · sin imports cruzados entre módulos (inverso)')
     ->expect('App\Modules\Auth')
     ->not->toUse('App\Modules\Users')
-    ->ignoring('App\Modules\Auth\Tests');
+    ->ignoring(['App\Modules\Auth\Tests', 'App\Modules\Users\Events']);
 
 /*
  * R6 · Core es el kernel compartido: lo pueden usar todos los módulos, pero él
@@ -290,9 +297,12 @@ arch('R14 · las Rules de módulo son final e implementan ValidationRule')
 test('R3 · un módulo sólo tiene las carpetas permitidas', function (): void {
     $allowed = [
         // Dominio
-        'Actions', 'Data', 'Events', 'Listeners', 'Models', 'Policies', 'Rules', 'Support',
+        'Actions', 'Data', 'Enums', 'Events', 'Listeners', 'Models', 'Policies', 'Rules', 'Support',
         // Entrega
         'Forms', 'Http', 'Routes', 'Resources',
+        // Salida hacia fuera de la aplicación: Excel, CSV, PDF. Es una capa de
+        // presentación, no de dominio, y por eso no cabe en Data/ ni en Support/.
+        'Exports',
         // Infraestructura del módulo
         'Console', 'Database', 'Providers', 'Tests',
         // Adaptadores de paquete cuyo contrato (nombre y firma) lo fija un
@@ -302,7 +312,7 @@ test('R3 · un módulo sólo tiene las carpetas permitidas', function (): void {
 
     $nested = [
         'Database' => ['Migrations', 'Factories', 'Seeders'],
-        'Http' => ['Controllers', 'Livewire', 'Requests', 'Middleware'],
+        'Http' => ['Controllers', 'Livewire', 'Requests', 'Middleware', 'Resources'],
         'Resources' => ['views', 'lang'],
     ];
 
@@ -336,4 +346,93 @@ test('R3 · un módulo sólo tiene las carpetas permitidas', function (): void {
     }
 
     expect($offenders)->toBe([]);
+});
+
+/**
+ * FQCN de las clases que hay en una carpeta de módulo, deducidos de la ruta.
+ *
+ * Se miran dos niveles (`Enums/*.php` y `Enums/Loquesea/*.php`): dentro de una
+ * carpeta permitida cada módulo se organiza como quiera.
+ *
+ * @param string $folder ruta relativa dentro del módulo, p. ej. `Http/Resources`
+ * @return list<string>
+ */
+function koreModuleClassesIn(string $folder): array
+{
+    $classes = [];
+
+    $files = array_merge(
+        (array) glob(__DIR__.'/../../app/Modules/*/'.$folder.'/*.php'),
+        (array) glob(__DIR__.'/../../app/Modules/*/'.$folder.'/*/*.php'),
+    );
+
+    foreach ($files as $file) {
+        $relative = substr((string) realpath((string) $file), strlen((string) realpath(__DIR__.'/../../app')) + 1);
+        $class = 'App\\'.str_replace('/', '\\', substr($relative, 0, -4));
+
+        if (class_exists($class) || enum_exists($class) || interface_exists($class)) {
+            $classes[] = $class;
+        }
+    }
+
+    sort($classes);
+
+    return $classes;
+}
+
+/*
+|--------------------------------------------------------------------------
+| R3 · las carpetas nuevas de la lista, con su forma
+|--------------------------------------------------------------------------
+|
+| `Enums/`, `Http/Resources/` y `Exports/` entraron en la lista de R3 en la
+| v2.1.0 porque asper-server —hijo del boilerplate— las había creado igual, con
+| la regla delante. Ampliar la lista sin decir qué puede vivir en ellas la
+| convertiría en el `Services/` que R3 existe para evitar, así que las dos que
+| tienen forma verificable la tienen verificada aquí. `Exports/` no: lo que hay
+| dentro depende del paquete de exportación que instale el proyecto, y R3 sólo
+| garantiza que la carpeta es una de las permitidas.
+|
+| Los dos tests son tolerantes a que hoy no exista ninguna clase: el
+| boilerplate todavía no usa ninguna de las tres. Son la red que se tensa el
+| día que un derivado —o este mismo repo— cree la primera.
+|
+*/
+
+// R3 · R14
+test('R3 · los Enums de módulo son enums backed', function (): void {
+    $offenders = [];
+
+    foreach (koreModuleClassesIn('Enums') as $class) {
+        if (! enum_exists($class)) {
+            $offenders[] = "{$class} está en Enums/ y no es un enum";
+
+            continue;
+        }
+
+        if (! new ReflectionEnum($class)->getBackingType() instanceof ReflectionNamedType) {
+            $offenders[] = "{$class} es un enum puro; usa uno backed (string o int)";
+        }
+    }
+
+    expect($offenders)->toBe([], implode("\n", [
+        ...$offenders,
+        'Un enum sin tipo de respaldo no se puede persistir ni serializar: en cuanto viaja a la base o a un JSON alguien acaba mapeándolo a mano. Ver R3 en docs/architecture/rules.md.',
+    ]));
+});
+
+// R3
+test('R3 · los Http/Resources de módulo extienden JsonResource', function (): void {
+    $offenders = [];
+
+    foreach (koreModuleClassesIn('Http/Resources') as $class) {
+        if (! is_subclass_of($class, JsonResource::class)) {
+            $offenders[] = "{$class} está en Http/Resources/ y no extiende ".JsonResource::class;
+        }
+    }
+
+    expect($offenders)->toBe([], implode("\n", [
+        ...$offenders,
+        'Http/Resources/ es la carpeta de los API Resources de Laravel, no un cajón de sastre de la capa Http. Ver R3 en docs/architecture/rules.md.',
+    ]));
 });

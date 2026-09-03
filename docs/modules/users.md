@@ -62,7 +62,7 @@ vigila). Lo que necesita de la autorización lo pide por
 Las rutas viven en `app/Modules/Users/Routes/web.php` y todas pasan por `auth + verified` y por el middleware `permission:users.{action}`.
 
 > El **save** y el **delete** se ejecutan dentro de componentes Livewire
-> (`FormComponent::save()`, `TableUsers::confirmDelete()`) — no hay rutas
+> (`FormComponent::save()`, `TableUsers::deleteAuthorized()`) — no hay rutas
 > POST/PUT/DELETE explícitas.
 
 > ⚠️ **El middleware `permission:*` de las rutas NO protege las acciones
@@ -155,7 +155,10 @@ final class UserForm extends Form
 - `mount()` autoriza y rellena el form si hay `model`
 - `save(UserCreateAction $createUser, UserUpdateAction $updateUser)`:
   **autoriza → valida → `toData()` → Action → toast → redirect**. Las Actions
-  llegan por inyección de método (Livewire las resuelve del contenedor)
+  llegan por inyección de método (Livewire las resuelve del contenedor), y las
+  dos últimas etapas son una sola línea:
+  `App\Core\Concerns\RedirectsWithToast::redirectWithToast()`, que manda el
+  toast por sesión —lo único que sobrevive a la redirección—
 - Computed properties: `title`, `roles`, `modules` — las dos últimas salen del
   `AuthorizationCatalog` y se serializan con `->toArray()` a la misma estructura
   que consumían antes el select y el Alpine de la matriz de permisos
@@ -172,9 +175,13 @@ La vista (`Resources/views/livewire/form-component.blade.php`) usa Alpine.js par
 - Columnas: id, nombre (searchable), email (searchable), rol (BadgeColumn con colores por rol), creado (DateColumn), acciones.
 - Filtros: SelectFilter por rol con callback custom (`whereHas('roles', ...)`).
 - Acciones por fila: editar, eliminar (con confirm). Eliminar a uno mismo o a un superadmin queda **oculto** automáticamente — pero eso es sólo cosmética.
-- `confirmDelete($id)` hace `abort_if($user->id === auth()->id(), 403)` y
+- El par confirmar → borrar lo aporta `App\Core\Concerns\HandlesDeleteConfirmation`:
+  el `RowAction` llama a `confirmDelete($id)`, el trait guarda el id en un
+  `#[Locked] $pendingDeleteId` y aterriza en el hook del componente.
+- `deleteAuthorized($id)` hace `abort_if($user->id === auth()->id(), 403)` y
   `$this->authorize('delete', $user)` **antes** de delegar en
-  `UserDeleteAction`; luego dispara `users-updated`.
+  `UserDeleteAction`; luego dispara `users-updated`. Es público a propósito:
+  así el check de R23 lo sigue viendo en el archivo del módulo.
 
 > La Action se resuelve con `resolve(...)` y **no** por inyección de método:
 > cuando el diálogo de confirmación acepta, quien invoca el método es
@@ -190,14 +197,14 @@ Tres capas, y las tres hacen falta:
 | Capa                       | Qué cubre                                    | Qué NO cubre                        |
 |----------------------------|----------------------------------------------|-------------------------------------|
 | `permission:*` en rutas    | la navegación GET a `/users`, `/users/create` | nada de lo que pase por `/livewire/update` |
-| `authorize()` en componentes | `FormComponent::mount/save`, `TableUsers::confirmDelete` | —                          |
+| `authorize()` en componentes | `FormComponent::mount/save`, `TableUsers::deleteAuthorized` | —                        |
 | `->hidden()` en RowActions | esconder botones                              | **no autoriza nada**                |
 
 Puntos exactos donde se autoriza:
 
 - `FormComponent::mount()` → `create` (alta) / `update` (edición)
 - `FormComponent::save()` → `create` o `update`, **antes** de validar y escribir
-- `TableUsers::confirmDelete()` → guarda de auto-borrado + `delete`
+- `TableUsers::deleteAuthorized()` → guarda de auto-borrado + `delete`
 
 ### UserPolicy
 
@@ -211,7 +218,7 @@ Registrada via `Gate::policy(User::class, UserPolicy::class)` en el provider.
 > **Ojo con el `Gate::before` del superadmin** (`AuthModuleServiceProvider`):
 > devuelve `true` antes de consultar la policy, así que para ese rol la policy
 > **no se evalúa**. Por eso la guarda de «no borrarse a uno mismo» se repite
-> como `abort_if` dentro de `TableUsers::confirmDelete()`.
+> como `abort_if` dentro de `TableUsers::deleteAuthorized()`.
 
 ## Anti-escalada de privilegios
 

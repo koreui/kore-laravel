@@ -34,8 +34,9 @@ test.describe('Users · borrar como superadmin', () => {
     });
 
     test('confirmar borra la fila', async ({ page }) => {
-        // koreUi 2.2 no autoriza el wireMethod de las row actions con confirm();
-        // TableUsers::hydrate() lo registra en $koreConfirmable como workaround.
+        // KORE-E2E-006 · koreUi 2.2 no autoriza el wireMethod de las row actions
+        // con confirm(); TableUsers::hydrate() lo registra en $koreConfirmable
+        // como workaround. Éste es el test que lo destapó.
         const created = await createUserViaUi(page);
         const users = new UsersIndexPage(page);
 

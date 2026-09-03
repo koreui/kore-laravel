@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 
-import { waitForLivewireReady } from '../support/livewire';
+import { waitForLivewireReady } from '../fixtures/livewire';
 
 /** `/magic-link` — componente Livewire `App\Modules\Auth\Http\Livewire\MagicLink`. */
 export class MagicLinkPage {

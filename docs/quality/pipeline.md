@@ -15,7 +15,7 @@ composer test:coverage     # Pest --coverage --min=80
 composer lint              # Pint (aplica fixes)
 composer lint:test         # Pint --test (no fix)
 composer analyse           # Larastan + PHPat + disallowed-calls (un solo binario)
-composer arch              # kore:arch:check (checks textuales: R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50)
+composer arch              # kore:arch:check (checks textuales: R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50, R52)
 composer refactor          # Rector (aplica)
 composer refactor:test     # Rector --dry-run
 composer ci                # lint:test + analyse + arch + refactor:test + test
@@ -35,16 +35,17 @@ no verifica nada.
 |------|-------------|--------|-----------|
 | **pre-commit** | ~2 s | **0,7 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
 | **commit-msg** | ~1 s | **0,3 s** | `ConventionalCommitMsgHook` — el asunto sigue Conventional Commits (R43) |
-| **pre-push** | ~30 s | **4 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
-| **`composer ci`** | ~90 s | **16 s** | `pint --test` (1,1) + `phpstan` (0,6 con caché, 2,0 en frío) + `composer arch` (0,2) + `rector --dry-run` (4,3) + `pest` (9,3, secuencial) |
+| **pre-push** | ~30 s | **5 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
+| **`composer ci`** | ~90 s | **16 s** | `pint --test` (0,2 con caché, 2,6 en frío) + `phpstan` (0,8 con caché, 2,3 en frío) + `composer arch` (0,2) + `rector --dry-run` (3,2 con caché) + `pest` (11,2, secuencial) |
 | **CI (GitHub)** | ~3 min | — | `composer ci` en matriz PHP 8.4 / 8.5 + `composer audit` + `npm ci && npm run build` + E2E |
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + `softprops/action-gh-release` |
 
-Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v1.4.0 y
-410 tests Pest. La suite E2E —63 tests en 16 archivos— va aparte y tarda
-19 s en local. Los tests nuevos de la v1.4.0 (los comandos de Core, el hook de
-`commit-msg`, el MCP `kore` y el módulo Docs) son los que explican el tiempo de
-más de `pest` respecto a la v1.3.0.
+Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v2.1.0 y
+511 tests Pest. La suite E2E —163 tests en 18 archivos— va aparte y tarda
+19 s en local. Los 56 tests nuevos de la v2.1.0 (los traits de `Core\Concerns`,
+el handler del 419, el `--dry-run`, los monitores de Sentry, el check de R52 y
+los arch tests de R3 y R5) son los que explican el tiempo de más de `pest`
+respecto a la v1.4.0.
 
 > Nota de entorno: `composer test` limpia la config cacheada antes de correr
 > Pest a propósito. Con un `bootstrap/cache/config.php` viejo, `PulseAccessTest`
@@ -110,7 +111,7 @@ atributos, docblocks).
 | Método | Regla |
 |--------|-------|
 | `testCoreNoDependeDeNingunModulo` | R6 |
-| `testModulosNoSeImportanEntreSi` | R5 — genera una regla por **cada par** de módulos a partir de `glob(app/Modules/*)`, ignorando `Tests` |
+| `testModulosNoSeImportanEntreSi` | R5 — genera una regla por **cada par** de módulos a partir de `glob(app/Modules/*)`, ignorando `Tests` y `Events` del módulo destino (los eventos son la frontera pública) |
 | `testElDominioNoDependeDeLaCapaDeEntrega` | R4 · R19 — `Actions`, `Data`, `Rules`, `Models` no dependen de `Livewire\*`, `Illuminate\Http\Request` ni de `Modules\*\{Http,Forms}` |
 | `testLosDtosSoloDependenDeDatos` | R8 — `canOnly()->dependOn()`: sólo `Core\Data`, `Core\Enums`, `Spatie\LaravelData` y enums |
 | `testLosContractsDeCoreSonInterfaces` | R7 |
@@ -173,9 +174,10 @@ php artisan kore:arch:check --root=/otro/repo  # otra raíz (lo usan sus tests)
 | R45 | si hay `phpstan-baseline.neon`, su primera línea es `# arch-baseline: vence YYYY-MM-DD` y la fecha no ha pasado |
 | R49 | cada `.agents/skills/{nombre}` tiene su symlink en `.claude/skills/{nombre}` apuntando a `../../.agents/skills/{nombre}`, y en `.claude/skills/` no hay nada que no sea uno de esos enlaces |
 | R50 | `AGENTS.md` es exactamente lo que generaría `php artisan kore:agents:sync` desde `CLAUDE.md` |
+| R52 | toda ruta `GET` con nombre de `routes/web.php` y `app/Modules/*/Routes/web.php` aparece en `tests/e2e/fixtures/access-map.ts`. Lee el texto de los archivos de rutas componiendo los `->prefix()` de los grupos; ignora las rutas con parámetro y las de `/__e2e__`. Si el mapa no existe todavía, avisa una vez y no falla. La válvula es **de línea** |
 
 Salida: `R{n} archivo:línea mensaje`, y exit code 1 si hay algo. Tests:
-`tests/Feature/ArchCheckCommandTest.php` (83 casos, un árbol de fixtures que
+`tests/Feature/ArchCheckCommandTest.php` (94 casos, un árbol de fixtures que
 viola cada check y otro que lo cumple).
 
 ### Rector — `rector.php`
@@ -238,8 +240,8 @@ ignora. Lo consume PHPStan.
 | R13 | `declare(strict_types=1)` en todo `App` |
 | R17 · R18 | sin `dd`, `dump`, `var_dump`, `ray` ni `env()` dentro de `App` |
 | R1 · R2 | `App\Modules\*\Actions` son `final`, con sufijo `Action` y extienden `App\Core\Actions\Action` |
-| R3 | un módulo sólo tiene las carpetas permitidas (y `Database/`, `Http/` y `Resources/` sólo sus subcarpetas fijas) |
-| R5 | `App\Modules\Users` no usa `App\Modules\Auth` (y al revés), ignorando `Tests/` |
+| R3 | un módulo sólo tiene las carpetas permitidas (y `Database/`, `Http/` y `Resources/` sólo sus subcarpetas fijas); los `Enums/` son enums backed y los `Http/Resources/` extienden `JsonResource` |
+| R5 | `App\Modules\Users` no usa `App\Modules\Auth` (y al revés), ignorando `Tests/` y `Events/`; `PhpatArchitectureTest` comprueba además la forma de la regla que PHPat genera para cada par |
 | R5 · R14 | `App\Modules\*\Events` son `final readonly` |
 | R6 | `App\Core` no usa `App\Modules` |
 | R7 | `App\Core\Contracts` son interfaces |
@@ -405,18 +407,19 @@ $ composer ci
 ✓ Larastan nivel 8 + PHPat + disallowed-calls: 0 errors
 ✓ kore:arch:check: sin violaciones
 ✓ Rector: nothing to refactor
-✓ Pest: 410 passed (985 assertions)
+✓ Pest: 511 passed (1243 assertions)
 ```
 
-Reparto de los 410 tests: 21 arch (`tests/Arch`), 60 del módulo Auth, 48 del
-módulo Users, 3 de Tenancy, 43 del módulo Docs y 235 en `tests/Feature`
-(health, scheduler, Sentry, Pulse, Pennant, mass assignment, landing,
-traducciones, backup, cabeceras de seguridad, configuración de producción,
-logging, migraciones reversibles, instalación limpia, el MCP `kore` y —desde la
-v1.4.0— `kore:arch:check` con sus 83 casos, los hooks con 36, `kore:agents:sync`
-con 7 y `kore:changelog:section` con 9). Aparte, la suite E2E de Playwright
-(`npm run e2e`): 63 tests en 16 archivos —15 de spec más
-`auth.setup.ts`, que hace el login por rol—.
+Reparto de los 511 tests: 34 arch (`tests/Arch`: 23 en `ArchitectureTest` y 11
+en `PhpatArchitectureTest`), 76 del módulo Auth, 48 del módulo Users, 3 de
+Tenancy, 43 del módulo Docs, 29 del módulo E2E y 278 en `tests/Feature` (health,
+scheduler, Sentry, Pulse, Pennant, mass assignment, landing, traducciones,
+backup, cabeceras de seguridad, configuración de producción, logging,
+migraciones reversibles, instalación limpia, el MCP `kore`, `kore:arch:check`
+con sus 94 casos, los hooks, `kore:agents:sync`, `kore:changelog:section`, el
+419 y `HasPublicUuid`). Aparte, la suite E2E de Playwright (`npm run e2e`): 163
+tests en 18 archivos —17 de spec más `auth.setup.ts`, que hace el login por
+rol—, 104 de ellos generados desde `tests/e2e/fixtures/access-map.ts`.
 
 Actualiza esta cifra cuando cambie (R41). Un número inventado en los docs es
 peor que no ponerlo: la auditoría de septiembre de 2026 encontró aquí «15 tests»

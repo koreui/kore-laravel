@@ -10,6 +10,157 @@ desde el upstream (`git remote add kore https://github.com/koreui/kore-laravel`)
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-09-03
+
+«La suite se defiende sola». Primera release que sale de la cantera de los
+proyectos reales (`docs/audit/2026-09-03-cantera-notarium-asper.md`): todo lo
+que entra existía ya en asper-server o en Notarium y se había pagado allí. Tres
+cosas cambian de golpe la relación con la suite E2E: un **harness** con tres
+candados para montar el escenario sin recorrerlo por pantalla, un **guardia de
+errores** que pone en rojo un test verde sobre una pantalla rota, y un **mapa de
+acceso** del que se generan solos el smoke y la matriz de autorización de cada
+pantalla. Además, `App\Core\Concerns` estrena los traits que Notarium copiaba a
+mano, el catálogo abre R3 a las carpetas que asper necesitó y aclara R5 sobre
+eventos, y llegan R51, R52 y R53.
+
+La suite Pest pasa de 410 a **511** tests y la E2E de 63 a **163** (104 generados
+desde el mapa). El catálogo llega a `R1..R53` con **46** reglas con verificador
+automático y **7** manuales.
+
+### Añadido
+
+- **Módulo `E2E`** (`app/Modules/E2E/`), el undécimo toggle del boilerplate.
+  Cinco archivos de producción y dos de test, sin `Actions/` y sin `register()`
+  en el provider: el harness es infraestructura de pruebas, no casos de uso del
+  producto, y no importa a ningún otro módulo (R5) — trabaja sobre
+  `App\Models\User`, que es global, y sobre `App\Core\Enums\SystemRole`.
+- **`HarnessGuard`, los tres candados** (`Support/HarnessGuard.php`): el flag
+  `config('kore-app.e2e.harness')`, el entorno en `['e2e', 'testing', 'local']`
+  y una base de pruebas —nombre con «e2e» o «test», o `:memory:`—. La lista de
+  entornos es una constante y no una clave de config a propósito: un candado que
+  se amplía desde el `.env` no es un candado. `reasons()` devuelve en español
+  cuál falla, que es lo que convierte «el harness no responde» en «la base se
+  llama kore_prod».
+- **Nueve rutas `/__e2e__/*`** (`Routes/web.php`, `Http/Controllers/HarnessController.php`),
+  todas JSON, sobre `web` —varias necesitan sesión—, sin `auth` —su razón de ser
+  es preparar el terreno antes de que haya sesión— y sin CSRF: `ping`,
+  `login-as`, `logout`, `users` (POST y DELETE), `mail/last`, `mail` (DELETE),
+  `artisan` y `throttle/clear`. `artisan` tiene lista blanca de dos comandos
+  (`kore:regenerate-permissions`, `cache:clear`): un endpoint sin autenticación
+  que ejecute artisan arbitrario es una shell remota, aunque viva detrás de tres
+  candados.
+- **Canal de log `e2e_mail`** (`config/logging.php` →
+  `storage/logs/e2e-mail.log`) y **`MailLog`** para leerlo. Con
+  `MAIL_LOG_CHANNEL=e2e_mail` en `.env.e2e`, el correo deja de mezclarse con el
+  ruido de `laravel.log` y `GET /__e2e__/mail/last?to=` devuelve asunto, cuerpo,
+  enlaces y el código de seis dígitos del último mensaje de ese destinatario
+  —filtrar por destinatario, y no quedarse con «el último» a secas, es lo que
+  permite que la suite siga corriendo en paralelo—.
+- **`scripts/e2e-seed.sh`**: `migrate:fresh --seed --seeder=E2eSeeder --env=e2e`
+  y buzón vacío, con **el mismo candado que `HarnessGuard` escrito en bash**. No
+  es redundancia: `migrate:fresh` borra la base antes de que ningún PHP tenga
+  ocasión de opinar, así que la comprobación tiene que estar arriba del todo.
+- **Switcher de cuentas de desarrollo** en `/dev/switch-account`
+  (`auth.dev-account-switcher` + `AuthDevImpersonateUserAction` +
+  `Auth\Support\DemoAccounts`): lista las cuentas sembradas agrupadas por rol y
+  entra como cualquiera de ellas de un clic, para las pruebas manuales de «qué
+  ve un viewer». **Sólo en `local`, y por triplicado**: `AuthModuleServiceProvider` no registra ni la ruta ni el alias del componente; `DevAccountSwitcher::switchTo()` corta con `abort_unless(App::isLocal(), 403)` la llamada que llega por `/livewire/update`, que no pasa por el middleware de la ruta (R23); y `AuthDevImpersonateUserAction` vuelve a comprobarlo antes de tocar la sesión. Su segundo candado es el
+  dominio del correo: sólo entra en cuentas de un **dominio reservado** (`.test`,
+  `.example`, `.invalid`, `.localhost`, `.local`, `example.com/net/org`, RFC
+  2606/6761/6762), que son las de los seeders y las únicas que no pueden ser de
+  una persona real.
+- **`docs/modules/e2e.md`**: los tres candados y por qué, la tabla de rutas con
+  su JSON, la cadena del correo, el script y el switcher.
+- **45 tests Pest nuevos**: `HarnessGuardTest` (13), `HarnessRoutesTest` (16) y
+  `DevAccountSwitcherTest` (16).
+
+- **Guardia de errores en todos los tests E2E** (`tests/e2e/fixtures/error-guard.ts`).
+  Recoge excepciones de JavaScript (`pageerror`), errores de consola, respuestas
+  `>= 400` y peticiones abortadas, y **hace fallar el test si hubo una excepción
+  JS, un 5xx o un `console.error`** — aunque todas sus aserciones hayan pasado.
+  Un test verde sobre una pantalla rota no sirve de nada. Los 4xx y las
+  peticiones canceladas quedan como avisos anotados en el reporte, porque la
+  matriz de acceso vive de los 403. Lo monta un `test.beforeEach` de
+  `fixtures/index.ts` en **todos** los tests, los pidan o no.
+  - Ruido conocido documentado uno a uno con su porqué (`favicon.ico`,
+    `net::ERR_ABORTED` de una navegación que cancela un `fetch` de Livewire,
+    `chrome-extension:`, chatter de Vite).
+  - Opt-out explícito que obliga a decir **qué** se tolera:
+    `test.use({ tolerarErrores: ['KORE-E2E-007'] })` para un describe, o
+    `errores.tolerar('…')` dentro de un test.
+- **Matriz de acceso como fuente única** (`tests/e2e/fixtures/access-map.ts`):
+  14 pantallas × 5 perfiles (invitado, member, viewer, editor, superadmin), con
+  seis resultados posibles — `200`, `403`, `404`, `'login'`, `'dashboard'`
+  (rebote de `guest`) y `'confirm'` (rebote de `password.confirm`).
+  De ahí salen **dos specs generados**:
+  - `specs/access/rbac.spec.ts` — **70 tests**, con `page.request` y
+    `maxRedirects: 0` para ver la redirección cruda.
+  - `specs/access/smoke.spec.ts` — **34 tests**: cada pantalla que da 200 carga,
+    muestra su heading, hidrata Livewire y no muestra claves de traducción sin
+    resolver.
+- **Cliente del harness** (`tests/e2e/fixtures/harness.ts`) para `/__e2e__/*`:
+  `ping`, `estaDisponible`, `loginAs`, `logout`, `createUser`, `deleteUser`,
+  `lastMail`, `esperarCorreo`, `clearMail`, `clearThrottle`, `artisan`. Fixture
+  `harness` en todos los tests. `specs/harness/harness.spec.ts` se salta solo
+  mientras `/__e2e__/ping` responda 404: **ningún otro spec depende del harness
+  todavía**, así que la suite sigue verde sin el módulo `app/Modules/E2E`.
+- **`scripts/e2e.sh`**, que es lo que corre `npm run e2e`: baja el `artisan
+  serve` huérfano que ocupe el puerto (reconociendo al hijo `php -S …
+  resources/server.php`, que es quien escucha de verdad, y a su padre), compila
+  los assets si falta el manifest de Vite, delega el sembrado en
+  `scripts/e2e-seed.sh` si existe y pasa los argumentos a Playwright tal cual.
+  Variables: `E2E_PORT`, `E2E_BUILD`, `E2E_SKIP_SEED`.
+- **`tests/e2e/HALLAZGOS.md`** — registro de lo que la suite encuentra, con
+  identificadores `KORE-E2E-###`, estados (🔴 · 🟢 · 🔵) y plantilla. Siete
+  hallazgos registrados con esta release: 2 corregidos, 3 documentados y 2
+  abiertos.
+- **`tests/e2e/FLUJOS.md`** — mapa de cobertura por flujo (A…I), con marcas
+  ✅ · 🟡 · ⬜ · 🔒 y el spec que cubre cada uno.
+
+- **`App\Core\Concerns` deja de estar vacía: tres traits para lo que un derivado
+  copiaba a mano.** Salen de contar duplicaciones reales en Notarium y en
+  asper-server, no de imaginar reutilización.
+  - `HandlesDeleteConfirmation` — el par `confirmDelete(int $id)` /
+    `deleteConfirmed()` de toda tabla, con el id pendiente bajo `#[Locked]`
+    (R24) y el workaround de koreUi (`hydrate()` reponiendo `$koreConfirmable`)
+    dentro. El componente sólo escribe `deleteAuthorized(int $id)`: `authorize()`
+    + Action + toast. El hook es **público** a propósito, para que
+    `kore:arch:check` siga exigiendo el `authorize()` en el archivo del módulo
+    (R23). Ya lo usa `TableUsers`.
+  - `RedirectsWithToast` — `redirectWithToast($ruta, $titulo, $mensaje, $params)`:
+    toast **por sesión** (`viaSession()`, lo único que sobrevive a la
+    redirección) + `to_route()`. Ya lo usa `FormComponent` de Users.
+  - `HasPublicUuid` — **opt-in**, port del `GeneraUuid` de Notarium: rellena la
+    columna `uuid` en `creating` dejando la llave primaria entera, y devuelve
+    `uuid` como llave de ruta sólo si el modelo declara
+    `public const bool ROUTE_BY_UUID = true;`. Sin migración de ejemplo: ningún
+    modelo del boilerplate lo usa todavía.
+- **`App\Core\Console\Concerns\SupportsDryRun`** — añade `--dry-run` a un comando
+  sin tocar su `#[Signature]`, más `isDryRun()` y `dryRunNotice()`. Estrenado en
+  `kore:regenerate-permissions`, que ahora dice cuántos permisos sincronizaría y
+  a cuántos Administradores antes de tocar nada.
+- **Monitores de cron en Sentry.** Todas las tareas de `routes/console.php`
+  llevan `->sentryMonitor()`: un scheduler parado no genera ninguna excepción,
+  así que sin check-ins se descubre el día que hace falta el backup. Sin
+  `SENTRY_LARAVEL_DSN` la macro sigue existiendo y el check-in se va por un
+  `return` temprano.
+- **El 419 deja de ser una pantalla de error.** `bootstrap/app.php` redirige un
+  `TokenMismatchException` de una petición web al `dashboard` si hay sesión y al
+  `login` con un aviso si no. Livewire, las peticiones que esperan JSON y
+  `api/*` conservan el 419 tal cual.
+- **Skill `kore-migration-change`** (`.agents/skills/`, con su symlink en
+  `.claude/skills/`, R49): obliga a leer el esquema real antes de escribir una
+  migración con `->change()`, y a enseñar los atributos conservados antes de
+  correrla. Implementa R53.
+- **R51, R52 y R53** en el catálogo (`docs/architecture/rules.md`):
+  - **R51 · El harness E2E sólo existe con flag + entorno + base de pruebas** —
+    tres candados, no uno; el tercero (el nombre de la base) es el que protege
+    cuando el `.env` se copia. Enforcement: `HarnessGuardTest`.
+  - **R52 · Toda pantalla nueva entra en `tests/e2e/fixtures/access-map.ts`** —
+    con check nuevo en `kore:arch:check`.
+  - **R53 · Al modificar una columna se repiten todos sus atributos** — Manual +
+    el skill `kore-migration-change`.
+
 ### Cambiado
 
 - **Rector al set de PHP 8.4** (`withPhpSets(php84: true)` +
@@ -21,6 +172,230 @@ desde el upstream (`git remote add kore https://github.com/koreui/kore-laravel`)
   **`concurrently` 10**. Los PRs de Dependabot llevaban abiertos desde la
   v1.0.0 con el CI en rojo; con el CI verde (v1.4.1) se fusionan los que pasan
   y el resto se aplica a mano en un solo commit.
+- **`config/kore-app.php` gana su undécima clave**, `e2e.harness`
+  (`E2E_HARNESS`, default `false`). `.env.example` la trae en `false`,
+  `phpunit.xml` la fuerza a `false` —por lo mismo que `DOCS_ENABLED`: si el
+  desarrollador la tuviera encendida en su `.env`, los tests del caso «toggle
+  apagado» fallarían sólo en su máquina— y **`.env.e2e` es el único archivo del
+  repositorio que la enciende**.
+- **El correo de la suite cambia de archivo**: `tests/e2e/support/env.ts` apunta
+  ahora a `storage/logs/e2e-mail.log` en vez de `storage/logs/laravel.log`. Es
+  un cambio de una línea que arrastra `global-setup.ts` (que vacía ese archivo)
+  y `support/mail-log.ts` (que lee el código OTP), y deja al lector de Node y al
+  del harness mirando exactamente el mismo archivo.
+- **`tests/Feature/KoreMcpTest.php`**: la tool `kore-list-toggles` pasa de diez a
+  once claves.
+
+- **`tests/e2e/fixtures/livewire.ts` absorbe `tests/e2e/support/livewire.ts`.**
+  Se suma un **contador de peticiones en vuelo** instalado con el hook `request`
+  del propio Livewire (`esperarLivewire`) y `conRoundTrip`, nombre nuevo de
+  `withLivewireRoundTrip` — que se conserva como alias, con la misma semántica.
+  La fixture `page` está sobrescrita para instrumentar antes del primer `goto`.
+- **`npm run e2e`** pasa de `playwright test` a `bash scripts/e2e.sh`.
+  `composer e2e` no cambia.
+- `UserFormPage.save()` espera a la hidratación antes de pulsar (KORE-E2E-007).
+- La suite pasa de **63 a 163 tests** (4 de ellos el proyecto `setup`).
+  De los 159 reales, **104 se generan desde el mapa de acceso**.
+
+- **R3 amplía la lista cerrada de carpetas de módulo** con `Enums/`,
+  `Http/Resources/` y `Exports/`. Las dos primeras entran **con arch test**
+  (enums backed; resources que extienden `JsonResource`); `Exports/` sólo con
+  R3, porque lo que va dentro lo fija el paquete de exportación. `Services/`
+  sigue fuera a propósito: es la carpeta que hay que justificar delante del
+  equipo.
+- **R5 aclarada: los `Events/` de otro módulo sí se pueden importar.** Son la
+  frontera pública de un módulo; un listener tiene que poder tipar el evento que
+  escucha. PHPat excluye ahora `{Otro}\Events` además de `{Otro}\Tests` en cada
+  par de módulos, y `tests/Arch/PhpatArchitectureTest.php` comprueba la forma de
+  la regla generada. Todo lo demás del módulo vecino sigue prohibido.
+- `kore:arch:check` gana el check **R52** (`checkRoutesAreInAccessMap`): lee el
+  texto de `routes/web.php` y `app/Modules/*/Routes/web.php` componiendo los
+  `->prefix()` de los grupos, ignora las rutas con parámetro y las de
+  `/__e2e__`, y exige que cada `path` aparezca en el mapa de acceso. Si el mapa
+  todavía no existe, avisa una vez y **no** falla. Su válvula es de línea.
+- `tests/Feature/ArchCheckCommandTest.php` pasa de 83 a **94 casos**;
+  `tests/Arch` de 21 a **34 tests** (23 en `ArchitectureTest` + 11 en el nuevo
+  `PhpatArchitectureTest`). La suite completa: **511 tests, 1243 assertions**.
+- `phpstan.neon` añade `tests/Feature/HasPublicUuidTest.php` a `paths`: PHPStan
+  no analiza el cuerpo de un trait que nadie usa, y ese test declara los dos
+  modelos que estrenan `HasPublicUuid`.
+
+### Eliminado
+
+- **`tests/e2e/specs/auth/protected-routes.spec.ts`** (6 tests). Era la matriz
+  de `/users` y `/users/create` escrita a mano; `specs/access/rbac.spec.ts` la
+  cubre entera, con los cinco perfiles y catorce pantallas.
+- **`tests/e2e/support/livewire.ts`**, absorbido por `fixtures/livewire.ts`.
+
+### Corregido
+
+- **KORE-E2E-001** · El detector de claves de traducción sin resolver cazaba 23
+  falsos positivos en `/docs/architecture/rules`: el visor renderiza PHP y una
+  llamada estática también lleva `::`. Ahora mira la prosa, recortando `pre`,
+  `code`, `script` y `style` de una copia del DOM.
+- **KORE-E2E-007** · El formulario de usuarios se enviaba como **GET nativo** si
+  se pulsaba Guardar antes de que Livewire hidratara, dejando todos los campos
+  —**contraseña incluida**— en la barra de direcciones. Los inputs se renderizan
+  sin `value` y `wire:submit` no está enganchado hasta la hidratación.
+  Corregido en la suite (`waitUntilReady()`) **y en el producto**: el botón
+  «Guardar» de `form-component.blade.php` nace `disabled` y Alpine lo habilita
+  al hidratar, que es cuando `wire:submit` ya escucha.
+
+### Migración desde 2.0.0
+
+Nada de esto toca rutas de producto, modelos ni base de datos. Tres bloques,
+según lo que use tu derivado.
+
+**Harness E2E** (sólo si usas la suite):
+
+Un derivado que **no** use la suite E2E no tiene que hacer nada: el toggle nace
+apagado y el módulo no registra nada.
+
+Si la usa:
+
+1. Copia `app/Modules/E2E/` y registra su provider **al final** de
+   `bootstrap/providers.php`.
+2. Añade la clave `e2e.harness` a tu `config/kore-app.php`, `E2E_HARNESS=false`
+   a `.env.example` y `<env name="E2E_HARNESS" value="false" force="true"/>` a
+   `phpunit.xml`.
+3. Añade el canal `e2e_mail` a `config/logging.php` y, en tu `.env.e2e`,
+   `E2E_HARNESS=true` y `MAIL_LOG_CHANNEL=e2e_mail`.
+4. **Comprueba el nombre de tu base de E2E.** Si no contiene «e2e» ni «test», el
+   tercer candado no se abre y el harness no existe: renómbrala. Es a propósito,
+   y `HarnessGuard::reasons()` te lo dirá con esas palabras.
+5. Si tu `tests/e2e/support/env.ts` apunta a `laravel.log`, cámbialo a
+   `e2e-mail.log` en el mismo commit que el `.env.e2e`: si no, los specs que
+   leen el OTP se quedan esperando un correo que ya está en otro archivo.
+6. El switcher de cuentas es opcional y sólo afecta a `local`. Si tus cuentas de
+   demostración **no** están en un dominio reservado, no aparecerán en la lista:
+   la regla está en `App\Modules\Auth\Support\DemoAccounts` y es el único sitio
+   que hay que tocar.
+
+**Fixtures de Playwright**:
+
+Cambios que hay que replicar a mano. Ninguno es automático.
+
+#### 1. Copia las fixtures nuevas y borra la vieja
+
+```bash
+cp upstream/tests/e2e/fixtures/{error-guard,livewire,access-map,harness}.ts tests/e2e/fixtures/
+cp upstream/tests/e2e/fixtures/index.ts tests/e2e/fixtures/
+rm tests/e2e/support/livewire.ts
+```
+
+Repunta los page objects que importaban del sitio viejo:
+
+```bash
+grep -rl "support/livewire" tests/e2e \
+  | xargs sed -i '' "s#from '../support/livewire'#from '../fixtures/livewire'#"
+```
+
+Si tu `fixtures/index.ts` está personalizado, no lo pises: trae de la versión
+nueva las opciones `tolerarErrores`, las fixtures `errores` y `harness`, la
+sobrescritura de `page` (que llama a `instrumentarLivewire`), el
+`errores.vigilar(page)` dentro de `withRolePage` y el `test.beforeEach` final.
+
+#### 2. Escribe **tu** `access-map.ts`
+
+El del boilerplate describe las catorce pantallas del boilerplate; el tuyo tiene
+que describir las tuyas. La estructura y los seis valores de `ResultadoAcceso`
+se reutilizan tal cual; `PerfilAcceso` sale de los roles de tu `E2eSeeder`.
+
+Si tus roles no son los cuatro del boilerplate, ajusta `PERFILES` y las claves
+de `roles` — y **entonces** copia `specs/access/{rbac,smoke}.spec.ts`, que no
+hay que tocar: leen el mapa.
+
+Cuenta lo que te va a generar antes de correrlo: `rutas × perfiles` en RBAC más
+las que valgan `200` en el smoke. Con 30 pantallas y 6 roles son 180 + N tests.
+
+#### 3. Espera que el guardia encuentre cosas
+
+En un proyecto con más superficie, **el guardia va a poner en rojo tests que
+hoy pasan**. Es lo que hace. El camino no es apagarlo:
+
+1. Corre la suite y anota cada error en tu `HALLAZGOS.md` con tu prefijo
+   (`MIAPP-E2E-001`…).
+2. Tolera sólo lo que no puedas arreglar hoy, con el patrón y el identificador:
+   `test.use({ tolerarErrores: ['MIAPP-E2E-001'] })`.
+3. Si es ruido del navegador, va a `RUIDO_CONOCIDO` **con su porqué**.
+
+Si tienes muchísimo, un aterrizaje suave es sacar `'consola'` de `graves()`
+durante una release —dejando sólo excepciones y 5xx— y volver a meterlo cuando
+la lista esté vacía. Es un `arch-accepted` con dueño, no una decisión silenciosa.
+
+#### 4. `scripts/e2e.sh` y `package.json`
+
+```json
+"e2e": "bash scripts/e2e.sh",
+```
+
+Revisa dentro del script el puerto (sale de `APP_URL` en tu `.env.e2e`) y si
+tienes `scripts/e2e-seed.sh`. Si tu base no es SQLite, seguramente lo tengas y
+el script lo llamará solo.
+
+#### 5. Los dos cuadernos
+
+`tests/e2e/HALLAZGOS.md` y `tests/e2e/FLUJOS.md` **no se copian**: se empiezan.
+Coge del boilerplate las cabeceras, la plantilla y la leyenda; el contenido es
+tuyo. Van en `tests/e2e/` y no en `docs/` a propósito: no pasan por el índice de
+`docs/README.md` (R40), se editan en el mismo commit que los tests, y se citan
+desde `docs/quality/e2e.md`.
+
+#### 6. Lo que se rompe si no haces nada
+
+| Si no… | Qué pasa |
+| --- | --- |
+| copias `fixtures/index.ts` | No hay guardia: la suite sigue igual que antes |
+| borras `support/livewire.ts` y repuntas los imports | Dos contadores distintos y `esperarLivewire` sin instrumentar |
+| escribes tu `access-map.ts` | `specs/access/*` no compila (no existe el módulo) |
+| añades R52 a `rules.md` antes que las citas | `kore:arch:check` falla: cita una regla que no existe |
+
+**Core, bonus y catálogo**:
+
+1. **Tablas y formularios (opcional, pero es donde está la ganancia).**
+   En cada `Table{X} extends KoreDataTable`:
+   - añade `use App\Core\Concerns\HandlesDeleteConfirmation;`,
+   - borra el `hydrate()` con el workaround de `$koreConfirmable` (lo trae el
+     trait),
+   - renombra `confirmDelete(int $id)` a `deleteAuthorized(int $id)` y déjalo
+     **público**. El `RowAction` sigue apuntando a `wireMethod('confirmDelete')`:
+     ese método ahora lo pone el trait.
+
+   En cada `FormComponent`: añade `use App\Core\Concerns\RedirectsWithToast;` y
+   sustituye el bloque `toast()->…->viaSession()->send(); return to_route(…);`
+   por `return $this->redirectWithToast('ruta.index', __('¡Listo!'), __('…'));`.
+
+   Los tests que llaman a `->call('confirmDelete', $id)` siguen funcionando sin
+   tocarlos.
+
+2. **419.** El bloque `withExceptions` de `bootstrap/app.php` es nuevo. Si tu
+   proyecto ya redirige los 419 por su cuenta, no lo dupliques. Si tienes rutas
+   de API fuera del prefijo `api/`, ajusta la condición: la que viene mira
+   `expectsJson()`, la cabecera `X-Livewire` y `api/*`.
+
+3. **Sentry.** `->sentryMonitor()` en cada tarea de tu `routes/console.php`. Sin
+   DSN es no-op, así que se puede añadir antes de tener Sentry configurado. En
+   producción, revisa los monitores que aparecen en Sentry y ponles el margen
+   (`checkInMargin`) que les corresponda.
+
+4. **R3 · carpetas nuevas.** Si ya tenías `Enums/`, `Http/Resources/` o
+   `Exports/` en tus módulos —y lo más probable es que sí—, ahora son legales.
+   Comprueba que tus enums son **backed** y que tus resources extienden
+   `JsonResource`: son los dos arch tests nuevos. Si tienes `Services/`, sigue
+   fuera: mira si son Actions (lo habitual), `Support/` o `Data/`.
+
+5. **R5 · eventos entre módulos.** Si tenías listeners registrados con el nombre
+   del evento en un string para esquivar PHPat, ya puedes volver a
+   `Event::listen(Evento::class, Listener::class)` con el `use` de verdad.
+
+6. **R52 · mapa de acceso.** Cuando fusiones `tests/e2e/fixtures/access-map.ts`,
+   `composer arch` empezará a exigir una fila por cada ruta `GET` con nombre.
+   Corre `php artisan kore:arch:check --rule=R52` para ver la lista antes de
+   escribirla. Sin el archivo, el check sólo avisa.
+
+7. **`HasPublicUuid` es opt-in.** No hay migración: si lo quieres, añade
+   `$table->uuid('uuid')->nullable()->unique()->after('id');` a tu tabla y el
+   trait al modelo.
 
 ## [2.0.0] - 2026-09-03
 
@@ -1262,7 +1637,8 @@ scaffold, cifras inventadas en los docs).
   el paquete cambiara. Republicarlas es un `vendor:publish` cuando de verdad
   haya que personalizarlas.
 
-[Unreleased]: https://github.com/koreui/kore-laravel/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/koreui/kore-laravel/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/koreui/kore-laravel/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/koreui/kore-laravel/compare/v1.4.1...v2.0.0
 [1.4.1]: https://github.com/koreui/kore-laravel/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/koreui/kore-laravel/compare/v1.3.0...v1.4.0

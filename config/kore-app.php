@@ -61,4 +61,20 @@ return [
         'passkeys' => (bool) env('AUTH_PASSKEYS', true),
     ],
 
+    /*
+     * Harness de la suite E2E (Playwright): las rutas `/__e2e__/*` con las que
+     * las pruebas siembran usuarios, entran como un rol y leen el buzón de
+     * correo sin recorrer cinco pantallas para llegar a la sexta.
+     *
+     * Es un backdoor a propósito, así que el flag NO basta: `HarnessGuard`
+     * exige además un entorno permitido (`e2e`, `testing`, `local`) y una base
+     * de datos de pruebas. Quien lo enciende es `.env.e2e`, y sólo `.env.e2e`:
+     * en `.env`, en `.env.example` y en producción va en false.
+     *
+     * Ver `docs/modules/e2e.md`.
+     */
+    'e2e' => [
+        'harness' => (bool) env('E2E_HARNESS', false),
+    ],
+
 ];

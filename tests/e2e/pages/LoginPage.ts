@@ -24,7 +24,7 @@ export class LoginPage {
 
     constructor(private readonly page: Page) {
         this.email = page.getByLabel('Correo electrónico');
-        // CANDIDATO A MEJORA DE ACCESIBILIDAD: en login.blade.php el campo de
+        // KORE-E2E-005 · CANDIDATO A MEJORA DE ACCESIBILIDAD: en login.blade.php el campo de
         // contraseña se pinta sin `:label`, así que <x-kore::password> no
         // emite <label for>. La etiqueta visible es un <span> hermano y el
         // input se queda sin nombre accesible → no hay getByLabel posible.

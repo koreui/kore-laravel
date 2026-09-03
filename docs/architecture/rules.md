@@ -1,4 +1,4 @@
-# Reglas de arquitectura (R1–R50)
+# Reglas de arquitectura (R1–R53)
 
 **TL;DR**: las reglas del boilerplate son numeradas, citables (`R5`) y cada una
 dice quién la verifica y con qué comando. Lo que se puede verificar, falla el
@@ -67,11 +67,11 @@ dominio se omite el prefijo repetido: `UserCreateAction` dentro de `Users`.
 
 ### R3 · Lista cerrada de carpetas por módulo
 Un módulo sólo puede tener: `Actions`, `Console`, `Data`, `Database`
-(`Migrations`, `Factories`, `Seeders`), `Events`, `Forms`, `Http`
-(`Controllers`, `Livewire`, `Requests`, `Middleware`), `Listeners`, `Models`,
-`Policies`, `Providers`, `Resources` (`views`, `lang`), `Routes`, `Rules`,
-`Support`, `Tests`, y `Fortify` como única carpeta de adaptadores de paquete.
-Cualquier otra rompe el build.
+(`Migrations`, `Factories`, `Seeders`), `Enums`, `Events`, `Exports`, `Forms`,
+`Http` (`Controllers`, `Livewire`, `Requests`, `Middleware`, `Resources`),
+`Listeners`, `Models`, `Policies`, `Providers`, `Resources` (`views`, `lang`),
+`Routes`, `Rules`, `Support`, `Tests`, y `Fortify` como única carpeta de
+adaptadores de paquete. Cualquier otra rompe el build.
 > Enforcement: Pest arch · `./vendor/bin/pest tests/Arch` · **Error**
 > Escape: ninguna — ampliar la lista es una decisión de arquitectura: se
 > actualiza este doc, `module-pattern.md` y el test, en el mismo commit.
@@ -80,11 +80,39 @@ Cualquier otra rompe el build.
 suya (`Services/`, `Repositories/`, `Helpers/`), el «modular monolith» pasa a
 ser cuatro arquitecturas conviviendo, y la IA copia la que encuentre primero.
 
-**Cicatriz.** Los stubs que publica Fortify vivían en
+**Las tres que entraron en la v2.1.0, y con qué forma.** No basta con abrir la
+lista: una carpeta permitida sin nada que la defina es el `Services/` de otra
+vez, con otro nombre. Dos de las tres traen su propio arch test:
+
+| Carpeta | Qué puede vivir dentro | Vigilado por |
+|---------|------------------------|--------------|
+| `Enums/` | enums **backed** (`string` o `int`) del dominio | Pest arch (`R3 · los Enums de módulo son enums backed`) |
+| `Http/Resources/` | API Resources que extienden `Illuminate\Http\Resources\Json\JsonResource` | Pest arch (`R3 · los Http/Resources de módulo extienden JsonResource`) |
+| `Exports/` | la salida hacia fuera: Excel, CSV, PDF | sólo R3 — lo que va dentro lo fija el paquete de exportación que instale el proyecto |
+
+**`Services/` sigue fuera, y a propósito.** Es *la* carpeta que hay que
+justificar, porque es la que absorbe todo lo que a alguien le da pereza
+nombrar. El caso legítimo existe —asper-server tiene un motor de formularios en
+`Formats/Services/FormEngine/`: un intérprete de esquemas con estado propio,
+que no es un caso de uso ni un DTO ni un helper—, y el caso que la regla evita
+también: `ExpedienteService` de Notarium, **1.147 líneas** en una clase, que es
+exactamente lo que R1 describe cuando dice «el `Service` de 900 líneas que el
+patrón vino a evitar». Si de verdad hace falta, se pide como cualquier otra
+capa nueva (ver `module-pattern.md`), con el equipo delante.
+
+**Cicatriz.** Doble. Los stubs que publica Fortify vivían en
 `App\Modules\Auth\Actions\Fortify\` y obligaban a una excepción permanente en
 el arch test de Actions (sus nombres y firmas los fija el paquete, no el
-boilerplate). En la v1.1.0 se mudaron a `App\Modules\Auth\Fortify\`, y esa
-carpeta es hoy la única entrada «rara» de la lista, documentada como tal.
+boilerplate). En la v1.1.0 se mudaron a `App\Modules\Auth\Fortify\`.
+
+La segunda es la que amplió la lista. **asper-server**, hijo del boilerplate y
+con esta regla escrita delante, creó `Enums/` en **9 de sus 15 módulos**,
+`Http/Resources/` en **5** y `Exports/` en **2**. No fue un despiste de un
+módulo: fue el proyecto entero diciendo que la lista se había quedado corta.
+Una regla que el 60 % del código de un derivado incumple no está protegiendo
+nada —está enseñando a ignorarla—, así que en la v2.1.0 se amplió la lista y se
+le puso forma a lo que entra. Lo que **no** se amplió es `Services/`: ahí asper
+tiene dos módulos y uno de los dos es el caso legítimo, no la regla.
 
 ### R4 · Sin lógica de negocio en controllers, Livewire ni Forms
 El Form valida y empaqueta (`rules()` + `toData()`); el componente hace
@@ -101,11 +129,17 @@ comando de importación o un test unitario de tres líneas.
 permisos y decidía si hashear la contraseña. Desapareció en la v1.1.0 a favor
 de `toData()` + `UserCreateAction` / `UserUpdateAction`.
 
-### R5 · Sin imports cruzados entre módulos
+### R5 · Sin imports cruzados entre módulos, salvo los eventos
 `App\Modules\X` no usa `App\Modules\Y`. La comunicación va por
-`App\Core\Contracts`, eventos (`{Domain}\Events\`) o DTOs y enums de `Core`.
-Los `Tests/` de cada módulo sí pueden cruzar: montan el mundo real.
-> Enforcement: PHPat (todos los pares, generados desde `app/Modules/*`) · `composer analyse` · **Error** · + Pest arch (Users ↔ Auth) · `./vendor/bin/pest tests/Arch` · **Error**
+`App\Core\Contracts`, DTOs y enums de `Core`, o **eventos**.
+
+`App\Modules\{Domain}\Events\` es la **frontera pública** de un módulo y sí se
+puede importar desde otro: un `Listeners\NotifyLoQueSea` tipa el evento que
+escucha, y el provider que los cablea con `Event::listen()` también. Todo lo
+demás del módulo vecino —`Models`, `Actions`, `Support`, `Data`, `Policies`,
+`Http`— sigue prohibido, en los dos sentidos. Los `Tests/` de cada módulo
+también pueden cruzar: montan el mundo real.
+> Enforcement: PHPat (todos los pares, generados desde `app/Modules/*`, excluyendo `Tests` y `Events` del destino) · `composer analyse` · **Error** · + Pest arch (Users ↔ Auth, y la forma de la regla generada en `PhpatArchitectureTest`) · `./vendor/bin/pest tests/Arch` · **Error**
 > Escape: `arch-exception` (ver §Válvulas)
 
 Relacionada: R6 (la arista `Core → Modules`, que ninguna válvula abre).
@@ -114,14 +148,32 @@ Relacionada: R6 (la arista `Core → Modules`, que ninguna válvula abre).
 aparece el día que quieres extraer el módulo, apagarlo con un toggle o
 reutilizarlo en otro proyecto.
 
-**Cicatriz.** Hasta la v1.1.0 `Users` importaba `Auth\Models\{Role, Module}` en
-**cuatro** archivos de producción —`Forms/UserForm.php`,
+**Por qué los eventos no cuentan.** La dirección es la que importa. Un evento es
+un contrato **hacia afuera**: `final readonly`, sin comportamiento, publicado
+por el módulo origen sin saber quién escucha. Quien depende es el que reacciona,
+y esa dependencia es exactamente la que la arquitectura quiere que exista —es lo
+que `module-pattern.md` lleva recomendando desde la v1.0.0—. Prohibirla no la
+elimina: la disfraza. Sin poder importar el evento, la única forma de cablear un
+listener es `Event::listen('App\Modules\Payments\Events\Cobrado', ...)` con el
+nombre en un string, que es la misma dependencia pero invisible para PHPat, para
+el IDE y para el refactor que renombre la clase.
+
+**Cicatriz.** Doble. Hasta la v1.1.0 `Users` importaba `Auth\Models\{Role,
+Module}` en **cuatro** archivos de producción —`Forms/UserForm.php`,
 `Http/Livewire/FormComponent.php` (dos imports: `Role` y `Module`),
 `Http/Livewire/TableUsers.php` y `Policies/UserPolicy.php`, cinco imports en
 total— más otros **tres** de `Tests/`, que la regla permite. El arch test
 correspondiente estaba comentado con un `TODO v1.1` al lado. Se resolvió con
 `App\Core\Contracts\AuthorizationCatalog`, `App\Core\Enums\SystemRole` y los
 DTOs de `App\Core\Data\Authorization`.
+
+La segunda la puso asper-server, y es la que abrió la excepción. Su
+`NotificationsModuleServiceProvider` importa **once** eventos de `Payments`,
+`Personnel`, `Studies` y `Auth` para mapearlos a sus listeners en una constante
+`EVENT_LISTENERS`: es el módulo de notificaciones haciendo exactamente lo que se
+espera de un módulo de notificaciones. PHPat, tal como estaba la regla, lo
+marcaba entero en rojo. La opción de «arreglarlo» era escribir los once nombres
+como strings; en la v2.1.0 se arregló la regla, que era la que estaba mal.
 
 ### R6 · `App\Core` no depende de `App\Modules`
 Core es el kernel compartido: lo usan todos, no usa a nadie.
@@ -138,8 +190,12 @@ kernel, que es justo lo que la frontera prometía.
 **Cicatriz.** Sin cicatriz todavía — pero hasta la v1.1.0 `Core/Contracts`,
 `Core/Support` y `Core/Concerns` sólo contenían `.gitkeep`, así que la regla
 nunca se había puesto a prueba. La v1.1.0 la estrenó con
-`AuthorizationCatalog`, `SystemRole` y los DTOs de `Core/Data/Authorization`;
-`Core/Support` y `Core/Concerns` siguen vacíos.
+`AuthorizationCatalog`, `SystemRole` y los DTOs de `Core/Data/Authorization`, y
+la v2.1.0 llenó `Core/Concerns` con los tres traits que un proyecto derivado
+copiaba a mano en cada tabla y en cada formulario
+(`HandlesDeleteConfirmation`, `RedirectsWithToast`, `HasPublicUuid`). Son la
+prueba de fuego de la regla: dependen de Livewire y de koreUi —capa de entrega
+compartida— y de ningún módulo.
 
 ### R7 · Los contratos de `Core\Contracts` son interfaces
 > Enforcement: PHPat · `composer analyse` · **Error** · + Pest arch (`toBeInterfaces`) · `./vendor/bin/pest tests/Arch` · **Error**
@@ -638,6 +694,39 @@ cifrado de verdad, no que la opción esté puesta.
 un stack Docker con volúmenes persistentes de MySQL y `storage/` y ninguna copia
 programada de ninguno de los dos.
 
+### R53 · Al modificar una columna se repiten todos sus atributos
+Un `->change()` reescribe la definición completa: todo atributo que no vuelvas a
+escribir —`nullable()`, `default()`, `unsigned()`, `comment()`, la longitud— se
+pierde. Antes de escribir la migración se lee el esquema real
+(`php artisan db:table {tabla}` o `Schema::getColumns()`), y el `down()` repite
+los valores **originales**.
+> Enforcement: **Manual** · **Warning** · + el skill `kore-migration-change`, que obliga a leer el esquema antes de escribir
+> Escape: ninguna
+
+Relacionada: R29, que exige el `down()` y comprueba que funciona. R53 se ocupa
+de lo que ese `down()` tiene que decir.
+
+**Por qué.** El fallo no aparece en la migración: aparece en el `INSERT` de la
+semana siguiente, cuando la columna que era `nullable` ya no lo es y el
+formulario que no manda ese campo revienta en producción. Y aparece lejos del
+commit que lo causó, con un stack trace que no menciona la migración.
+
+**Por qué es Manual.** Se estudió un check textual —marcar toda migración con
+`->change()` que no lleve un comentario listando los atributos conservados— y se
+descartó: obligaría a escribir un comentario ceremonial en cada migración
+legítima sin comprobar que lo que dice sea verdad, que es justo lo que R41
+prohíbe. Sólo el esquema real sabe qué tenía la columna antes, y leerlo es un
+paso del proceso, no un lint. Por eso lo que se automatiza aquí es el
+**procedimiento**: el skill lee el esquema, enseña los atributos que conserva y
+pide confirmación antes de migrar.
+
+**Cicatriz.** Notarium perdió atributos en un `->change()` y la respuesta fue
+escribirse un agente propio (`.claude/agents/notarium-migration.md`) cuya única
+misión era leer el esquema antes de generar la migración. Un proyecto derivado
+que tiene que inventarse una herramienta para no tropezar con el framework es la
+señal de que al padre le faltaba la regla; en la v2.1.0 subió, con el skill
+`kore-migration-change` detrás.
+
 ### Nota · La instalación limpia es un test, no un procedimiento
 
 `tests/Feature/CleanInstallTest.php` reproduce lo que hacen `composer setup` y
@@ -728,7 +817,7 @@ sale en el listado con su archivo y el comando devuelve exit 1.
 > Enforcement: **Manual** · **Error** en review
 > Escape: ninguna
 
-**Por qué.** Es la única forma de que las 49 reglas restantes signifiquen algo:
+**Por qué.** Es la única forma de que las 52 reglas restantes signifiquen algo:
 un arch test dice que la clase está en su sitio, no que haga lo que promete.
 
 **Cicatriz.** `README.md` y `CLAUDE.md` prometían arch tests «desde el día uno»
@@ -786,6 +875,111 @@ Con `uniqueEmail()` / `uniqueName()`. La base sólo se resetea en `globalSetup`.
 `--workers=4` lo decide al azar.
 
 **Cicatriz.** Sin cicatriz todavía.
+
+### R51 · El harness de pruebas sólo existe con flag, entorno y base de pruebas
+Las rutas `/__e2e__/*` del módulo E2E se registran únicamente cuando se cumplen
+las **tres** condiciones a la vez: `E2E_HARNESS=true`, un entorno de la lista
+blanca (`e2e`, `testing`, `local`) y una conexión cuya base se llame como una
+base de pruebas —contiene «e2e» o «test», o es `:memory:`—. Con cualquiera de
+las tres cerrada, el provider hace `return` y no registra nada.
+> Enforcement: tests (`app/Modules/E2E/Tests/Feature/HarnessGuardTest.php`, `HarnessRoutesTest.php`) · `composer test` · **Error**
+> Escape: ninguna
+
+Relacionada: R10, de la que ésta es el caso extremo. R10 dice que un toggle
+apagado no registra nada; R51 dice que, para este toggle, **encendido tampoco
+basta**.
+
+**Por qué.** El harness crea usuarios con el rol que le pidan, se salta el
+formulario de login y corre comandos de artisan, todo sin autenticación. Es
+exactamente lo que una suite E2E necesita y exactamente lo que no puede existir
+en un servidor. Un solo flag no da esa garantía: un `.env` se copia de una
+máquina a otra, y el error no avisa —la aplicación funciona perfectamente, sólo
+que con una puerta abierta—.
+
+El tercer candado es el que de verdad protege, y por eso no es opcional. Un flag
+se enciende por equivocación y un entorno se puede llamar `local` en una máquina
+que no lo es; lo que no pasa por accidente es que la base de producción se llame
+`algo_e2e`. Mientras la conexión apunte a la base real, el harness sigue muerto
+aunque los otros dos candados estén abiertos.
+
+Por lo mismo la lista blanca de entornos es una constante de `HarnessGuard` y no
+una clave de `config/kore-app.php`: un candado que se puede ampliar desde el
+`.env` deja de serlo. Y por lo mismo `scripts/e2e-seed.sh` repite la
+comprobación en bash antes de llamar a artisan: `migrate:fresh` borra la base
+**antes** de que ningún PHP tenga ocasión de opinar.
+
+**Cicatriz.** Heredada, no propia. El harness viene de **asper**, el primer
+proyecto derivado que necesitó montar escenarios sin recorrer doce pantallas.
+Allí los tres candados no se escribieron de golpe: el primero fue el del
+**seeder**, que se niega a correr si el nombre de la base no contiene «e2e» ni
+«test», porque `migrate:fresh --seed` apuntando al `.env` equivocado no avisa,
+no pregunta y no se deshace. Cuando llegó el harness —que además de sembrar
+**abre sesiones**— se reusó exactamente esa comprobación (`HarnessGuard::
+isTestDatabase()` la comparten el provider y el seeder) y se le añadieron el
+flag y el entorno por delante. La lección que sube al boilerplate es la del
+orden: el candado que se escribió primero fue el que miraba la base, no el que
+miraba el flag.
+
+### R52 · Toda pantalla nueva entra en `access-map.ts`
+Cada ruta **GET con nombre** de un `Routes/web.php` que sirva una pantalla
+tiene su entrada en `tests/e2e/fixtures/access-map.ts`, con su `path` literal,
+su `nombre`, su `heading` y el resultado esperado para los cinco perfiles.
+> Enforcement: `kore:arch:check` (compara las rutas GET con nombre de los `Routes/web.php` contra los `path:` del mapa) · `composer arch` · **Error**
+> Escape: `arch-accepted` (ver §Válvulas)
+
+Relacionada: R36, de la que ésta es la mitad verificable. R36 pide «smoke +
+happy path + autorización» y no hay forma de comprobar que existan; R52 pide
+una línea en un archivo, y esa línea **genera** el smoke y la matriz de
+autorización. Lo que R36 sigue pidiendo a mano es el happy path.
+
+**Por qué.** Una pantalla nueva sin permiso —o con el permiso equivocado— no se
+nota en ninguna pantalla. No hay error, no hay excepción, no hay log: hay
+alguien viendo algo que no le tocaba, y nadie mirando. La única forma de que
+salte es que alguien recorra la matriz completa de roles × rutas, y eso nadie lo
+hace a mano dos veces.
+
+La regla existe porque el coste de cumplirla es una entrada de siete líneas y
+el beneficio son cinco tests de autorización y uno de smoke que aparecen
+solos. Cuando cubrir una pantalla cuesta menos que no cubrirla, se cubre.
+
+El `path` tiene que ser un **literal entre comillas simples**, absoluto y sin
+parámetros: el check lee el archivo como texto, así que un `path` construido
+(`` `/users/${id}/edit` ``) o sacado de una constante sería invisible. Las rutas
+con parámetro quedan fuera del mapa a propósito y se cubren con su propio spec,
+llegando como se llega en la aplicación real.
+
+**Cómo se verifica.** El check lee el **texto** de `routes/web.php` y de
+`app/Modules/*/Routes/web.php` —componiendo los `->prefix()` de los grupos— y
+no `Route::getRoutes()`, para poder correr en un pre-commit y sobre un árbol de
+fixtures sin bootear la aplicación ni depender de qué toggles tenga encendidos
+la máquina. Si el mapa todavía no existe (un derivado sin suite E2E, o el commit
+que la introduce), avisa una vez y no falla: R52 exige que la pantalla esté en
+el mapa, no que el proyecto tenga E2E. La válvula es **de línea**, no de
+archivo: un `web.php` declara varias pantallas y eximir a una no puede tapar a
+las demás.
+
+**Cicatriz.** La de asper, que es el proyecto donde nació el mapa. Allí la
+matriz `02-rbac` es «el spec más aburrido de leer y el más útil de tener», y en
+sus 27 pantallas × 7 roles destapó dos cosas que ninguna otra capa vio:
+
+- **ASPER-E2E-006** — un trabajador social podía abrir el estudio de un
+  compañero, de cualquier empresa cliente: domicilio, composición familiar,
+  ingresos y fotografías del interior de la casa de candidatos que no le
+  tocaban. `roles.md` decía desde el primer día «studies.view: TRABAJADOR SOCIAL
+  ✅ (asignados)»; la implementación daba paso libre a todo el personal interno.
+  La documentación y el código llevaban meses diciendo cosas distintas y nadie
+  tenía dónde verlo.
+- **ASPER-E2E-001** — el permiso `studies.create` prometía una pantalla que
+  respondía 403, porque `mount()` aborta a quien no tenga `client_id`. Un
+  desajuste entre lo que el catálogo de permisos promete y lo que la pantalla
+  cumple, que el mapa fija con `soloRoles` en vez de dejarlo como sorpresa.
+
+En kore-laravel el mapa nació con la v2.1.0 y ya destapó dos asimetrías el
+primer día: `/magic-link` no rebota a quien tiene sesión, a diferencia de las
+otras cuatro pantallas de acceso (KORE-E2E-002), y `/pulse` es la única ruta que
+responde 403 a un invitado en vez de mandarlo al login (KORE-E2E-003). Ninguna
+de las dos es un agujero; las dos llevaban ahí desde siempre y nadie las había
+visto.
 
 ---
 
@@ -912,7 +1106,7 @@ nada más: ni copias, ni carpetas sueltas, ni enlaces con ruta absoluta.
 
 **Por qué.** Los dos clientes leen la misma carpeta de formas distintas: Claude
 Code sigue los symlinks **a nivel de skill individual** (no los de la carpeta
-padre, por eso los enlaces son ocho y no uno), y Codex no resuelve enlaces en
+padre, por eso los enlaces son nueve y no uno), y Codex no resuelve enlaces en
 absoluto. De ahí el reparto: la carpeta real es la del estándar Agent Skills
 —`.agents/skills/`, la que lee el cliente que no sigue enlaces— y el espejo de
 Claude Code se resuelve solo. El enlace es relativo porque uno absoluto rompe el
@@ -1026,13 +1220,13 @@ con `--no-verify`, y entonces no verifica nada.
 |------|-------------|--------|-----------|
 | **pre-commit** | ~2 s | **0,7 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
 | **commit-msg** | ~1 s | **0,3 s** | `ConventionalCommitMsgHook` — el asunto sigue Conventional Commits (R43) |
-| **pre-push** | ~30 s | **4 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
-| **`composer ci`** | ~90 s | **16 s** | `pint --test` (1,1) + `phpstan` (0,6 con caché, 2,0 en frío) + `composer arch` (0,2) + `rector --dry-run` (4,3) + `pest` (9,3, secuencial) |
-| **CI (GitHub)** | ~3 min | — | `composer ci` en matriz PHP 8.4 / 8.5 + `composer audit` + `npm ci && npm run build` + E2E (63 tests en 16 archivos) |
+| **pre-push** | ~30 s | **5 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
+| **`composer ci`** | ~90 s | **16 s** | `pint --test` (0,2 con caché, 2,6 en frío) + `phpstan` (0,8 con caché, 2,3 en frío) + `composer arch` (0,2) + `rector --dry-run` (3,2 con caché) + `pest` (11,2, secuencial) |
+| **CI (GitHub)** | ~3 min | — | `composer ci` en matriz PHP 8.4 / 8.5 + `composer audit` + `npm ci && npm run build` + E2E (163 tests en 18 archivos) |
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + GitHub Release (R42) |
 
 Medido en un MacBook (Apple Silicon, PHP 8.4) sobre el repositorio a fecha de
-la v1.4.0, con 410 tests Pest y una suite E2E de 63 tests en 16 archivos
+la v2.1.0, con 511 tests Pest y una suite E2E de 163 tests en 18 archivos
 (19 s aparte). Las cuatro primeras capas caben holgadamente en su
 presupuesto: el margen es para que un proyecto derivado pueda crecer sin tener
 que rediseñar el pipeline.
@@ -1055,13 +1249,13 @@ se re-registran a mano con `php artisan git-hooks:register`.
 | **PHPat** (`tests/Arch/PhpatArchitecture.php`) | `composer analyse` | R1, R4, R5, R6, R7, R8, R19 |
 | **disallowed-calls** (`phpstan-disallowed.neon`) | `composer analyse` | R17, R18, R19, R20, R21, R22, R27 |
 | **Larastan nivel 8** | `composer analyse` | R15 |
-| **`kore:arch:check`** | `composer arch` | R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50 |
+| **`kore:arch:check`** | `composer arch` | R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50, R52 |
 | **Pint** | `composer lint` | R13, R16 |
-| **Tests Pest** | `composer test` | R10, R12, R26, R27, R28, R29, R33, R34, R46, R47, R48 |
+| **Tests Pest** | `composer test` | R10, R12, R26, R27, R28, R29, R33, R34, R46, R47, R48, R51 |
 | **Hooks de git** (`config/git-hooks.php`) | `git commit` | R43 |
 | **GitHub Actions** (`.github/workflows/release.yml`) | `git push --tags` | R42 |
 | **E2E Playwright** | `npm run e2e` | *ninguna* — ver abajo |
-| **Revisión humana** | code review | R2, R4, R9, R10, R12, R14, R16, R25, R28, R31, R32, R35, R36, R39, R40, R41, R42, R43, R44, R48 |
+| **Revisión humana** | code review | R2, R4, R9, R10, R12, R14, R16, R25, R28, R31, R32, R35, R36, R39, R40, R41, R42, R43, R44, R48, R53 |
 
 **Por qué la fila de `npm run e2e` está vacía.** Es la única, y es a propósito.
 La suite E2E es el **objeto** de R36, no su verificador: correrla comprueba que
@@ -1081,12 +1275,19 @@ Pest arch y la semántica del nombre (`{Domain}{Object}{Verb}`) en revisión
 humana; R14 tiene el `final` verificado en Actions, Data, Events, Rules,
 Policies y Providers, y a ojo en el resto.
 
-De las 50 reglas, **44 tienen al menos un verificador automático** que falla el
-build (entero o en parte) y **6 son íntegramente manuales**: R31, R32, R35, R36,
-R39 y R41. Ninguna regla está sin clasificar: si dice **Manual**, es porque hoy
-no hay forma barata de verificarla, no porque nadie lo haya mirado.
+De las 53 reglas, **46 tienen al menos un verificador automático** que falla el
+build (entero o en parte) y **7 son íntegramente manuales**: R31, R32, R35, R36,
+R39, R41 y R53. Ninguna regla está sin clasificar: si dice **Manual**, es porque
+hoy no hay forma barata de verificarla, no porque nadie lo haya mirado.
 
-El reparto es 44/6 y no 42/8 porque **R42** y **R43** dejaron de ser manuales en
+Las tres de la v2.1.0 se reparten 2/1: **R51** la verifica `HarnessGuardTest` y
+**R52** el `kore:arch:check`, mientras que **R53** se queda manual —con su
+skill detrás— porque el único que sabe qué atributos tenía una columna antes de
+un `->change()` es el esquema real, y comprobarlo es un paso del proceso, no un
+lint. La regla lo dice en su propia entrada, para que nadie vuelva a intentarlo
+sin leer por qué se descartó.
+
+El reparto anterior era 44/6 y no 42/8 porque **R42** y **R43** dejaron de ser manuales en
 la v1.4.0: el hook `commit-msg` rechaza un asunto que no siga Conventional
 Commits, y `release.yml` se niega a publicar un tag cuyo `CHANGELOG.md` no tenga
 sección. Las dos siguen apareciendo en la fila de revisión humana porque su

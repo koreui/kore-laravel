@@ -74,8 +74,15 @@ export const port = url.port !== '' ? Number(url.port) : 80;
 /** Ruta absoluta a la SQLite dedicada de E2E. */
 export const databasePath = path.resolve(repoRoot, e2eEnv.DB_DATABASE ?? 'database/e2e.sqlite');
 
-/** Log donde `MAIL_MAILER=log` escribe los emails (magic link). */
-export const mailLogPath = path.join(repoRoot, 'storage', 'logs', 'laravel.log');
+/**
+ * Log donde `MAIL_MAILER=log` escribe los emails (magic link).
+ *
+ * Desde que `.env.e2e` define `MAIL_LOG_CHANNEL=e2e_mail`, el correo va a su
+ * propio archivo (`config/logging.php` → canal `e2e_mail`) y no a
+ * `laravel.log`. Es el MISMO archivo que sirve `GET /__e2e__/mail/last`, así
+ * que el lector de Node y el del harness ven lo mismo.
+ */
+export const mailLogPath = path.join(repoRoot, 'storage', 'logs', 'e2e-mail.log');
 
 /** Manifest de Vite: sin él, cualquier vista con `@vite(...)` revienta. */
 export const viteManifestPath = path.join(repoRoot, 'public', 'build', 'manifest.json');

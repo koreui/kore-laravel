@@ -18,6 +18,7 @@ test.describe('Users · editar', () => {
         await users.clickRowAction(created.email, 'Editar');
 
         await expect(page).toHaveURL(/\/users\/\d+\/edit$/);
+        await form.waitUntilReady(); // KORE-E2E-007
         await expect(form.cardTitle).toHaveText('Editar usuario');
         await expect(form.name).toHaveValue(created.name);
         await expect(form.email).toHaveValue(created.email);
@@ -40,6 +41,12 @@ test.describe('Users · editar', () => {
 
         await users.focusOnRow(created.email);
         await users.clickRowAction(created.email, 'Editar');
+
+        // KORE-E2E-007 · Llegar por la fila es una navegación, y el formulario
+        // no está vivo hasta que Livewire hidrata: escribir antes es escribir
+        // en un input que nadie escucha, y el morph de la hidratación se lleva
+        // por delante lo tecleado.
+        await form.waitUntilReady();
 
         // El placeholder avisa de que dejarla vacía no la cambia.
         await expect(form.password).toHaveAttribute(

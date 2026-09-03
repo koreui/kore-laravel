@@ -15,6 +15,13 @@ parameters:
         # analizarla para poder reflejarla. `tests/Arch/ArchitectureTest.php`
         # NO entra: es sintaxis funcional de Pest.
         - tests/Arch/PhpatArchitecture.php
+        # `App\Core\Concerns\HasPublicUuid` es opt-in y todavía no lo usa ningún
+        # modelo del boilerplate. PHPStan no analiza el cuerpo de un trait que
+        # nadie usa (`trait.unused`), así que sin esto el trait viajaría sin
+        # comprobar. Su test declara los dos modelos que lo estrenan, y con el
+        # archivo aquí el trait se analiza en el contexto de ambos. Se añade
+        # este archivo y no `tests/` entero: el resto son closures de Pest.
+        - tests/Feature/HasPublicUuidTest.php
     excludePaths:
         analyseAndScan:
             - app/Modules/*/Database/Migrations/*

@@ -97,12 +97,12 @@ test('kore-list-modules cuenta carpetas, Actions, Livewire, rutas y tests', func
 |--------------------------------------------------------------------------
 */
 
-test('kore-list-toggles devuelve las diez claves de kore-app con su variable de .env y un lector', function (): void {
+test('kore-list-toggles devuelve las once claves de kore-app con su variable de .env y un lector', function (): void {
     $payload = mcpToolPayload(ListTogglesTool::class);
 
     $toggles = collect(Arr::get($payload, 'toggles'))->keyBy('clave');
 
-    expect($toggles)->toHaveCount(10)
+    expect($toggles)->toHaveCount(11)
         ->and($toggles->keys()->all())->toBe([
             'kore-app.api.enabled',
             'kore-app.tenancy.enabled',
@@ -114,6 +114,7 @@ test('kore-list-toggles devuelve las diez claves de kore-app con su variable de 
             'kore-app.auth.magic_links',
             'kore-app.auth.social_login',
             'kore-app.auth.passkeys',
+            'kore-app.e2e.harness',
         ]);
 
     expect($toggles->get('kore-app.api.enabled')['env'])->toBe('API_ENABLED')
@@ -124,7 +125,8 @@ test('kore-list-toggles devuelve las diez claves de kore-app con su variable de 
         ->and($toggles->get('kore-app.auth.two_factor')['env'])->toBe('AUTH_2FA_ENABLED')
         ->and($toggles->get('kore-app.auth.magic_links')['env'])->toBe('AUTH_MAGIC_LINKS')
         ->and($toggles->get('kore-app.auth.social_login')['env'])->toBe('AUTH_SOCIAL_LOGIN')
-        ->and($toggles->get('kore-app.auth.passkeys')['env'])->toBe('AUTH_PASSKEYS');
+        ->and($toggles->get('kore-app.auth.passkeys')['env'])->toBe('AUTH_PASSKEYS')
+        ->and($toggles->get('kore-app.e2e.harness')['env'])->toBe('E2E_HARNESS');
 
     // R11: un toggle que no lee nadie es un toggle fantasma. Si esto falla, el
     // que miente es el boilerplate, no la herramienta.

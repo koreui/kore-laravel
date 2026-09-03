@@ -8,6 +8,7 @@ use App\Core\Contracts\AuthorizationCatalog as AuthorizationCatalogContract;
 use App\Models\User;
 use App\Modules\Auth\Console\Commands\RegeneratePermissionsCommand;
 use App\Modules\Auth\Http\Livewire\Dashboard;
+use App\Modules\Auth\Http\Livewire\DevAccountSwitcher;
 use App\Modules\Auth\Http\Livewire\MagicLink;
 use App\Modules\Auth\Http\Livewire\Passkeys;
 use App\Modules\Auth\Models\Role;
@@ -117,6 +118,16 @@ final class AuthModuleServiceProvider extends ServiceProvider
     {
         foreach (self::LIVEWIRE_COMPONENTS as $alias => $class) {
             Livewire::component($alias, $class);
+        }
+
+        /*
+         * El switcher de cuentas es un atajo de desarrollo: sólo se registra
+         * en `local`, igual que su ruta (`Auth/Routes/web.php`). Fuera de
+         * local ni el alias existe, así que tampoco se puede montar a mano
+         * desde otra vista.
+         */
+        if ($this->app->environment('local')) {
+            Livewire::component('auth.dev-account-switcher', DevAccountSwitcher::class);
         }
     }
 

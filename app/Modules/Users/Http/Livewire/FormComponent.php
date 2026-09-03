@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Users\Http\Livewire;
 
+use App\Core\Concerns\RedirectsWithToast;
 use App\Core\Contracts\AuthorizationCatalog;
 use App\Core\Data\Authorization\PermissionModuleData;
 use App\Core\Data\Authorization\RoleOptionData;
@@ -22,6 +23,7 @@ use Livewire\Component;
 final class FormComponent extends Component
 {
     use InteractsWithFeedback;
+    use RedirectsWithToast;
 
     #[Locked]
     public ?User $model = null;
@@ -82,12 +84,7 @@ final class FormComponent extends Component
         $this->form->password = null;
         $this->form->password_confirmation = null;
 
-        $this->toast()
-            ->success(__('¡Listo!'), __('Usuario guardado correctamente.'))
-            ->viaSession()
-            ->send();
-
-        return to_route('users.index');
+        return $this->redirectWithToast('users.index', __('¡Listo!'), __('Usuario guardado correctamente.'));
     }
 
     #[Computed]

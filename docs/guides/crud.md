@@ -215,7 +215,8 @@ Laravel los descubre solo; no hace falta registrarlos.
 `app/Modules/{Modulo}/Http/Livewire/FormComponent.php`.
 
 **Reglas**:
-- `use KoreUi\Core\Concerns\InteractsWithFeedback;` para toasts.
+- `use KoreUi\Core\Concerns\InteractsWithFeedback;` para toasts, y
+  `use App\Core\Concerns\RedirectsWithToast;` para el «guardado + volver».
 - `#[Locked] public ?{Modelo} $model = null;` — el modelo para editar.
 - `public {Modelo}Form $form;` — siempre se llama `$form`.
 - `mount()` **autoriza** (`create` / `update`) y rellena el form si hay modelo.
@@ -246,12 +247,10 @@ public function save(UserCreateAction $createUser, UserUpdateAction $updateUser)
         ? $updateUser->handle($this->model, $data)
         : $createUser->handle($data);
 
-    $this->toast()
-        ->success(__('¡Listo!'), __('Usuario guardado correctamente.'))
-        ->viaSession()
-        ->send();
-
-    return to_route('users.index');
+    // App\Core\Concerns\RedirectsWithToast: el toast va por sesión, que es lo
+    // único que sobrevive a la redirección. Escrito a mano y sin `viaSession()`,
+    // el usuario aterriza en el listado sin ninguna señal de que se guardó.
+    return $this->redirectWithToast('users.index', __('¡Listo!'), __('Usuario guardado correctamente.'));
 }
 ```
 
@@ -302,6 +301,10 @@ public function save(UserCreateAction $createUser, UserUpdateAction $updateUser)
 ```php
 final class Table{Modelos} extends KoreDataTable
 {
+    // App\Core\Concerns\HandlesDeleteConfirmation aporta confirmDelete()/
+    // deleteConfirmed(), el `#[Locked] $pendingDeleteId` y el workaround de
+    // koreUi que hace que la row action con `confirm()` llegue a ejecutarse.
+    use HandlesDeleteConfirmation;
     use InteractsWithFeedback;
 
     public function query(): Builder
@@ -342,12 +345,16 @@ final class Table{Modelos} extends KoreDataTable
     }
 
     /**
+     * El hook del trait: el `RowAction` llama a `confirmDelete($id)`, el trait
+     * guarda el id con `#[Locked]` y aterriza aquí. Es público a propósito —así
+     * `kore:arch:check` sigue exigiendo el `authorize()` (R23)—.
+     *
      * Aquí la Action se resuelve a mano: cuando el diálogo de confirmación de
      * koreUi acepta, `handleConfirmCallback()` llama `$this->{$method}(...$params)`
      * sin pasar por el contenedor, así que un parámetro extra tipado reventaría
      * en el navegador (y NO en el test, que sí usa el contenedor).
      */
-    public function confirmDelete(int $id): void
+    public function deleteAuthorized(int $id): void
     {
         $model = {Modelo}::find($id);
 

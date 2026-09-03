@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Illuminate\Console\Scheduling\Event;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Sentry\Laravel\Integration;
 
@@ -46,3 +48,82 @@ it('loads the sentry integration class', function (): void {
         ->and(file_get_contents(base_path('bootstrap/app.php')))
         ->toContain('Integration::handles($exceptions)');
 });
+
+/*
+|--------------------------------------------------------------------------
+| Cron monitors — `->sentryMonitor()` en routes/console.php
+|--------------------------------------------------------------------------
+|
+| Un scheduler sin monitor falla en silencio: el cron deja de correr, el backup
+| deja de hacerse y nadie se entera hasta el día que hace falta.
+| `sentryMonitor()` convierte cada tarea en un check-in de Sentry, que avisa
+| cuando **no** llega.
+|
+| Cómo se detecta. La macro no deja marca en el evento: lo que hace es
+| registrar un `before` (y un `onSuccess`/`onFailure`) con el check-in dentro.
+| Ese closure captura por `use` un `$monitorSlug` y un `$startCheckIn`, y esa
+| pareja de nombres no la produce ningún otro método del scheduler. Es acoplado
+| a la implementación de sentry-laravel a propósito: la alternativa —comprobar
+| que el texto de routes/console.php dice `sentryMonitor()`— no probaría que la
+| llamada surte efecto, que es justo lo que se rompe al reordenar una cadena.
+|
+*/
+
+/**
+ * Nombres de las tareas programadas que NO llevan `->sentryMonitor()`.
+ *
+ * @return array<int, string>
+ */
+function tareasSinMonitorDeSentry(): array
+{
+    $sinMonitor = [];
+
+    foreach (resolve(Schedule::class)->events() as $event) {
+        $callbacks = new ReflectionObject($event)
+            ->getProperty('beforeCallbacks')
+            ->getValue($event);
+
+        $tieneMonitor = collect((array) $callbacks)->contains(function (Closure $callback): bool {
+            $captured = array_keys(new ReflectionFunction($callback)->getStaticVariables());
+
+            return in_array('monitorSlug', $captured, true) && in_array('startCheckIn', $captured, true);
+        });
+
+        if (! $tieneMonitor) {
+            $sinMonitor[] = (string) $event->command;
+        }
+    }
+
+    return $sinMonitor;
+}
+
+it('registers the sentryMonitor macro even without a DSN', function (): void {
+    expect(config('sentry.dsn'))->toBeEmpty()
+        ->and(Event::hasMacro('sentryMonitor'))->toBeTrue();
+});
+
+it('puts a sentry monitor on every scheduled task', function (): void {
+    expect(resolve(Schedule::class)->events())->not->toBeEmpty()
+        ->and(tareasSinMonitorDeSentry())->toBe([]);
+});
+
+it('puts a sentry monitor on the backup tasks too', function (): void {
+    withEnvironment(['BACKUP_ENABLED' => 'true'], function (): void {
+        $commands = collect(resolve(Schedule::class)->events())
+            ->map(fn (Event $event): string => (string) $event->command);
+
+        expect($commands->contains(fn (string $command): bool => str_contains($command, 'backup:run')))->toBeTrue()
+            ->and(tareasSinMonitorDeSentry())->toBe([]);
+    });
+});
+
+/*
+ * Sin DSN, `onBootInactive()` deja `shouldHandleCheckIn` en false y el check-in
+ * se va por el `return` de su primera línea: la tarea corre igual y no hay
+ * ninguna llamada de red que fingir en los tests.
+ */
+it('keeps the monitor a no-op while there is no DSN', function (): void {
+    foreach (resolve(Schedule::class)->events() as $event) {
+        $event->callBeforeCallbacks(app());
+    }
+})->throwsNoExceptions();

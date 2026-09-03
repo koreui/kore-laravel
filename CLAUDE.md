@@ -13,7 +13,7 @@ El desarrollador trabaja en español. Comunícate en español.
 
 Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta `docs/`:
 
-- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **catálogo R1–R50**: cada regla con su enforcement, su válvula y su cicatriz
+- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **catálogo R1–R53**: cada regla con su enforcement, su válvula y su cicatriz
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) — stack y patrón modular monolith
 - [`docs/architecture/module-pattern.md`](docs/architecture/module-pattern.md) — cómo se construye un módulo (lista cerrada de carpetas)
 - [`docs/architecture/toggles.md`](docs/architecture/toggles.md) — `config/kore-app.php`
@@ -22,6 +22,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - [`docs/modules/tenancy.md`](docs/modules/tenancy.md) — stancl/tenancy con toggle
 - [`docs/modules/users.md`](docs/modules/users.md) — Users (primer CRUD del boilerplate)
 - [`docs/modules/docs.md`](docs/modules/docs.md) — visor de `docs/` en `/docs` (toggle `DOCS_ENABLED`)
+- [`docs/modules/e2e.md`](docs/modules/e2e.md) — harness de la suite E2E (`/__e2e__/*`) y switcher de cuentas de desarrollo
 - [`docs/patterns/README.md`](docs/patterns/README.md) — la **regla de tres**: cuándo una solución sube al boilerplate, y el camino de vuelta de un proyecto hijo al padre
 - [`docs/guides/crud.md`](docs/guides/crud.md) — patrón CRUD del boilerplate
 - [`docs/ops/deployment.md`](docs/ops/deployment.md) — Docker en VPS
@@ -44,7 +45,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - E2E: Playwright standalone (TypeScript) en `tests/e2e/`, entorno aislado con `.env.e2e`
 - Calidad: Pint + Larastan nivel 8 + PHPat + `spaze/phpstan-disallowed-calls` + `kore:arch:check` + Rector
 - Observabilidad: Sentry · Laravel Pulse · spatie/laravel-health · spatie/laravel-activitylog · spatie/laravel-backup (toggle)
-- AI: Laravel Boost MCP + **MCP propio `kore`** (`app/Core/Mcp/`, registrado en `routes/ai.php`: módulos, toggles, permisos, reglas, `kore:arch:check`) + skills en `.agents/skills/` —los cuatro propios son module-scaffold, kore-action-create, kore-livewire-create y kore-e2e-test— con `.claude/skills/` como symlinks (R49); `AGENTS.md` generado desde `CLAUDE.md` con `kore:agents:sync` (R50)
+- AI: Laravel Boost MCP + **MCP propio `kore`** (`app/Core/Mcp/`, registrado en `routes/ai.php`: módulos, toggles, permisos, reglas, `kore:arch:check`) + skills en `.agents/skills/` —los cinco propios son module-scaffold, kore-action-create, kore-livewire-create, kore-e2e-test y kore-migration-change— con `.claude/skills/` como symlinks (R49); `AGENTS.md` generado desde `CLAUDE.md` con `kore:agents:sync` (R50)
 
 ## Arquitectura — Modular Monolith + Action Pattern
 
@@ -52,8 +53,12 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 app/
 ├── Core/                       # kernel compartido (no negocio)
 │   ├── Actions/Action.php      # base abstracta
-│   ├── Concerns/               # traits compartidos
+│   ├── Concerns/               # traits compartidos de Livewire y Eloquent
+│   │   ├── HandlesDeleteConfirmation.php  # confirmar → borrar, id #[Locked]
+│   │   ├── HasPublicUuid.php   # identidad pública opt-in, PK entera
+│   │   └── RedirectsWithToast.php         # toast en sesión + redirect
 │   ├── Console/                # comandos transversales (kore:arch:check) y hooks de git
+│   │   └── Concerns/SupportsDryRun.php    # opción --dry-run + helpers
 │   ├── Contracts/              # interfaces compartidas (fronteras entre módulos)
 │   ├── Data/Data.php           # base DTO (extiende spatie/laravel-data)
 │   ├── Enums/                  # valores compartidos (SystemRole)
@@ -63,13 +68,16 @@ app/
 │   ├── Actions/                # 1 clase = 1 caso de uso, método handle()
 │   ├── Console/                # comandos artisan del módulo
 │   ├── Data/                   # DTOs del módulo
-│   ├── Events/                 # lo que otros módulos pueden escuchar
+│   ├── Enums/                  # enums backed del dominio
+│   ├── Events/                 # frontera pública: otros módulos SÍ los importan
+│   ├── Exports/                # salida hacia fuera: Excel, CSV, PDF
 │   ├── Forms/                  # Livewire Form Objects (rules() + toData())
 │   ├── Http/
 │   │   ├── Controllers/
 │   │   ├── Livewire/
 │   │   ├── Middleware/
-│   │   └── Requests/
+│   │   ├── Requests/
+│   │   └── Resources/          # API Resources (extienden JsonResource)
 │   ├── Listeners/              # reacciones a eventos propios o de otros
 │   ├── Models/
 │   ├── Policies/
@@ -92,14 +100,14 @@ app/
 
 ### Reglas de oro (resumen — el catálogo completo es [`docs/architecture/rules.md`](docs/architecture/rules.md))
 
-Las reglas están numeradas `R1..R50` para poder citarlas en un review, en un
+Las reglas están numeradas `R1..R53` para poder citarlas en un review, en un
 commit o en un comentario. Aquí va el resumen; el detalle —enforcement,
 severidad, por qué existe y la cicatriz que la originó— está en el catálogo.
 
 1. **R1 · R2** — 1 Action = 1 caso de uso, `final`, extiende `App\Core\Actions\Action`, un único `handle()` público. Naming `{Domain}{Object}{Verb}Action` (se omite el prefijo repetido: `UserCreateAction` en Users).
-2. **R3** — la lista de carpetas de un módulo es **cerrada**; inventarse una falla el build. Ver `module-pattern.md`.
+2. **R3** — la lista de carpetas de un módulo es **cerrada**: `Actions`, `Console`, `Data`, `Database`, `Enums`, `Events`, `Exports`, `Forms`, `Http` (+`Resources`), `Listeners`, `Models`, `Policies`, `Providers`, `Resources`, `Routes`, `Rules`, `Support`, `Tests` (+`Fortify`). Inventarse otra falla el build, y `Services/` sigue fuera a propósito. Ver `module-pattern.md`.
 3. **R4** — sin lógica de negocio en controllers, Livewire ni Forms: el Form valida y empaqueta (`rules()` + `toData()`), el componente hace autorizar → validar → DTO → Action, y la escritura vive en la Action.
-4. **R5 · R6 · R7** — sin imports cruzados entre módulos: `App\Core\Contracts`, eventos o DTOs/enums de `Core`. `App\Core` no depende de ningún módulo y sus contratos son interfaces.
+4. **R5 · R6 · R7** — sin imports cruzados entre módulos, **salvo `{Otro}\Events\`**, que es la frontera pública y sí se importa desde un listener. Lo demás va por `App\Core\Contracts` o por DTOs/enums de `Core`. `App\Core` no depende de ningún módulo y sus contratos son interfaces.
 5. **R8** — DTOs en vez de arrays asociativos: `final`, extienden `App\Core\Data\Data`, con **todas las propiedades `readonly`**, y sólo dependen de datos.
 6. **R11 · R12** — un toggle sólo existe si alguien lo lee, y un `config/*.php` nunca lee otro (se cargan en orden alfabético).
 7. **R13 · R14 · R15 · R16** — `declare(strict_types=1)`, `final class` por defecto, type hints completos y `CarbonImmutable`.
@@ -111,6 +119,7 @@ severidad, por qué existe y la cicatriz que la originó— está en el catálog
 13. **Factories dentro del módulo**: `App\Modules\{X}\Models\{Y}` resuelve a `App\Modules\{X}\Database\Factories\{Y}Factory` (lo registra `AppServiceProvider::configureFactories()`).
 14. **R46 · R47 · R48** — las cabeceras de seguridad (CSP incluida) las emite la app desde `config/security.php`, no el hosting; `APP_DEBUG=true` en producción no arranca; y con `BACKUP_ENABLED=true` el backup va cifrado y el monitor vigila el mismo destino al que se escribe.
 15. **R49 · R50** — los skills viven en `.agents/skills/` y `.claude/skills/` son symlinks relativos, uno por skill; y `AGENTS.md` no se edita: se genera desde `CLAUDE.md` con `php artisan kore:agents:sync`.
+16. **R51 · R52 · R53** — el harness E2E sólo vive si coinciden flag, entorno y base de pruebas (los tres, no uno); toda ruta `GET` con nombre entra en `tests/e2e/fixtures/access-map.ts` con los roles que la abren; y al modificar una columna con `->change()` se repiten **todos** sus atributos previos o se pierden en silencio (usa el skill `kore-migration-change`).
 
 ### Válvulas de escape
 
@@ -156,6 +165,7 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | `TENANCY_ENABLED`       | `false`          | Módulo Tenancy (stancl/tenancy)     |
 | `BACKUP_ENABLED`        | `false`          | spatie/laravel-backup (run+clean+monitor, zip cifrado, `BackupsCheck`) |
 | `DOCS_ENABLED`          | `false`          | Visor de `docs/` en `/docs` (local sí, producción no) |
+| `E2E_HARNESS`           | `false`          | Harness de la suite E2E (`/__e2e__/*`); sólo `.env.e2e` |
 | `AUTH_2FA_ENABLED`      | `true`           | 2FA vía Fortify                     |
 | `AUTH_PASSKEYS`         | `true`           | Passkeys (WebAuthn) vía Fortify     |
 | `AUTH_MAGIC_LINKS`      | `true`           | spatie/laravel-one-time-passwords   |
@@ -163,7 +173,7 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | `SOCIAL_GOOGLE`         | `false`          | proveedor Google de Socialite       |
 | `SOCIAL_GITHUB`         | `false`          | proveedor GitHub de Socialite       |
 
-Esas diez claves son **todas** las de `config/kore-app.php`. Regla: un toggle
+Esas once claves son **todas** las de `config/kore-app.php`. Regla: un toggle
 sólo existe si alguien lo lee. Reverb, Octane y Scout no son toggles sino
 módulos opcionales que se instalan bajo demanda; el modo `single-db`/`multi-db`
 de tenancy se elige en `config/tenancy.php` al correr `kore:tenancy:enable`.
@@ -229,7 +239,7 @@ composer e2e                        # suite E2E (ver docs/quality/e2e.md)
 # Calidad
 composer lint                       # Pint
 composer analyse                    # Larastan nivel 8 + PHPat + disallowed-calls
-composer arch                       # kore:arch:check (checks textuales: R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50)
+composer arch                       # kore:arch:check (checks textuales: R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50, R52)
 composer refactor                   # Rector
 composer ci                         # todo lo anterior
 
@@ -278,7 +288,7 @@ php artisan mcp:inspector kore      # inspector oficial, para depurar el server 
 4. `./vendor/bin/pest` (al menos los tests del módulo tocado)
 5. (Cuando aplique) `./vendor/bin/phpstan analyse`
 6. (Si tocaste rutas, vistas, Livewire o permisos) `npm run e2e`; si añadiste una pantalla,
-   su spec en `tests/e2e/specs/{modulo}/`
+   su fila en `tests/e2e/fixtures/access-map.ts` (R52) y su spec en `tests/e2e/specs/{modulo}/`
 7. El mensaje de commit sigue Conventional Commits (R43); el hook `commit-msg` lo verifica
 
 ---

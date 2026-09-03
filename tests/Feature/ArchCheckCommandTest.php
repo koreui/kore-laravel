@@ -29,7 +29,7 @@ use Illuminate\Support\Facades\File;
  *
  * @param array<string, string> $files ruta relativa => contenido
  */
-function archFixture(array $files, string $catalog = "### R11 · toggles\n### R23 · authorize\n### R24 · locked\n### R29 · down\n### R30 · blade\n### R37 · testid\n### R38 · timeout\n### R40 · docs\n### R44 · valvulas\n### R45 · baseline\n"): string
+function archFixture(array $files, string $catalog = "### R11 · toggles\n### R23 · authorize\n### R24 · locked\n### R29 · down\n### R30 · blade\n### R37 · testid\n### R38 · timeout\n### R40 · docs\n### R44 · valvulas\n### R45 · baseline\n### R52 · access map\n> Escape: `arch-accepted`\n"): string
 {
     $root = storage_path('framework/testing/arch-check/'.uniqid('case_', true));
 
@@ -588,6 +588,176 @@ it('R50 · no dice nada en un proyecto sin CLAUDE.md', function (): void {
     [$exit] = archCheck(archFixture([]), 'R50');
 
     expect($exit)->toBe(0);
+});
+
+/*
+|--------------------------------------------------------------------------
+| R52 · toda pantalla nueva entra en el mapa de acceso de los E2E
+|--------------------------------------------------------------------------
+*/
+
+/** Un archivo de rutas de módulo con un grupo con prefijo. */
+function routesFixture(string $body, string $prefix = 'demo'): string
+{
+    return "<?php\n\nuse Illuminate\\Support\\Facades\\Route;\n\n"
+        ."Route::middleware('web')\n    ->prefix('{$prefix}')\n    ->as('{$prefix}.')\n    ->group(function (): void {\n"
+        .$body
+        ."    });\n";
+}
+
+it('R52 · falla cuando una pantalla no está en el mapa de acceso', function (): void {
+    $root = archFixture([
+        'app/Modules/Demo/Routes/web.php' => routesFixture("        Route::get('/', 'index')->name('index');\n"),
+        'tests/e2e/fixtures/access-map.ts' => "export const accessMap = [\n];\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R52');
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('R52')
+        ->and($output)->toContain('la ruta /demo no está en tests/e2e/fixtures/access-map.ts');
+});
+
+it('R52 · pasa cuando la pantalla está en el mapa, con su prefijo compuesto', function (): void {
+    $root = archFixture([
+        'app/Modules/Demo/Routes/web.php' => routesFixture(
+            "        Route::get('/', 'index')->name('index');\n"
+            ."        Route::get('/create', 'create')->name('create');\n"
+        ),
+        'tests/e2e/fixtures/access-map.ts' => "export const accessMap = [\n"
+            ."    { path: '/demo', roles: ['admin'] },\n"
+            ."    { path: '/demo/create', roles: ['admin'] },\n"
+            ."];\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R52');
+
+    expect($exit)->toBe(0)->and($output)->toContain('sin violaciones');
+});
+
+it('R52 · ve las rutas declaradas en la raíz y las de un módulo', function (): void {
+    $root = archFixture([
+        'routes/web.php' => "<?php\n\nRoute::get('/bienvenida', fn () => view('welcome'))->name('welcome');\n",
+        'tests/e2e/fixtures/access-map.ts' => "export const accessMap = [];\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R52');
+
+    expect($exit)->toBe(1)->and($output)->toContain('la ruta /bienvenida no está');
+});
+
+/*
+ * Una ruta con parámetro no se puede escribir literal en el mapa: su `path`
+ * depende de un id que la suite crea en cada test.
+ */
+it('R52 · ignora las rutas con parámetro', function (): void {
+    $root = archFixture([
+        'app/Modules/Demo/Routes/web.php' => routesFixture("        Route::get('/{thing}/edit', 'edit')->name('edit');\n"),
+        'tests/e2e/fixtures/access-map.ts' => "export const accessMap = [];\n",
+    ]);
+
+    [$exit] = archCheck($root, 'R52');
+
+    expect($exit)->toBe(0);
+});
+
+/*
+ * El harness de pruebas existe sólo para la suite: no es una pantalla que
+ * alguien pueda abrir, así que no le toca fila en el mapa.
+ */
+it('R52 · ignora las rutas del harness E2E', function (): void {
+    $root = archFixture([
+        'app/Modules/E2E/Routes/web.php' => routesFixture("        Route::get('/login-as', 'loginAs')->name('login-as');\n", '__e2e__'),
+        'tests/e2e/fixtures/access-map.ts' => "export const accessMap = [];\n",
+    ]);
+
+    [$exit] = archCheck($root, 'R52');
+
+    expect($exit)->toBe(0);
+});
+
+it('R52 · ignora un GET sin nombre y todo lo que no sea GET', function (): void {
+    $root = archFixture([
+        'app/Modules/Demo/Routes/web.php' => routesFixture(
+            "        Route::get('/sin-nombre', 'anon');\n"
+            ."        Route::post('/guardar', 'store')->name('store');\n"
+        ),
+        'tests/e2e/fixtures/access-map.ts' => "export const accessMap = [];\n",
+    ]);
+
+    [$exit] = archCheck($root, 'R52');
+
+    expect($exit)->toBe(0);
+});
+
+/*
+ * La válvula de R52 es **de línea**, no de archivo: un `web.php` declara varias
+ * pantallas y eximir a una no puede tapar a las demás.
+ */
+it('R52 · acepta la válvula puesta en la línea de la ruta', function (): void {
+    $root = archFixture([
+        'app/Modules/Demo/Routes/web.php' => routesFixture(
+            "        Route::get('/oculta', 'hidden')->name('hidden'); // arch-accepted: R52 · redirección técnica, no es pantalla · @cesar\n"
+        ),
+        'tests/e2e/fixtures/access-map.ts' => "export const accessMap = [];\n",
+    ]);
+
+    [$exit] = archCheck($root, 'R52');
+
+    expect($exit)->toBe(0);
+});
+
+it('R52 · acepta la válvula en el comentario justo encima', function (): void {
+    $root = archFixture([
+        'app/Modules/Demo/Routes/web.php' => routesFixture(
+            "        // arch-accepted: R52 · redirección técnica, no es pantalla · @cesar\n"
+            ."        Route::get('/oculta', 'hidden')->name('hidden');\n"
+        ),
+        'tests/e2e/fixtures/access-map.ts' => "export const accessMap = [];\n",
+    ]);
+
+    [$exit] = archCheck($root, 'R52');
+
+    expect($exit)->toBe(0);
+});
+
+it('R52 · la válvula de una ruta no exime a la de al lado', function (): void {
+    $root = archFixture([
+        'app/Modules/Demo/Routes/web.php' => routesFixture(
+            "        Route::get('/oculta', 'hidden')->name('hidden'); // arch-accepted: R52 · redirección técnica · @cesar\n"
+            ."        Route::get('/visible', 'index')->name('index');\n"
+        ),
+        'tests/e2e/fixtures/access-map.ts' => "export const accessMap = [];\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R52');
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('/demo/visible')
+        ->and($output)->not->toContain('/demo/oculta');
+});
+
+/*
+ * El mapa lo aporta la suite E2E y puede no existir todavía. R52 exige que la
+ * pantalla esté en el mapa, no que el proyecto tenga E2E: se avisa una vez y no
+ * se falla.
+ */
+it('R52 · avisa y no falla cuando todavía no hay mapa de acceso', function (): void {
+    $root = archFixture([
+        'app/Modules/Demo/Routes/web.php' => routesFixture("        Route::get('/', 'index')->name('index');\n"),
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R52');
+
+    expect($exit)->toBe(0)
+        ->and($output)->toContain('no hay tests/e2e/fixtures/access-map.ts')
+        ->and($output)->toContain('1 ruta(s)');
+});
+
+it('R52 · no dice nada en un proyecto sin rutas', function (): void {
+    [$exit, $output] = archCheck(archFixture([]), 'R52');
+
+    expect($exit)->toBe(0)->and($output)->not->toContain('access-map');
 });
 
 /*

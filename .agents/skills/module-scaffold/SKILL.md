@@ -18,13 +18,16 @@ app/Modules/{Domain}/
 ├── Actions/                       # 1 clase = 1 caso de uso (handle()), extienden Core\Actions\Action
 ├── Console/Commands/              # comandos artisan del dominio
 ├── Data/                          # DTOs final que extienden App\Core\Data\Data
+├── Enums/                         # enums backed (string o int) del dominio
 ├── Events/                        # lo que otros módulos pueden escuchar (final readonly)
+├── Exports/                       # salida hacia fuera: Excel, CSV, PDF
 ├── Forms/                         # Livewire Form Objects (rules() + toData())
 ├── Http/
 │   ├── Controllers/
 │   ├── Livewire/
 │   ├── Middleware/
-│   └── Requests/
+│   ├── Requests/
+│   └── Resources/                 # API Resources (extienden JsonResource)
 ├── Listeners/                     # reacciones a eventos de otros módulos
 ├── Models/
 ├── Policies/
@@ -55,6 +58,17 @@ toca `docs/architecture/module-pattern.md`, el `$allowed` de
 `tests/Arch/ArchitectureTest.php` y `docs/architecture/rules.md` en el mismo
 commit. La única excepción existente son los adaptadores de un paquete cuyo
 contrato fija un tercero (`app/Modules/Auth/Fortify/`).
+
+Tres de las carpetas tienen forma verificada, así que crea dentro sólo lo que
+toca:
+
+- `Enums/` → enums **backed** (`enum Estado: string`). Un enum puro falla el
+  arch test.
+- `Http/Resources/` → clases que extienden
+  `Illuminate\Http\Resources\Json\JsonResource`. No es un cajón para lo demás
+  de la capa Http.
+- `Exports/` → la salida hacia fuera (Excel, CSV, PDF). Lo de dentro lo fija el
+  paquete de exportación que use el proyecto.
 
 ## Pasos
 
@@ -131,10 +145,12 @@ Route::middleware('web')->prefix('{domain}')->group(function (): void {
 - **R24** · Toda propiedad pública que identifique un modelo (`$id`, `$model`,
   `$algoId`) lleva `#[Locked]`.
 - **R5** · Sin imports cruzados a otros `Modules\*` (lo verifican Pest arch y
-  PHPat, que genera la regla para cada par de módulos). Si necesitas
-  comunicar entre módulos: Events (`{Domain}\Events\`), Contracts en
-  `app/Core/Contracts/` implementados en `{Domain}\Support\`, enums compartidos
-  en `app/Core/Enums/`, o llamar Actions públicas vía interfaz.
+  PHPat, que genera la regla para cada par de módulos). **Salvo `{Otro}\Events\`**,
+  que es la frontera pública: un listener sí puede importar y tipar el evento que
+  escucha, y el provider cablearlo con `Event::listen(Evento::class, …)`. Para
+  todo lo demás: Contracts en `app/Core/Contracts/` implementados en
+  `{Domain}\Support\`, enums compartidos en `app/Core/Enums/`, o Actions
+  públicas vía interfaz.
 - **R6** · `App\Core` nunca depende de `App\Modules`.
 - **R31** · Componentes UI: `<x-kore::*>` (siempre). Nunca otra librería.
 - **R8** · DTOs en lugar de arrays asociativos entre capas.
@@ -142,6 +158,10 @@ Route::middleware('web')->prefix('{domain}')->group(function (): void {
 - **R29** · Toda migración del módulo define `down()`.
 - **R11** · Si añades un toggle, alguien tiene que leerlo con
   `config('kore-app.{clave}')`, o `composer arch` lo marca como fantasma.
+- **R52** · Cada ruta `GET` con nombre que añadas en `Routes/web.php` entra en
+  `tests/e2e/fixtures/access-map.ts` con los roles que pueden abrirla, o
+  `composer arch` la marca. Las rutas con parámetro y las del harness
+  (`/__e2e__/…`) quedan fuera.
 - **R44** · Si el código necesita una excepción a cualquiera de estas reglas,
   **no la escribas tú**: para y pregúntale al usuario, que es quien firma el
   `@owner` de la válvula.

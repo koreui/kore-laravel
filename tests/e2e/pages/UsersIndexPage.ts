@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-import { waitForLivewireReady, withLivewireRoundTrip } from '../support/livewire';
+import { waitForLivewireReady, withLivewireRoundTrip } from '../fixtures/livewire';
 
 /**
  * `/users` — vista `users::pages.index` con el `KoreDataTable` `TableUsers`.

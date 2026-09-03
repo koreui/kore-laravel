@@ -5,8 +5,9 @@ import { mailLogPath } from './env';
 /**
  * Lectura del último código OTP (magic link) desde el log de correo.
  *
- * `.env.e2e` usa `MAIL_MAILER=log`, así que cada email se escribe entero en
- * `storage/logs/laravel.log`. El mensaje que manda
+ * `.env.e2e` usa `MAIL_MAILER=log` con `MAIL_LOG_CHANNEL=e2e_mail`, así que
+ * cada email se escribe entero en `storage/logs/e2e-mail.log` — el mismo
+ * archivo que sirve `GET /__e2e__/mail/last`. El mensaje que manda
  * spatie/laravel-one-time-passwords trae el código en tres sitios; usamos los
  * dos que no dependen del HTML:
  *
@@ -110,6 +111,6 @@ export async function waitForOtpCode(
 
     throw new Error(
         `No apareció ningún código OTP para ${email} en ${mailLogPath} tras ${timeoutMs} ms ` +
-            '(¿MAIL_MAILER=log en .env.e2e? ¿LOG_CHANNEL=single?).',
+            '(¿MAIL_MAILER=log y MAIL_LOG_CHANNEL=e2e_mail en .env.e2e?).',
     );
 }
