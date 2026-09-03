@@ -78,13 +78,23 @@ return [
     | by Laravel's translation / localization methods. This option can be
     | set to any locale for which you plan to have translation strings.
     |
+    | kore-laravel usa el ESPAÑOL como idioma fuente: las vistas llaman a
+    | `__('Iniciar sesión')` con el texto español como clave. Con locale `es`
+    | y sin `lang/es.json`, `__()` devuelve la clave tal cual, así que la UI
+    | sale en español "gratis"; lo que sí cambia respecto a `en` es que
+    | validación, auth y passwords se resuelven contra `lang/es/*.php`.
+    |
+    | El inglés es el fallback y vive en JSON: `lang/en.json` (compartido) y
+    | `app/Modules/{Modulo}/Resources/lang/en.json` (por módulo).
+    | Ver `docs/guides/i18n.md`.
+    |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    'locale' => env('APP_LOCALE', 'es'),
 
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 
-    'faker_locale' => env('APP_FAKER_LOCALE', 'en_US'),
+    'faker_locale' => env('APP_FAKER_LOCALE', 'es_ES'),
 
     /*
     |--------------------------------------------------------------------------

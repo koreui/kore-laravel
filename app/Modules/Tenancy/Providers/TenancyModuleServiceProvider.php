@@ -35,6 +35,8 @@ final class TenancyModuleServiceProvider extends ServiceProvider
 
         $base = __DIR__.'/..';
 
+        $this->loadJsonTranslationsFrom("{$base}/Resources/lang");
+
         // `kore:tenancy:enable` publica aquí las migraciones de stancl. En un
         // clon fresco la carpeta puede no existir todavía (sólo lleva .gitkeep),
         // y loadMigrationsFrom() con una ruta inexistente revienta al migrar.
