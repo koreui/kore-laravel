@@ -24,5 +24,9 @@
     "Usuario guardado correctamente.": "User saved successfully.",
     "Usuarios": "Users",
     "¡Listo!": "Done!",
-    "¿Eliminar este usuario?": "Delete this user?"
+    "¿Eliminar este usuario?": "Delete this user?",
+    "Foto de perfil": "Profile photo",
+    "PNG, JPG o WebP. Máximo 2 MB.": "PNG, JPG or WebP. 2 MB max.",
+    "Guardar foto": "Save photo",
+    "Avatar": "Avatar"
 }

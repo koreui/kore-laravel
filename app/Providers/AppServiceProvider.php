@@ -228,6 +228,9 @@ final class AppServiceProvider extends ServiceProvider
             'PDF' => fn (): string => config('kore-app.pdf.enabled')
                 ? 'enabled (driver '.config('laravel-pdf.driver').')'
                 : 'disabled',
+            'Files' => fn (): string => config('kore-app.files.enabled')
+                ? 'enabled (disco '.config('files.disk').')'
+                : 'disabled',
             'Backup' => fn (): string => config('kore-app.backup.enabled')
                 ? 'enabled'.(config('backup.backup.password') ? ' (zip cifrado)' : ' (zip SIN cifrar)')
                 : 'disabled',

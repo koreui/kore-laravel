@@ -116,6 +116,24 @@ if ((bool) config('kore-app.devices.enabled')) {
         ->sentryMonitor();
 }
 
+// Purga de versiones archivadas (módulo Files): sólo con FILES_ENABLED=true,
+// porque con el toggle apagado `files:cleanup` ni siquiera está registrado —y
+// `Schedule::command()` no falla aunque el comando no exista, así que sin este
+// `if` el scheduler intentaría correr un comando inexistente cada noche.
+//
+// A las 04:30, detrás del backup de las 02:00 y de `devices:cleanup`: si la
+// purga se lleva un fichero que hacía falta, el zip de la noche todavía lo
+// tiene. Los 30 días son el plazo por defecto y se escriben AQUÍ, no en el
+// config: borrar es destructivo y la cifra tiene que verse en la línea que la
+// aplica.
+if ((bool) config('kore-app.files.enabled')) {
+    Schedule::command('files:cleanup --days=30')
+        ->dailyAt('04:30')
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->sentryMonitor();
+}
+
 // `model:prune` se deja fuera a propósito: hoy ningún modelo del boilerplate
 // usa el trait Prunable / MassPrunable, y el comando aborta si no encuentra
 // ninguno. Descoméntalo cuando añadas el primero.

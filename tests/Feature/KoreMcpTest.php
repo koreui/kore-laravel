@@ -97,12 +97,12 @@ test('kore-list-modules cuenta carpetas, Actions, Livewire, rutas y tests', func
 |--------------------------------------------------------------------------
 */
 
-test('kore-list-toggles devuelve las trece claves de kore-app con su variable de .env y un lector', function (): void {
+test('kore-list-toggles devuelve las catorce claves de kore-app con su variable de .env y un lector', function (): void {
     $payload = mcpToolPayload(ListTogglesTool::class);
 
     $toggles = collect(Arr::get($payload, 'toggles'))->keyBy('clave');
 
-    expect($toggles)->toHaveCount(13)
+    expect($toggles)->toHaveCount(14)
         ->and($toggles->keys()->all())->toBe([
             'kore-app.api.enabled',
             'kore-app.tenancy.enabled',
@@ -110,6 +110,7 @@ test('kore-list-toggles devuelve las trece claves de kore-app con su variable de
             'kore-app.docs.enabled',
             'kore-app.devices.enabled',
             'kore-app.pdf.enabled',
+            'kore-app.files.enabled',
             'kore-app.socialite.google',
             'kore-app.socialite.github',
             'kore-app.auth.two_factor',
@@ -125,6 +126,7 @@ test('kore-list-toggles devuelve las trece claves de kore-app con su variable de
         ->and($toggles->get('kore-app.docs.enabled')['env'])->toBe('DOCS_ENABLED')
         ->and($toggles->get('kore-app.devices.enabled')['env'])->toBe('DEVICES_ENABLED')
         ->and($toggles->get('kore-app.pdf.enabled')['env'])->toBe('PDF_ENABLED')
+        ->and($toggles->get('kore-app.files.enabled')['env'])->toBe('FILES_ENABLED')
         ->and($toggles->get('kore-app.socialite.google')['env'])->toBe('SOCIAL_GOOGLE')
         ->and($toggles->get('kore-app.socialite.github')['env'])->toBe('SOCIAL_GITHUB')
         ->and($toggles->get('kore-app.auth.two_factor')['env'])->toBe('AUTH_2FA_ENABLED')

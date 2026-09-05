@@ -30,6 +30,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - [`docs/modules/e2e.md`](docs/modules/e2e.md) — harness de la suite E2E (`/__e2e__/*`) y switcher de cuentas de desarrollo
 - [`docs/modules/devices.md`](docs/modules/devices.md) — dispositivos que consumen la API (toggle `DEVICES_ENABLED`)
 - [`docs/modules/pdf.md`](docs/modules/pdf.md) — generación de PDF con spatie/laravel-pdf y Gotenberg (toggle `PDF_ENABLED`)
+- [`docs/modules/files.md`](docs/modules/files.md) — archivos con versionado por slot y URL firmada (toggle `FILES_ENABLED`)
 - [`docs/patterns/README.md`](docs/patterns/README.md) — la **regla de tres**: cuándo una solución sube al boilerplate, y el camino de vuelta de un proyecto hijo al padre
 - [`docs/guides/api.md`](docs/guides/api.md) — contrato de la API REST: envelope, errores, paginación, middleware, limiters y Scramble
 - [`docs/guides/exports.md`](docs/guides/exports.md) — la carpeta `Exports/`: CSV sin dependencias, Excel en el derivado y PDF delegando en el módulo Pdf
@@ -50,6 +51,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - Auth: Fortify (2FA, passkeys WebAuthn, toggles) + Sanctum (toggle) + spatie/laravel-permission
 - API: contrato en `App\Core\Http\Api` (envelope `{data, meta?}` / `{error:{code,message,details?}}`, R54) + OpenAPI con dedoc/scramble + módulo opcional **Devices** (`DEVICES_ENABLED`): inventario de los clientes que consumen la API, alimentado por los eventos de Auth
 - PDF: módulo opcional **Pdf** (`PDF_ENABLED`) sobre spatie/laravel-pdf con driver **Gotenberg** (servicio aparte); contrato `App\Core\Contracts\PdfRenderer`, tema base con vista previa y las imágenes de la hoja embebidas como `data:` URI
+- Archivos: módulo opcional **Files** (`FILES_ENABLED`) sobre spatie/laravel-medialibrary — contrato `App\Core\Contracts\FileStore`, versionado por slot (reemplazar **archiva**, no borra), URL firmada con el `v=` dentro de la firma, y compresión + subida a S3/R2 opcionales en cola
 - DTOs: spatie/laravel-data
 - Feature flags: Laravel Pennant
 - Tests: Pest 5 (con arch tests en `tests/Arch/ArchitectureTest.php`)
@@ -66,11 +68,14 @@ app/
 │   ├── Actions/Action.php      # base abstracta
 │   ├── Concerns/               # traits compartidos de Livewire y Eloquent
 │   │   ├── HandlesDeleteConfirmation.php  # confirmar → borrar, id #[Locked]
+│   │   ├── HandlesSlotUploads.php         # subir/archivar el archivo de un slot
 │   │   ├── HasPublicUuid.php   # identidad pública opt-in, PK entera
 │   │   └── RedirectsWithToast.php         # toast en sesión + redirect
 │   ├── Console/                # comandos transversales (kore:arch:check) y hooks de git
 │   │   └── Concerns/SupportsDryRun.php    # opción --dry-run + helpers
 │   ├── Contracts/              # interfaces compartidas (AuthorizationCatalog, PdfRenderer)
+│   ├── Contracts/              # interfaces compartidas (fronteras entre módulos)
+│   │                           #   AuthorizationCatalog · FileStore
 │   ├── Data/Data.php           # base DTO (extiende spatie/laravel-data)
 │   │                           # + PdfBrandData · PdfOptionsData · PdfDocumentData
 │   ├── Enums/                  # valores compartidos (SystemRole, ApiErrorCode, PdfPaperFormat)
@@ -189,6 +194,7 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | `E2E_HARNESS`           | `false`          | Harness de la suite E2E (`/__e2e__/*`); sólo `.env.e2e` |
 | `DEVICES_ENABLED`       | `false`          | Módulo Devices: rutas `api/v1/devices/*`, listeners de los eventos de token de Auth, alias `devices.version` y `devices:cleanup` |
 | `PDF_ENABLED`           | `false`          | Módulo Pdf: binding de `PdfRenderer`, gate `viewPdfPreview` y rutas `/pdf/preview*`. El motor es un servicio aparte (Gotenberg) |
+| `FILES_ENABLED`         | `false`          | Módulo Files: contrato `FileStore`, ruta firmada `/files/{file}`, listeners de compresión/sync y `files:cleanup` |
 | `AUTH_2FA_ENABLED`      | `true`           | 2FA vía Fortify                     |
 | `AUTH_PASSKEYS`         | `true`           | Passkeys (WebAuthn) vía Fortify     |
 | `AUTH_MAGIC_LINKS`      | `true`           | spatie/laravel-one-time-passwords   |
@@ -196,7 +202,7 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | `SOCIAL_GOOGLE`         | `false`          | proveedor Google de Socialite       |
 | `SOCIAL_GITHUB`         | `false`          | proveedor GitHub de Socialite       |
 
-Esas trece claves son **todas** las de `config/kore-app.php`. Regla: un toggle
+Esas catorce claves son **todas** las de `config/kore-app.php`. Regla: un toggle
 sólo existe si alguien lo lee. Reverb, Octane y Scout no son toggles sino
 módulos opcionales que se instalan bajo demanda; el modo `single-db`/`multi-db`
 de tenancy se elige en `config/tenancy.php` al correr `kore:tenancy:enable`.
@@ -206,7 +212,8 @@ Sentry se activa con `SENTRY_LARAVEL_DSN` y Pulse con `PULSE_ENABLED`
 `config/kore-api.php` es un archivo aparte y **no** duplica `API_ENABLED`: guarda
 los parámetros del contrato de la API (`version`, `pagination`, `docs.enabled`
 vía `API_DOCS`, `limiters`). El check R11 sólo vigila `kore-app`, porque
-`kore-api` declara cifras y no capacidades.
+`kore-api` declara cifras y no capacidades. `config/devices.php` y
+`config/files.php` siguen el mismo reparto respecto de sus toggles.
 
 Cuando un toggle está OFF, su `ServiceProvider` debe hacer `return` temprano y no registrar nada: ni rutas, ni middleware, ni comandos de dominio, ni traducciones. Dos excepciones, y sólo dos (R10): el comando que enciende el toggle, y el namespace de vistas (`loadViewsFrom`), que sin rutas no expone nada y que Larastan necesita para validar `view('docs::x')`.
 
@@ -312,6 +319,8 @@ php artisan mcp:inspector kore      # inspector oficial, para depurar el server 
 - ❌ No copiar un skill dentro de `.claude/skills/`: la carpeta real es `.agents/skills/` y ahí sólo van symlinks relativos (R49).
 - ❌ No construir a mano el JSON de una respuesta de API: `respond()` / `respondNoContent()` de `ApiController` (R54).
 - ❌ No extender `FormRequest` ni `JsonResource` directamente en un módulo para la API: `BaseApiRequest` y `BaseApiResource` (R54).
+- ❌ No construir a mano la URL de un archivo privado ni exponer su ruta de disco: sale de `FileStore::url()`, que la firma con el `v=` dentro.
+- ❌ No borrar archivos desde la interfaz: se archivan (`FileStore::archive()`). `delete()` es para el dueño que se borra a sí mismo y para `files:cleanup`.
 
 ## Antes de finalizar cualquier cambio
 

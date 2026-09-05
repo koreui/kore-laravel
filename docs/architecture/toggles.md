@@ -12,6 +12,7 @@
 | `DOCS_ENABLED`         | `false`       | Visor de `docs/` en `/docs` (módulo Docs). Pensado para local; producción lo deja apagado | `DocsModuleServiceProvider` |
 | `DEVICES_ENABLED`      | `false`       | Módulo Devices: rutas `api/v1/devices/*`, listeners de `ApiTokenIssued`/`ApiTokenRevoked`, alias `devices.version` y `devices:cleanup` en el scheduler. **La tabla `devices` se migra igual** con el toggle apagado | `DevicesModuleServiceProvider`, `routes/console.php`, `AppServiceProvider::configureAbout()` |
 | `PDF_ENABLED`          | `false`       | Módulo Pdf: binding de `App\Core\Contracts\PdfRenderer`, gate `viewPdfPreview` y rutas `/pdf/preview*`. Opt-in porque el motor es un **servicio aparte** (Gotenberg). **No tiene tablas**, así que aquí no hay nada que migrar | `PdfModuleServiceProvider`, `AppServiceProvider::configureAbout()` |
+| `FILES_ENABLED`        | `false`       | Módulo Files: binding de `App\Core\Contracts\FileStore`, ruta firmada `files.serve`, listeners de compresión/sincronización y `files:cleanup` en el scheduler. **La tabla `media` y el espacio de vistas `files::` se registran igual** con el toggle apagado (ver abajo) | `FilesModuleServiceProvider`, `routes/console.php`, `AppServiceProvider::configureAbout()`, `Users\Http\Livewire\{FormComponent, TableUsers}` |
 | `E2E_HARNESS`          | `false`       | Harness de la suite E2E: rutas `/__e2e__/*` (módulo E2E). Sólo lo enciende `.env.e2e`, y aun así hacen falta el entorno y una base de pruebas | `E2EModuleServiceProvider` vía `HarnessGuard` |
 | `AUTH_2FA_ENABLED`     | `true`        | Fortify `twoFactorAuthentication` (rutas + pantalla)| `FortifyServiceProvider::register()` |
 | `AUTH_MAGIC_LINKS`     | `true`        | OTP via spatie/laravel-one-time-passwords           | `Auth/Routes/web.php`, `login.blade.php` |
@@ -20,7 +21,7 @@
 | `SOCIAL_GOOGLE`        | `false`       | proveedor Google de Socialite                       | `SocialiteController`, `login.blade.php` |
 | `SOCIAL_GITHUB`        | `false`       | proveedor GitHub de Socialite                       | `SocialiteController`, `login.blade.php` |
 
-Estas trece son **todas** las claves de `config/kore-app.php`. La columna
+Estas catorce son **todas** las claves de `config/kore-app.php`. La columna
 "quién lo lee" no es decorativa: es la regla. Un toggle que nadie lee es una
 mentira en la documentación, y por eso en la v1.0.0 se borraron
 `REVERB_ENABLED`, `OCTANE_ENABLED`/`OCTANE_SERVER`, `SCOUT_ENABLED`/`SCOUT_DRIVER`,
@@ -100,6 +101,13 @@ que la aplicación hace. Ver [`../guides/api.md`](../guides/api.md).
   migra igual: una migración condicional produciría bases distintas según el
   `.env` del día en que se migró, y un boilerplate reutilizable no puede
   permitírselo.
+- ℹ️ **Un toggle tampoco apaga un espacio de vistas con componentes.** Blade
+  compila las etiquetas `<x-modulo::algo>` al compilar la plantilla que las usa,
+  no al ejecutarla: un `@if (config(…))` alrededor no evita la resolución. Por
+  eso `FilesModuleServiceProvider` hace su `loadViewsFrom` **antes** del early
+  return, igual que la migración. Registrar un espacio de vistas que ninguna
+  ruta pinta no expone nada; no hacerlo devolvía un 500 en la pantalla de
+  usuarios con `FILES_ENABLED=false`.
 - ⚠️ **Un config no puede leer otro config.** Laravel carga `config/*.php` en orden alfabético, así que `config/fortify.php` NO puede hacer `config('kore-app.auth.two_factor')`: cuando se evalúa, `kore-app` todavía no existe. La salida es mutar la config del paquete desde el `register()` del provider del módulo, que corre después de cargar toda la config y antes del `boot()` que registra las rutas. Es exactamente lo que hace `FortifyServiceProvider::configureTwoFactorFeature()`.
 
 ## Pennant para rollouts graduales
