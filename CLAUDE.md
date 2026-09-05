@@ -28,6 +28,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - [`docs/modules/files.md`](docs/modules/files.md) — archivos con versionado por slot y URL firmada (toggle `FILES_ENABLED`)
 - [`docs/modules/notifications.md`](docs/modules/notifications.md) — bandeja in-app, campana, preferencias por categoría y API (toggle `NOTIFICATIONS_ENABLED`)
 - [`docs/modules/platform.md`](docs/modules/platform.md) — ajustes en BD, series de folio y features por instalación (sin toggle: siempre encendido)
+- [`docs/modules/mx.md`](docs/modules/mx.md) — utilidades de México: catálogo SEPOMEX e importe en letra (toggle `MX_ENABLED`)
 - [`docs/patterns/README.md`](docs/patterns/README.md) — la **regla de tres**: cuándo una solución sube al boilerplate, y el camino de vuelta de un proyecto hijo al padre
 - [`docs/guides/api.md`](docs/guides/api.md) — contrato de la API REST: envelope, errores, paginación, middleware, limiters y Scramble
 - [`docs/guides/exports.md`](docs/guides/exports.md) — la carpeta `Exports/`: CSV sin dependencias, Excel en el derivado y PDF delegando en el módulo Pdf
@@ -52,6 +53,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - Archivos: módulo opcional **Files** (`FILES_ENABLED`) sobre spatie/laravel-medialibrary — contrato `App\Core\Contracts\FileStore`, versionado por slot (reemplazar **archiva**, no borra), URL firmada con el `v=` dentro de la firma, y compresión + subida a S3/R2 opcionales en cola
 - Notificaciones: módulo opcional **Notifications** (`NOTIFICATIONS_ENABLED`) — contrato `App\Core\Contracts\Notifier`, bandeja in-app + campana, preferencias por categoría × canal, API `api/v1/me/notifications*` y poda; el canal de push **sólo loguea** y sus tokens llegan desde Devices por `App\Core\Contracts\PushTokenDirectory`
 - Plataforma: módulo **Platform**, siempre encendido y sin toggle — `App\Core\Contracts\Settings` (ajustes en BD con fallback a `config/kore-settings.php` y pantalla `/settings`), `NumberSeries` (folios correlativos con `lockForUpdate` + snapshot del emisor, `config/kore-numbering.php`) e `InstallationFeatures` (`config/features.php`, middleware `feature:` y directiva `@feature`: «tu licencia no incluye esto», que no es un toggle ni un permiso ni Pennant)
+- México: módulo opcional **Mx** (`MX_ENABLED`) — catálogo SEPOMEX (código postal → colonias, municipio, entidad) con su importador del CSV oficial, `MontoEnLetras` (importe en letra notarial), dos endpoints públicos de API y un componente Livewire de código postal embebible
 - DTOs: spatie/laravel-data
 - Feature flags: Laravel Pennant
 - Tests: Pest 5 (con arch tests en `tests/Arch/ArchitectureTest.php`)
@@ -203,6 +205,7 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | `FILES_ENABLED`         | `false`          | Módulo Files: contrato `FileStore`, ruta firmada `/files/{file}`, listeners de compresión/sync y `files:cleanup` |
 | `AUTH_INVITATIONS`      | `false`          | Registro por invitación + estado de alta: `/register` pide código, pantallas `/invitations*` y `/account/pending`, middleware `account.active`, panel de estado en Users y `invitations:prune` |
 | `NOTIFICATIONS_ENABLED` | `false`          | Módulo Notifications: contrato `Notifier`, campana, `/notifications*`, `api/v1/me/notifications*` y `notifications:prune` |
+| `MX_ENABLED`            | `false`          | Módulo Mx: rutas `api/v1/mx/*`, componente `mx.postal-code-field` y comando `mx:sepomex:import`. Las tablas se migran igual y nacen vacías |
 | `AUTH_2FA_ENABLED`      | `true`           | 2FA vía Fortify                     |
 | `AUTH_PASSKEYS`         | `true`           | Passkeys (WebAuthn) vía Fortify     |
 | `AUTH_MAGIC_LINKS`      | `true`           | spatie/laravel-one-time-passwords   |
@@ -221,7 +224,7 @@ Sentry se activa con `SENTRY_LARAVEL_DSN` y Pulse con `PULSE_ENABLED`
 los parámetros del contrato de la API (`version`, `pagination`, `docs.enabled`
 vía `API_DOCS`, `limiters`). El check R11 sólo vigila `kore-app`, porque
 `kore-api` declara cifras y no capacidades. `config/devices.php`,
-`config/files.php`, `config/kore-settings.php` y `config/kore-numbering.php`
+`config/files.php`, `config/mx.php`, `config/kore-settings.php` y `config/kore-numbering.php`
 siguen el mismo reparto respecto de sus toggles (Platform, además, no tiene
 ninguno: está siempre encendido).
 

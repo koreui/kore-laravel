@@ -16,5 +16,6 @@ return [
     App\Modules\Files\Providers\FilesModuleServiceProvider::class,
     App\Modules\Notifications\Providers\NotificationsModuleServiceProvider::class,
     App\Modules\Platform\Providers\PlatformModuleServiceProvider::class,
+    App\Modules\Mx\Providers\MxModuleServiceProvider::class,
     App\Modules\E2E\Providers\E2EModuleServiceProvider::class,
 ];

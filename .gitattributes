@@ -6,6 +6,10 @@
 *.md diff=markdown
 *.php diff=php
 
+# El fixture de SEPOMEX imita al archivo oficial: ISO-8859-1 y saltos CRLF.
+# Sin `-text`, la normalización a LF le quitaría la mitad de lo que prueba.
+app/Modules/Mx/Tests/fixtures/*.txt -text
+
 /.github export-ignore
 CHANGELOG.md export-ignore
 .styleci.yml export-ignore

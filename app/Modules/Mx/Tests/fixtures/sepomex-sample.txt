@@ -1,0 +1,22 @@
+Catalogo Nacional de Codigos Postales - archivo de ejemplo, datos inventados
+d_codigo|d_asenta|d_tipo_asenta|D_mnpio|d_estado|d_ciudad|d_CP|c_estado|c_oficina|c_CP|c_tipo_asenta|c_mnpio|id_asenta_cpcons|d_zona|c_cve_ciudad
+01000|San Ángel|Colonia|Álvaro Obregón|Ciudad de México|Ciudad de México|01001|09|01001||09|010|0001|Urbano|01
+01000|San Ángel Inn|Colonia|Álvaro Obregón|Ciudad de México|Ciudad de México|01001|09|01001||09|010|0002|Urbano|01
+1000|Tlacopac|Colonia|Álvaro Obregón|Ciudad de México|Ciudad de México|01001|09|01001||09|010|0003|Urbano|01
+01000|San Ángel|Colonia|Álvaro Obregón|Ciudad de México|Ciudad de México|01001|09|01001||09|010|0004|Urbano|01
+44100|Centro|Colonia|Guadalajara|Jalisco|Guadalajara|44101|14|44101||09|039|0001|Urbano|01
+44100|Americana|Colonia|Guadalajara|Jalisco|Guadalajara|44101|14|44101||09|039|0002|Urbano|01
+44100|Lafayette|Fraccionamiento|Guadalajara|Jalisco|Guadalajara|44101|14|44101||10|039|0003|Urbano|01
+44100|El Refugio|Barrio|Guadalajara|Jalisco|Guadalajara|44101|14|44101||06|039|0004|Urbano|01
+64000|Centro|Colonia|Monterrey|Nuevo León|Monterrey|64001|19|64001||09|039|0001|Urbano|01
+64000|Obispado|Colonia|Monterrey|Nuevo León|Monterrey|64001|19|64001||09|039|0002|Urbano|01
+64000|Mitras Centro||Monterrey|Nuevo León|Monterrey|64001|19|64001||09|039|0003|Urbano|01
+20000|Zona Centro|Colonia|Aguascalientes|Aguascalientes|Aguascalientes|20001|01|20001||09|001|0001|Urbano|01
+20000|Barrio de la Salud|Barrio|Aguascalientes|Aguascalientes|Aguascalientes|20001|01|20001||06|001|0002|Urbano|01
+20010|Ojocaliente|Fraccionamiento|Aguascalientes|Aguascalientes||20001|01|20001||10|001|0003|Urbano|
+97000|Centro|Colonia|Mérida|Yucatán|Mérida|97001|31|97001||09|050|0001|Urbano|01
+97000|Itzimná|Colonia|Mérida|Yucatán|Mérida|97001|31|97001||09|050|0002|Urbano|01
+97070|García Ginerés|Colonia|Mérida|Yucatán|Mérida|97001|31|97001||09|050|0003|Urbano|01
+62000|Centro|Colonia|Cuernavaca|Morelos|Cuernavaca|62001|17|62001||09|007|0001|Urbano|01
+91000|Centro|Colonia|Xalapa|Veracruz de Ignacio de la Llave|Xalapa|91001|30|91001||09|087|0001|Urbano|01
+91000|Ánimas|Fraccionamiento|Xalapa|Veracruz de Ignacio de la Llave|Xalapa|91001|30|91001||10|087|0002|Urbano|01

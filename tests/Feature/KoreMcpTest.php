@@ -102,7 +102,7 @@ test('kore-list-toggles devuelve las quince claves de kore-app con su variable d
 
     $toggles = collect(Arr::get($payload, 'toggles'))->keyBy('clave');
 
-    expect($toggles)->toHaveCount(16)
+    expect($toggles)->toHaveCount(17)
         ->and($toggles->keys()->all())->toBe([
             'kore-app.api.enabled',
             'kore-app.tenancy.enabled',
@@ -112,6 +112,7 @@ test('kore-list-toggles devuelve las quince claves de kore-app con su variable d
             'kore-app.pdf.enabled',
             'kore-app.files.enabled',
             'kore-app.notifications.enabled',
+            'kore-app.mx.enabled',
             'kore-app.socialite.google',
             'kore-app.socialite.github',
             'kore-app.auth.two_factor',
@@ -130,6 +131,7 @@ test('kore-list-toggles devuelve las quince claves de kore-app con su variable d
         ->and($toggles->get('kore-app.pdf.enabled')['env'])->toBe('PDF_ENABLED')
         ->and($toggles->get('kore-app.files.enabled')['env'])->toBe('FILES_ENABLED')
         ->and($toggles->get('kore-app.notifications.enabled')['env'])->toBe('NOTIFICATIONS_ENABLED')
+        ->and($toggles->get('kore-app.mx.enabled')['env'])->toBe('MX_ENABLED')
         ->and($toggles->get('kore-app.socialite.google')['env'])->toBe('SOCIAL_GOOGLE')
         ->and($toggles->get('kore-app.socialite.github')['env'])->toBe('SOCIAL_GITHUB')
         ->and($toggles->get('kore-app.auth.two_factor')['env'])->toBe('AUTH_2FA_ENABLED')
