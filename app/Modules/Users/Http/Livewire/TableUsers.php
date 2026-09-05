@@ -6,7 +6,10 @@ namespace App\Modules\Users\Http\Livewire;
 
 use App\Core\Concerns\HandlesDeleteConfirmation;
 use App\Core\Contracts\AuthorizationCatalog;
+use App\Core\Contracts\FileStore;
 use App\Core\Data\Authorization\RoleOptionData;
+use App\Core\Data\FileSlotData;
+use App\Core\Data\StoredFileData;
 use App\Core\Enums\SystemRole;
 use App\Models\User;
 use App\Modules\Users\Actions\UserDeleteAction;
@@ -17,6 +20,7 @@ use KoreUi\DataTable\Columns\ActionColumn;
 use KoreUi\DataTable\Columns\BadgeColumn;
 use KoreUi\DataTable\Columns\Column;
 use KoreUi\DataTable\Columns\DateColumn;
+use KoreUi\DataTable\Columns\ImageColumn;
 use KoreUi\DataTable\Filters\Filter;
 use KoreUi\DataTable\Filters\SelectFilter;
 use KoreUi\DataTable\KoreDataTable;
@@ -33,10 +37,67 @@ final class TableUsers extends KoreDataTable
     {
         /** @var Builder<User> $query */
         $query = User::query()
-            ->with('roles')
+            ->with($this->eagerLoads())
             ->whereDoesntHave('roles', fn (Builder $q): Builder => $q->where('name', '=', SystemRole::Superadmin->value));
 
         return $query;
+    }
+
+    /**
+     * Relaciones que se cargan de golpe para la página que se está pintando.
+     *
+     * `media` entra sólo con el módulo Files encendido, y entra **aquí** y no en
+     * la columna: la alternativa es que cada fila pregunte por su avatar, que
+     * son veinticinco consultas por página en cuanto la tabla crece. Con el
+     * eager load son dos —usuarios y sus medias—, pase lo que pase.
+     *
+     * @return array<int, string>
+     */
+    private function eagerLoads(): array
+    {
+        return (bool) config('kore-app.files.enabled')
+            ? ['roles', 'media']
+            : ['roles'];
+    }
+
+    /**
+     * La columna del avatar, o ninguna si el módulo Files está apagado.
+     *
+     * Va como lista para poder desplegarla con `...` en `columns()`: una tabla
+     * no puede llevar una columna «vacía», y un `if` alrededor del array entero
+     * duplicaría las otras cinco.
+     *
+     * La URL sale **resuelta desde aquí**, no desde la Blade (R30): quien pinta
+     * recibe una cadena. Y sale sin consultar la base, porque `media` viene
+     * cargada (ver `eagerLoads()`) y `FileStore` recuerda la marca de tiempo del
+     * fichero que acaba de leer.
+     *
+     * `ImageColumn` sobre `id` con `format()`: el campo es sólo el gancho para
+     * llegar a la fila; el valor que se pinta lo devuelve el callback.
+     *
+     * @return array<int, Column>
+     */
+    private function avatarColumn(): array
+    {
+        if (! (bool) config('kore-app.files.enabled')) {
+            return [];
+        }
+
+        $store = resolve(FileStore::class);
+        $slot = new FileSlotData(collection: 'avatar');
+
+        return [
+            ImageColumn::make(__('Avatar'), 'id')
+                ->nameField('name')
+                ->width(72)
+                ->format(function (mixed $value, User $row) use ($store, $slot): ?string {
+                    $avatar = $store->current($row, $slot);
+
+                    return $avatar instanceof StoredFileData && $avatar->isImage()
+                        ? $store->url($avatar->id)
+                        : null;
+                }),
+        ];
     }
 
     #[Override]
@@ -59,6 +120,8 @@ final class TableUsers extends KoreDataTable
     {
         return [
             Column::make('#', 'id')->sortable()->width(80),
+
+            ...$this->avatarColumn(),
 
             Column::make(__('Usuario'), 'name')
                 ->sortable()

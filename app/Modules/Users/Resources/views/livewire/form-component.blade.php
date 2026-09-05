@@ -29,6 +29,21 @@
     <x-kore::card :title="$this->title">
         <div class="space-y-6">
 
+            {{-- Avatar: sólo en edición y sólo con el módulo Files encendido.
+                 En el alta todavía no hay fila de la que colgar el archivo, y
+                 sin `FILES_ENABLED` no hay `FileStore` que resuelva. Ver
+                 `docs/modules/files.md`. --}}
+            @if ($this->avatarEnabled)
+                <x-files::slot-upload
+                    :current="$this->avatar"
+                    :label="__('Foto de perfil')"
+                    :hint="__('PNG, JPG o WebP. Máximo 2 MB.')"
+                    accept="image/png,image/jpeg,image/webp"
+                    :max-size="2"
+                    :action="__('Guardar foto')"
+                />
+            @endif
+
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <x-kore::input id="form-name" :label="__('Nombre')" wire:model="form.name" name="form.name" />
                 <x-kore::input id="form-email" :label="__('Email')" type="email" wire:model="form.email" name="form.email" />

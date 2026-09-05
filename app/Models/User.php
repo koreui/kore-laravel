@@ -18,6 +18,8 @@ use Laravel\Sanctum\HasApiTokens;
 use Override;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\OneTimePasswords\Models\Concerns\HasOneTimePasswords;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -40,7 +42,7 @@ use Spatie\Permission\Traits\HasRoles;
     'two_factor_recovery_codes',
     'two_factor_secret',
 ])]
-class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
+class User extends Authenticatable implements HasMedia, MustVerifyEmail, PasskeyUser
 {
     use HasApiTokens;
 
@@ -49,6 +51,18 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 
     use HasOneTimePasswords;
     use HasRoles;
+
+    /**
+     * Archivos colgados del usuario, vía `App\Core\Contracts\FileStore`.
+     *
+     * El contrato y la interfaz se declaran **siempre**, también con
+     * `FILES_ENABLED=false`: son la forma del modelo, no una capacidad. Es lo
+     * mismo que la tabla `media`, que se migra igual con el toggle apagado. Lo
+     * que el toggle apaga es quién guarda y quién sirve archivos, no si este
+     * modelo puede tenerlos.
+     */
+    use InteractsWithMedia;
+
     use LogsActivity;
     use Notifiable;
 
@@ -72,6 +86,22 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             ->logOnly(['name', 'email'])
             ->logOnlyDirty()
             ->dontLogEmptyChanges();
+    }
+
+    /**
+     * La única colección de archivos del boilerplate: el avatar.
+     *
+     * **Sin `singleFile()` a propósito.** Esa opción de media-library borra el
+     * archivo anterior al añadir uno nuevo, y aquí quien decide qué pasa con la
+     * versión anterior es el store: la archiva (`is_current = false`) y la
+     * conserva. Con `singleFile()` el historial no existiría y `files:cleanup`
+     * no tendría nada que purgar, porque el borrado ya habría ocurrido sin que
+     * nadie lo pidiera.
+     */
+    #[Override]
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('avatar');
     }
 
     /**
