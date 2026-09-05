@@ -1,0 +1,12 @@
+{
+    "Código postal": "Postal code",
+    "Colonia": "Neighborhood",
+    "Municipio": "Municipality",
+    "Entidad federativa": "State",
+    "Ciudad": "City",
+    "Elige una colonia": "Choose a neighborhood",
+    "Ese código postal no está en el catálogo.": "That postal code is not in the catalog.",
+    "El código postal son cinco dígitos.": "A postal code is five digits.",
+    "código postal": "postal code",
+    "importe": "amount"
+}

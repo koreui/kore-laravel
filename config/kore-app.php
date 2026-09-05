@@ -78,6 +78,20 @@ return [
         'enabled' => (bool) env('FILES_ENABLED', false),
     ],
 
+    // Utilidades genéricas para México (módulo Mx): catálogo SEPOMEX —código
+    // postal → colonias, municipio y estado— y el monto en letra de un importe.
+    // Opt-in: son datos y convenciones de UN país, así que un boilerplate que
+    // también sirve fuera de México no puede darlos por hechos. Con el toggle
+    // apagado no hay rutas de API, ni componente Livewire registrado, ni el
+    // comando `mx:sepomex:import`: sin el módulo nadie consulta las tablas, así
+    // que importar el catálogo tampoco tiene sentido. Las TABLAS `mx_states` y
+    // `mx_postal_codes` sí se migran siempre, y el espacio de vistas `mx::`
+    // también se registra: un toggle apaga rutas y comportamiento, nunca el
+    // esquema (mismo criterio que devices y files). Ver docs/modules/mx.md.
+    'mx' => [
+        'enabled' => (bool) env('MX_ENABLED', false),
+    ],
+
     'socialite' => [
         'google' => (bool) env('SOCIAL_GOOGLE', false),
         'github' => (bool) env('SOCIAL_GITHUB', false),

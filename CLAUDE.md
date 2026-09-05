@@ -26,6 +26,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - [`docs/modules/devices.md`](docs/modules/devices.md) — dispositivos que consumen la API (toggle `DEVICES_ENABLED`)
 - [`docs/modules/pdf.md`](docs/modules/pdf.md) — generación de PDF con spatie/laravel-pdf y Gotenberg (toggle `PDF_ENABLED`)
 - [`docs/modules/files.md`](docs/modules/files.md) — archivos con versionado por slot y URL firmada (toggle `FILES_ENABLED`)
+- [`docs/modules/mx.md`](docs/modules/mx.md) — utilidades de México: catálogo SEPOMEX e importe en letra (toggle `MX_ENABLED`)
 - [`docs/patterns/README.md`](docs/patterns/README.md) — la **regla de tres**: cuándo una solución sube al boilerplate, y el camino de vuelta de un proyecto hijo al padre
 - [`docs/guides/api.md`](docs/guides/api.md) — contrato de la API REST: envelope, errores, paginación, middleware, limiters y Scramble
 - [`docs/guides/exports.md`](docs/guides/exports.md) — la carpeta `Exports/`: CSV sin dependencias, Excel en el derivado y PDF delegando en el módulo Pdf
@@ -47,6 +48,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - API: contrato en `App\Core\Http\Api` (envelope `{data, meta?}` / `{error:{code,message,details?}}`, R54) + OpenAPI con dedoc/scramble + módulo opcional **Devices** (`DEVICES_ENABLED`): inventario de los clientes que consumen la API, alimentado por los eventos de Auth
 - PDF: módulo opcional **Pdf** (`PDF_ENABLED`) sobre spatie/laravel-pdf con driver **Gotenberg** (servicio aparte); contrato `App\Core\Contracts\PdfRenderer`, tema base con vista previa y las imágenes de la hoja embebidas como `data:` URI
 - Archivos: módulo opcional **Files** (`FILES_ENABLED`) sobre spatie/laravel-medialibrary — contrato `App\Core\Contracts\FileStore`, versionado por slot (reemplazar **archiva**, no borra), URL firmada con el `v=` dentro de la firma, y compresión + subida a S3/R2 opcionales en cola
+- México: módulo opcional **Mx** (`MX_ENABLED`) — catálogo SEPOMEX (código postal → colonias, municipio, entidad) con su importador del CSV oficial, `MontoEnLetras` (importe en letra notarial), dos endpoints públicos de API y un componente Livewire de código postal embebible
 - DTOs: spatie/laravel-data
 - Feature flags: Laravel Pennant
 - Tests: Pest 5 (con arch tests en `tests/Arch/ArchitectureTest.php`)
@@ -190,6 +192,7 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | `DEVICES_ENABLED`       | `false`          | Módulo Devices: rutas `api/v1/devices/*`, listeners de los eventos de token de Auth, alias `devices.version` y `devices:cleanup` |
 | `PDF_ENABLED`           | `false`          | Módulo Pdf: binding de `PdfRenderer`, gate `viewPdfPreview` y rutas `/pdf/preview*`. El motor es un servicio aparte (Gotenberg) |
 | `FILES_ENABLED`         | `false`          | Módulo Files: contrato `FileStore`, ruta firmada `/files/{file}`, listeners de compresión/sync y `files:cleanup` |
+| `MX_ENABLED`            | `false`          | Módulo Mx: rutas `api/v1/mx/*`, componente `mx.postal-code-field` y comando `mx:sepomex:import`. Las tablas se migran igual y nacen vacías |
 | `AUTH_2FA_ENABLED`      | `true`           | 2FA vía Fortify                     |
 | `AUTH_PASSKEYS`         | `true`           | Passkeys (WebAuthn) vía Fortify     |
 | `AUTH_MAGIC_LINKS`      | `true`           | spatie/laravel-one-time-passwords   |
@@ -207,8 +210,9 @@ Sentry se activa con `SENTRY_LARAVEL_DSN` y Pulse con `PULSE_ENABLED`
 `config/kore-api.php` es un archivo aparte y **no** duplica `API_ENABLED`: guarda
 los parámetros del contrato de la API (`version`, `pagination`, `docs.enabled`
 vía `API_DOCS`, `limiters`). El check R11 sólo vigila `kore-app`, porque
-`kore-api` declara cifras y no capacidades. `config/devices.php` y
-`config/files.php` siguen el mismo reparto respecto de sus toggles.
+`kore-api` declara cifras y no capacidades. `config/devices.php`,
+`config/files.php` y `config/mx.php` siguen el mismo reparto respecto de sus
+toggles.
 
 Cuando un toggle está OFF, su `ServiceProvider` debe hacer `return` temprano y no registrar nada: ni rutas, ni middleware, ni comandos de dominio, ni traducciones. Tres excepciones, y sólo tres (R10): el comando que enciende el toggle; el namespace de vistas (`loadViewsFrom`), que sin rutas no expone nada y que Larastan necesita para validar `view('docs::x')`; y ese mismo `loadViewsFrom` cuando el espacio contiene componentes Blade anónimos (`<x-files::slot-upload>`), porque Blade resuelve la etiqueta al **compilar** la plantilla y con el registro dentro del toggle la pantalla de usuarios devolvía un 500 con `FILES_ENABLED=false`.
 
