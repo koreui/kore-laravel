@@ -33,7 +33,7 @@ plataforma es un enum con cuatro casos y el CLI cuenta como dispositivo.
 |----------|---------|--------------|
 | `DEVICES_ENABLED` | `false` | Rutas `api/v1/devices/*`, listeners de los eventos de Auth, policy, alias `devices.version`, comando `devices:cleanup` y su tarea del scheduler |
 
-Es la duodécima clave de `config/kore-app.php` y la lee
+Es una de las catorce claves de `config/kore-app.php` y la lee
 `DevicesModuleServiceProvider` (más `routes/console.php`, para el scheduler, y
 `AppServiceProvider::configureAbout()`).
 

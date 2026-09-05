@@ -61,7 +61,7 @@ lo declaran en `.mcp.json` y `.codex/config.toml`.
 | `kore-list-modules` | inventario de `app/Modules/*`: provider, si está registrado en `bootstrap/providers.php`, carpetas de la lista cerrada (R3), nº de Actions, nº de componentes Livewire, rutas `web`/`api` y nº de tests | «¿existe ya un módulo para facturación?», «¿el módulo Users tiene rutas de API?», «¿cuántas Actions tiene Auth?» |
 | `kore-list-toggles` | los toggles de `config/kore-app.php` con su variable de `.env`, su valor por defecto, su valor actual y **qué archivos los leen**; más las claves que encienden capacidades sin ser toggles (`pulse.enabled`, `sentry.dsn`, `health.secret_token`) | «¿qué apaga `TENANCY_ENABLED` exactamente?», «¿quién lee `kore-app.backup.enabled`?», «¿está Sentry configurado?» |
 | `kore-list-permissions` | roles del sistema (`SystemRole`), roles asignables, la matriz de módulos con sus permisos `{slug}.{accion}`, los permisos de cada rol y —si la base responde— cuáles están sembrados. Todo vía `App\Core\Contracts\AuthorizationCatalog` | «¿qué permiso necesito para el listado de usuarios?», «¿qué le llega al rol `Usuario`?», «¿existe `invoices.approve`?» |
-| `kore-get-rule` | una regla del catálogo por número (`R24`) con su enunciado, enforcement, severidad, válvula y cicatriz; sin parámetro, la tabla resumen de las 53 | «¿qué dice R24?», «¿qué válvula admite R20?», «dame el índice de reglas» |
+| `kore-get-rule` | una regla del catálogo por número (`R24`) con su enunciado, enforcement, severidad, válvula y cicatriz; sin parámetro, la tabla resumen de las 57 | «¿qué dice R24?», «¿qué válvula admite R20?», «dame el índice de reglas» |
 | `kore-arch-check` | ejecuta `php artisan kore:arch:check` (opcionalmente `--rule` o `--files`) y devuelve salida y código de salida | «¿rompí algo con lo que acabo de escribir?» |
 
 Las cinco están anotadas como `readOnlyHint` e `idempotentHint`.
@@ -133,7 +133,7 @@ Es **la fuente de verdad** del proyecto y el doc que más le importa a un agente
 
 Cuatro cosas que hay que saber antes de tocar código:
 
-1. **Las reglas están numeradas `R1..R54` y se citan por número.** En un review,
+1. **Las reglas están numeradas `R1..R57` y se citan por número.** En un review,
    en un mensaje de commit, en un comentario del código o al pedirle algo a la
    AI, «esto rompe R24» es una frase completa. Cada regla lleva su enunciado,
    quién la verifica y con qué comando, la severidad, la válvula que admite, por

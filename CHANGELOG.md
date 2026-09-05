@@ -10,6 +10,297 @@ desde el upstream (`git remote add kore https://github.com/koreui/kore-laravel`)
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-09-04
+
+«Archivos y documentos». Las dos cosas que todo proyecto acaba necesitando y que
+ningún boilerplate traía: guardar ficheros que suben los usuarios y emitir un
+PDF. Los dos proyectos de la cantera las habían resuelto por separado y bien,
+pero atadas a su dominio: Notarium tenía `MediaStorageService` con sus tres jobs
+—versionar por slot, archivar en vez de borrar, comprimir y sincronizar— y
+asper-server tenía `MediaUrl` (el `v` dentro de la firma) y `PdfImagen` /
+`PdfLogo` (por qué una hoja que acaba en PDF no puede enlazar nada). Aquí suben
+como dos contratos en `Core` —`FileStore` y `PdfRenderer`— y dos módulos con
+toggle que los implementan, de forma que un módulo cliente no conoce ni
+media-library ni Gotenberg.
+
+La suite Pest pasa de 693 a **831** tests (2342 assertions) y la E2E de 163 a
+**176** en 19 archivos, `config/kore-app.php` llega a **catorce** claves con
+`PDF_ENABLED` y `FILES_ENABLED`, y el catálogo a `R1..R57` con **50** reglas con
+verificador automático y **7** manuales.
+
+### Añadido
+
+#### Core: los dos contratos
+
+- **`App\Core\Contracts\FileStore`** — `store()`, `current()`, `history()`,
+  `archive()`, `url()` y `delete()`. Quien guarda o enseña un archivo habla con
+  esta interfaz y recibe DTOs; el modelo `Media` del paquete que haya por debajo
+  no sale de `app/Modules/Files` (R5 · R7). `archive()` y `delete()` son
+  operaciones distintas a propósito, y ésa es la regla R56.
+- **`App\Core\Data\FileSlotData`** — el hueco al que pertenece un archivo:
+  `collection`, `key` y `public`. Su `fingerprint()` ordena la `key` antes de
+  hashear con `xxh128`, así que `['a'=>1,'b'=>2]` y `['b'=>2,'a'=>1]` son el
+  mismo slot; es la cicatriz de Notarium, donde el nombre visible contaba como
+  identidad y partía el historial en dos.
+- **`App\Core\Data\StoredFileData`** — el archivo ya guardado. Las fechas viajan
+  en ISO 8601 y no como `CarbonImmutable`, por lo mismo que `ApiTokenData`: un
+  DTO sólo puede depender de datos y de enums de `Core` (R8).
+- **`App\Core\Enums\FileCompressionStatus`** y **`FileSyncStatus`** — los dos
+  ciclos opcionales del módulo, con `pending`, `done`, `skipped` y `failed`.
+- **`App\Core\Concerns\HandlesSlotUploads`** — el trait que pone una subida en un
+  componente Livewire. El actor entra por `slotUploadActorId()` porque en `Core`
+  `auth()` está prohibido (R19), y `authorizeSlotUpload()` es **abstracto** y se
+  llama siempre: un componente que se olvide de autorizar no compila (R23).
+- **`App\Core\Contracts\PdfRenderer`** — `fromView($view, $data, $options):
+  PdfDocumentData`. Cambiar de motor es cambiar un binding.
+- **`App\Core\Data\PdfBrandData`** — la marca del documento: logos **ya
+  embebidos**, líneas de pie, código del documento y texto de la marca de agua.
+  Todo primitivo, porque la hoja la escribe un módulo y la marca la arma otro.
+- **`App\Core\Data\PdfOptionsData`** — papel, orientación, márgenes y nombre del
+  archivo. `null` significa «lo que diga la configuración», no «nada»: si el DTO
+  trajera valores por defecto, cambiar el papel de toda la aplicación dejaría de
+  ser una variable de entorno y pasaría a ser un `grep`.
+- **`App\Core\Data\PdfDocumentData`** — nombre y bytes, con `size()`. No sabe
+  construir una `Response`: eso ataría `App\Core\Data` a `Illuminate\Http` (R8).
+- **`App\Core\Enums\PdfPaperFormat`** (`a4`, `letter`, `legal`) y
+  **`App\Core\Support\PdfImage`** (`embedded()`: una imagen del disco como
+  `data:` URI, `null` si no hay archivo que leer — una hoja sin logo es
+  recuperable, una excepción a mitad de la generación no).
+
+#### Módulo `Files` (`FILES_ENABLED`, apagado por defecto)
+
+- **`Support/MediaFileStore`** — la implementación del contrato sobre
+  spatie/laravel-medialibrary. No escribe nada por su cuenta: compone las
+  Actions y traduce a los DTOs de `Core` (R4).
+- **Cinco Actions**: `FileStoreAction` (versiona, y archiva las anteriores
+  **sólo** tras escribir con éxito), `FileArchiveAction` (idempotente, no mueve
+  la marca original), `FileDeleteAction`, `FileCompressAction` (Ghostscript para
+  los PDF y `Spatie\Image` para las imágenes; sólo sustituye si el resultado
+  pesa menos, y fallar nunca cuesta el archivo) y `FileSyncAction` (staging →
+  destino, con verificación de tamaño antes de borrar la copia local).
+- **`Http/Controllers/FileServeController`** en `GET /files/{file}`, firmada y
+  con throttle, **sin** `auth`: la firma **es** la autorización, y el `v` del
+  fichero va dentro de ella. Sirve por stream desde un disco local y redirige a
+  la URL temporal del bucket si es remoto.
+- **`Events/FileStored`** como frontera pública (R5) y dos listeners
+  `ShouldQueue` —compresión y sincronización, opt-in por config— en vez de una
+  carpeta `Jobs/`, que R3 no admite. Nunca se registran los dos: comprimir
+  cambia el fichero, así que es la compresión quien encadena la subida.
+- **`files:cleanup --days=30 --dry-run`** y su tarea del scheduler a las 04:30,
+  detrás del backup.
+- **`<x-files::slot-upload>`**, componente Blade anónimo que recibe arrays y
+  nunca Eloquent (R30), y `Support/{MediaSlots, SlotPathGenerator}`.
+- **`config/files.php`** — discos, TTL de la URL firmada, throttle, tamaño
+  máximo y los dos ciclos opcionales. No duplica el toggle, igual que
+  `kore-api.php` respecto de `API_ENABLED`.
+- **La tabla `media` se migra siempre**, también con el toggle apagado: un toggle
+  apaga rutas y comportamiento, nunca el esquema.
+- **71 tests Pest** en `app/Modules/Files/Tests/`: `FilesToggleTest` (14),
+  `FileStoreActionTest` (8), `FileSlotDataTest` (6), `FilesConfigTest` (6),
+  `FileArchiveAndDeleteActionsTest` (5), `FileCompressActionTest` (5),
+  `FileListenersTest` (5), `FileServeTest` (5), `MediaFileStoreTest` (5),
+  `SlotPathGeneratorTest` (5), `FileSyncActionTest` (4) y
+  `FilesCleanupCommandTest` (3).
+
+#### Módulo `Pdf` (`PDF_ENABLED`, apagado por defecto)
+
+- **`Support/GotenbergPdfRenderer`** — el **único** sitio del proyecto que conoce
+  spatie/laravel-pdf. Traduce `PdfOptionsData` a llamadas del builder y resuelve
+  contra `kore-pdf` lo que el documento dejó en `null`.
+- **`Actions/PdfRenderAction`** — el caso de uso: mete `brand` en los datos de la
+  vista para que el tema base lo encuentre sin que cada módulo se acuerde, y fija
+  `paged = false`.
+- **`Support/{PdfBrand, PdfLogo, PdfSample}`** — la marca armada desde
+  `config/kore-pdf.php` (vive en el módulo y no en `Core` porque **lee
+  configuración**, y un DTO no puede: R8 · R19).
+- **El tema base `pdf::layouts.base`** con `.seccion`, `.campo`, `.tabla`,
+  `.nota`, `.salto-antes` y `.salto-despues`; el cromo (`pdf::partials.chrome`)
+  usa `position: fixed` para el pie y la marca de agua y los **margin boxes de
+  `@page`** para el código del documento y la numeración, en vez de
+  `->headerView()` / `->footerView()`, que el convertidor compone aparte y
+  dejarían la vista previa mintiendo.
+- **Vista previa** en `/pdf/preview` (HTML) y `/pdf/preview/download` (PDF), la
+  **misma vista**, detrás de `auth` y del gate `viewPdfPreview` (superadmin y
+  administrador). `?watermark=1` la sella.
+- **`config/kore-pdf.php`** (la marca: logos, pie, marca de agua, papel y
+  márgenes) separado de **`config/laravel-pdf.php`** (del paquete: driver y
+  `GOTENBERG_URL`). Ninguno lee al otro (R12).
+- **El módulo no tiene tablas**: los documentos se generan al vuelo.
+- **29 tests Pest**: `PdfToggleTest` (9), `PdfPreviewTest` (8), `PdfBrandTest`
+  (8) y `PdfRenderActionTest` (4). Ninguno habla con Gotenberg: `Pdf::fake()`
+  sustituye al builder.
+
+#### El avatar de Users, consumidor de referencia
+
+- **`app/Modules/Users`** estrena el avatar sin importar una sola clase de
+  `App\Modules\Files` (R5): sólo `App\Core\Contracts\FileStore` y sus DTOs.
+  `FormComponent` usa `HandlesSlotUploads` y autoriza con la misma policy que
+  gobierna el formulario, en cada subida y en cada archivado (R23); `TableUsers`
+  añade la columna sólo con el toggle encendido, con `->with('media')` y un test
+  que cuenta las consultas para que siga sin haber N+1.
+- **Spec de Playwright** `tests/e2e/specs/users/avatar.spec.ts` con un PNG de 1×1
+  de 69 bytes generado para el caso —no copiado de ningún sitio, así no arrastra
+  licencia ni metadatos—. `.env.e2e` enciende `FILES_ENABLED` para que la suite
+  lo ejercite.
+
+#### Reglas, documentación e infraestructura
+
+- **R55 · toda URL de un archivo privado sale de `FileStore::url()`.** Fuera de
+  `app/Modules/Files/` nadie escribe `Storage::url()`, `Storage::temporaryUrl()`,
+  `temporaryUrl()`, `getUrl()`, `getTemporaryUrl()` ni `getFullUrl()`. Check
+  textual `checkFileUrlsComeFromStore` en `kore:arch:check`; válvula
+  `arch-accepted`.
+- **R56 · los archivos no se borran desde la interfaz: se archivan.**
+  `disallowedMethodCalls` sobre `App\Core\Contracts\FileStore::delete()`
+  (`kore.r56`), permitido sólo en el módulo Files, en los `Console/` y en los
+  `Listeners/` de cualquier módulo, más un arch test que barre los componentes
+  Livewire que consumen el contrato; válvula `arch-accepted`.
+- **R57 · las imágenes y el CSS de una hoja PDF van embebidos, nunca
+  enlazados.** Check textual `checkPdfSheetsAreSelfContained` sobre las vistas
+  del módulo Pdf y sobre cualquier `pdf/` dentro de las vistas de otro módulo;
+  sin válvula.
+- **`docs/modules/files.md`**, **`docs/modules/pdf.md`** y
+  **`docs/guides/exports.md`** (la carpeta `Exports/`: CSV sin dependencias,
+  Excel en el derivado y PDF delegando en el módulo Pdf), los tres enlazados en
+  `docs/README.md`. Filas nuevas en `docs/architecture/toggles.md` y sección
+  «PDF con Gotenberg» en `docs/ops/deployment.md`.
+- **Servicio `gotenberg`** en `docker-compose.prod.yml`, bajo `profiles: [pdf]`,
+  con `--api-timeout=60s`, healthcheck contra su `/health` y **sin puertos
+  publicados**: Gotenberg convierte el HTML que le manden, así que expuesto es un
+  renderizador de páginas gratis para cualquiera.
+- **Paquetes nuevos** (versiones exactas de `composer.lock`):
+  `spatie/laravel-medialibrary` 11.23.7, `spatie/image` 3.9.6,
+  `league/flysystem-aws-s3-v3` 3.35.3, `spatie/laravel-pdf` 2.13.1 y
+  `gotenberg/gotenberg-php` v2.25.0.
+
+### Cambiado
+
+- **`App\Models\User` implementa `HasMedia`** y usa `InteractsWithMedia`
+  **siempre**, también con `FILES_ENABLED=false`: es la forma del modelo, no una
+  capacidad, igual que la tabla `media` se migra igual. La colección `avatar` va
+  **sin `singleFile()`** a propósito —esa opción borra el archivo anterior, y
+  aquí quien decide qué pasa con él es el store, que lo archiva (R56)—.
+- **`config/kore-app.php` pasa de doce a catorce claves** con `pdf.enabled` y
+  `files.enabled`, y con ellas `KoreMcpTest` (`kore-list-toggles`), la tabla de
+  `docs/architecture/toggles.md`, la de `README.md` y el `about` de
+  `AppServiceProvider`.
+- **R10 gana una tercera excepción**: el espacio de vistas que contiene
+  componentes Blade anónimos se registra siempre. Blade resuelve la etiqueta
+  `<x-files::slot-upload>` **al compilar** la plantilla, no al ejecutarla, así
+  que un `@if` sobre el toggle no evita nada; con el `loadViewsFrom` detrás del
+  early return, la pantalla de edición de usuarios devolvía un 500 en toda
+  instalación con `FILES_ENABLED=false`. Está contado una sola vez, en
+  `docs/architecture/toggles.md` y en el docblock de
+  `FilesModuleServiceProvider`.
+- **`config/media-library.php` y `config/laravel-pdf.php` quedan publicados.**
+  El primero está tocado en tres sitios (`disk_name` lee `env('FILES_DISK')`,
+  `path_generator` es el del módulo y `max_file_size` sube a 50 MB) y el resto es
+  el archivo del paquete tal cual, para que un `diff -w` contra `vendor/` enseñe
+  sólo lo que cambia el paquete. El segundo está publicado **a medias** a
+  propósito: `mergeConfigFrom()` es un `array_merge` de primer nivel, así que las
+  claves que no aparecen las sigue poniendo el paquete — con la contrapartida de
+  que una clave nueva **dentro de** `gotenberg` no llegaría.
+- **`phpunit.xml` fuerza `PDF_ENABLED=false`**, por lo mismo que `DOCS_ENABLED`:
+  si el desarrollador lo tuviera encendido en su `.env`, los tests del caso
+  «toggle apagado» fallarían sólo en su máquina.
+- **El pipeline se remidió** (R41): `composer ci` pasa de 16 s a 31 s y el
+  pre-push de 5 s a 7 s, con la suite ya en 831 tests. Las cifras de
+  `docs/quality/pipeline.md`, `docs/quality/e2e.md`, `docs/architecture/rules.md`
+  y `tests/e2e/FLUJOS.md` se recontaron.
+- **`docs/quality/pipeline.md` avisa de los hooks en un `git worktree`**: no sólo
+  falla `git-hooks:register`, es que el `.git/hooks/pre-commit` instalado es el
+  del clon principal e invoca **su** `artisan` con rutas relativas, así que Pint
+  recibe rutas que allí no existen.
+
+### Nota de migración para derivados
+
+1. **`composer update`**. Entran cinco paquetes nuevos
+   (`spatie/laravel-medialibrary`, `spatie/image`,
+   `league/flysystem-aws-s3-v3`, `spatie/laravel-pdf`, `gotenberg/gotenberg-php`)
+   y ninguno se activa solo: los dos módulos vienen apagados.
+
+2. **`php artisan migrate`**. Hay **una migración nueva**
+   (`app/Modules/Files/Database/Migrations/2026_09_04_100000_create_media_table.php`)
+   y **se aplica aunque `FILES_ENABLED` esté en `false`**, igual que la de
+   `devices` en la 2.2.0: un toggle apaga rutas y comportamiento, nunca el
+   esquema. Su `down()` hace `dropIfExists` (R29).
+
+   > **Si ya usabas spatie/laravel-medialibrary por tu cuenta, no la apliques
+   > tal cual**: ya tienes una tabla `media`. Compara las dos migraciones y
+   > quédate con la tuya; lo único que el módulo necesita es que la tabla tenga
+   > `custom_properties`, donde guarda el slot (`slot_fingerprint`,
+   > `slot_key`, `version`, `is_current`, `replaced_at`, `uploaded_by` y los dos
+   > estados de compresión y sincronización). Marca la migración del boilerplate
+   > como ya ejecutada en tu tabla `migrations` para que no vuelva a intentarlo.
+
+3. **Variables nuevas de `.env`** (todas opcionales; `.env.example` las trae con
+   su explicación): `PDF_ENABLED=false`, `GOTENBERG_URL`, `PDF_LOGO`,
+   `PDF_SECONDARY_LOGO`, `PDF_FORMAT`, `PDF_WATERMARK`, `FILES_ENABLED=false`,
+   `FILES_DISK`, `FILES_PUBLIC_DISK`, `FILES_STAGING_DISK`, `FILES_COMPRESSION`
+   y `FILES_SYNC`.
+
+4. **Cuatro archivos nuevos en `config/`**: `files.php` y `kore-pdf.php` (del
+   boilerplate) y `media-library.php` y `laravel-pdf.php` (publicados de sus
+   paquetes). Si ya tenías publicado alguno de los dos últimos, reconcilia a
+   mano: en `media-library.php`, `disk_name`, `path_generator` y
+   `max_file_size`; en `laravel-pdf.php`, el bloque `gotenberg`.
+
+   > ⚠️ `media-library.disk_name` lee `env('FILES_DISK')` y **no**
+   > `config('files.disk')`, porque los `config/*.php` se cargan en orden
+   > alfabético y `files` todavía no existe cuando `media-library` se evalúa
+   > (R12). Que las dos cifras no se separen lo vigila `FilesConfigTest`.
+
+5. **`App\Models\User` implementa `HasMedia`.** Si mantienes tu propio `User`,
+   añade `implements HasMedia` y `use InteractsWithMedia`, y define la colección
+   en `registerMediaCollections()`. Hazlo aunque no vayas a encender el toggle:
+   la interfaz es la forma del modelo, y sin ella el día que lo enciendas el
+   contrato no acepta tu modelo.
+
+6. **Para adoptar `FileStore` en un modelo propio**, tres pasos y ninguno toca
+   el módulo Files:
+
+   ```php
+   final class Expediente extends Model implements HasMedia
+   {
+       use InteractsWithMedia;
+   }
+
+   // En el componente Livewire, con la policy del dueño delante (R23):
+   $archivo = $this->files->store(
+       owner: $expediente,
+       file: $this->upload,
+       slot: new FileSlotData(collection: 'documentos', key: ['tipo' => 'escritura']),
+       uploadedBy: $actorId,
+   );
+
+   // Y para enseñarlo, siempre por el contrato (R55):
+   $url = $this->files->url($archivo->id);
+   ```
+
+   Si la pantalla sube archivos, usa `App\Core\Concerns\HandlesSlotUploads` en
+   vez de escribir el ciclo a mano: trae la validación, el archivado y el
+   `authorizeSlotUpload()` obligatorio.
+
+7. **Gotenberg en producción.** `PDF_ENABLED=true` sin un Gotenberg levantado no
+   falla al desplegar: falla la primera vez que alguien pide un documento. El
+   servicio va en el perfil `pdf` de `docker-compose.prod.yml`
+   (`docker compose -f docker-compose.prod.yml --profile pdf up -d`) y en el
+   `.env` `GOTENBERG_URL=http://gotenberg:3000`. En local basta
+   `docker run --rm -p 127.0.0.1:3000:3000 gotenberg/gotenberg:8`.
+
+8. **Los checks nuevos pueden ponerte código existente en rojo**, y es el punto
+   de la release:
+   - **R55** marcará cada `Storage::url()`, `temporaryUrl()` o `getUrl()` que
+     hoy tengas fuera de `app/Modules/Files/`. Lo correcto es moverlos al
+     contrato; si un módulo tuyo sirve assets **públicos** sin dueño que
+     autorizar, ése es el caso de la válvula `arch-accepted` — y la pone una
+     persona, no un agente (R44).
+   - **R57** marcará cualquier `@vite`, hoja de estilos enlazada, `asset()` o
+     `src` absoluto en una vista bajo un `pdf/`. Ésta **no tiene válvula**: si
+     el recurso no va embebido, el PDF sale roto en silencio.
+   - **R56** sólo salta si ya consumías `FileStore`, así que en un derivado que
+     viene de la 2.2.0 no puede fallar todavía.
+
 ## [2.2.0] - 2026-09-03
 
 «API con contrato». Hasta la v2.1, `API_ENABLED` encendía una sola ruta que
@@ -1936,7 +2227,8 @@ scaffold, cifras inventadas en los docs).
   el paquete cambiara. Republicarlas es un `vendor:publish` cuando de verdad
   haya que personalizarlas.
 
-[Unreleased]: https://github.com/koreui/kore-laravel/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/koreui/kore-laravel/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/koreui/kore-laravel/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/koreui/kore-laravel/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/koreui/kore-laravel/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/koreui/kore-laravel/compare/v1.4.1...v2.0.0

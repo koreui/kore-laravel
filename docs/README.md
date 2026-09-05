@@ -6,7 +6,7 @@ Hub central de documentación. Las reglas vivas y resúmenes operativos están e
 
 ### Arquitectura
 
-- [`architecture/rules.md`](architecture/rules.md) — **catálogo R1–R54**: cada regla con su enforcement, su válvula de escape y la cicatriz que la originó
+- [`architecture/rules.md`](architecture/rules.md) — **catálogo R1–R57**: cada regla con su enforcement, su válvula de escape y la cicatriz que la originó
 - [`architecture/overview.md`](architecture/overview.md) — stack, capas y decisiones
 - [`architecture/module-pattern.md`](architecture/module-pattern.md) — cómo se construye un módulo (y qué carpetas puede tener)
 - [`architecture/toggles.md`](architecture/toggles.md) — `config/kore-app.php`

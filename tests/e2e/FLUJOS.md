@@ -21,7 +21,7 @@ Lo que la suite **encuentra** va a [`HALLAZGOS.md`](./HALLAZGOS.md).
 | ⬜ | Sin cubrir todavía |
 | 🔒 | No se puede probar aquí (depende de un servicio externo o de otro entorno) |
 
-**Cifras de la suite**: 163 tests en 18 archivos (4 de ellos son el proyecto
+**Cifras de la suite**: 176 tests en 19 archivos (4 de ellos son el proyecto
 `setup`, que abre una sesión por rol). 104 salen generados del mapa de acceso.
 
 ---

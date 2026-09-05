@@ -8,7 +8,7 @@ guardia de errores monta en todos los tests: si la pantalla lanza una
 excepción de JavaScript o el servidor devuelve 500, el test falla aunque su
 aserción haya pasado.** Cada pantalla nueva se declara en
 `tests/e2e/fixtures/access-map.ts`, y con eso queda cubierta por RBAC y por el
-smoke sin escribir un test. Hoy: 163 tests en 18 archivos, 104 de ellos
+smoke sin escribir un test. Hoy: 176 tests en 19 archivos, 104 de ellos
 generados desde el mapa.
 
 ## Por qué Playwright standalone y no el browser testing de Pest
