@@ -109,6 +109,10 @@ final class Module extends Model
             'settings' => [
                 ['value' => 'settings.manage', 'label' => 'Administrar Ajustes'],
             ],
+
+            'webhooks' => [
+                ['value' => 'webhooks.manage', 'label' => 'Gestionar webhooks'],
+            ],
         ];
     }
 }

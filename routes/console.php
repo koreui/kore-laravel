@@ -171,6 +171,35 @@ if ((bool) config('kore-app.notifications.enabled')) {
         ->sentryMonitor();
 }
 
+// Salida de webhooks (módulo Webhooks): sólo con WEBHOOKS_ENABLED=true, porque
+// con el toggle apagado los comandos `webhooks:*` ni siquiera están registrados
+// —y `Schedule::command()` no falla aunque el comando no exista, así que sin
+// estos `if` el scheduler intentaría correr comandos inexistentes—.
+//
+// `webhooks:dispatch` va cada minuto y sin solapamiento: es la red de seguridad
+// del outbox, no el camino normal. En el camino normal la entrega sale por el
+// listener en cola nada más confirmarse la transacción que la publicó, y esta
+// pasada no encuentra nada; existe para los reintentos con backoff y para el
+// día que los workers estuvieron parados.
+//
+// `webhooks:prune` va a las 04:45, detrás del backup de las 02:00 y de las dos
+// purgas anteriores: si se lleva algo que hacía falta, el zip de la noche
+// todavía lo tiene. Los 30 días se escriben AQUÍ y no en el config, porque
+// borrar es destructivo y la cifra tiene que verse en la línea que la aplica.
+if ((bool) config('kore-app.webhooks.enabled')) {
+    Schedule::command('webhooks:dispatch')
+        ->everyMinute()
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->sentryMonitor();
+
+    Schedule::command('webhooks:prune --days=30')
+        ->dailyAt('04:45')
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->sentryMonitor();
+}
+
 // `model:prune` se deja fuera a propósito: hoy ningún modelo del boilerplate
 // usa el trait Prunable / MassPrunable, y el comando aborta si no encuentra
 // ninguno. Descoméntalo cuando añadas el primero.

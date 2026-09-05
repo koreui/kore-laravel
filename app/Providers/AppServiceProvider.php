@@ -236,6 +236,9 @@ final class AppServiceProvider extends ServiceProvider
                 ? 'enabled (disco '.config('files.disk').')'
                 : 'disabled',
             'México' => fn (): string => $state(config('kore-app.mx.enabled')),
+            'Webhooks' => fn (): string => config('kore-app.webhooks.enabled')
+                ? 'enabled ('.count((array) config('kore-webhooks.events', [])).' eventos en el catálogo)'
+                : 'disabled',
             'Backup' => fn (): string => config('kore-app.backup.enabled')
                 ? 'enabled'.(config('backup.backup.password') ? ' (zip cifrado)' : ' (zip SIN cifrar)')
                 : 'disabled',

@@ -25,6 +25,7 @@ Hub central de documentación. Las reglas vivas y resúmenes operativos están e
 - [`modules/pdf.md`](modules/pdf.md) — generación de PDF con spatie/laravel-pdf y Gotenberg, detrás de `PDF_ENABLED`
 - [`modules/platform.md`](modules/platform.md) — ajustes en base de datos, series de folio y features por instalación. **Sin toggle: siempre encendido**
 - [`modules/mx.md`](modules/mx.md) — utilidades de México (catálogo SEPOMEX e importe en letra), detrás de `MX_ENABLED`
+- [`modules/webhooks.md`](modules/webhooks.md) — webhooks salientes con firma HMAC y outbox con reintentos, detrás de `WEBHOOKS_ENABLED`
 
 ### Guías
 

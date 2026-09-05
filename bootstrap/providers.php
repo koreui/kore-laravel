@@ -17,5 +17,6 @@ return [
     App\Modules\Notifications\Providers\NotificationsModuleServiceProvider::class,
     App\Modules\Platform\Providers\PlatformModuleServiceProvider::class,
     App\Modules\Mx\Providers\MxModuleServiceProvider::class,
+    App\Modules\Webhooks\Providers\WebhooksModuleServiceProvider::class,
     App\Modules\E2E\Providers\E2EModuleServiceProvider::class,
 ];

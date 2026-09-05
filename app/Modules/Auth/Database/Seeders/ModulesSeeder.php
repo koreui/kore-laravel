@@ -78,6 +78,22 @@ final class ModulesSeeder extends Seeder
                 'roles' => [Role::ADMIN],
                 'active' => true,
             ],
+
+            // Webhooks no lleva CRUD de cuatro sino un único permiso especial,
+            // declarado en Module::specialPermissions(): ver la lista de
+            // endpoints ya enseña a qué sistemas se les cuenta lo que pasa
+            // aquí dentro, y quien la ve puede leer el payload de cada
+            // entrega. No hay un «sólo lectura» menos sensible que el resto.
+            //
+            // El módulo se siembra SIEMPRE, también con WEBHOOKS_ENABLED=false:
+            // un toggle apaga rutas y comportamiento, no el catálogo de
+            // permisos — igual que la migración de sus tablas.
+            [
+                'name' => 'Webhooks',
+                'slug' => 'webhooks',
+                'roles' => [Role::ADMIN],
+                'active' => true,
+            ],
         ];
 
         foreach ($modules as $module) {

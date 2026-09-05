@@ -15,6 +15,7 @@
 | `FILES_ENABLED`        | `false`       | Módulo Files: binding de `App\Core\Contracts\FileStore`, ruta firmada `files.serve`, listeners de compresión/sincronización y `files:cleanup` en el scheduler. **La tabla `media` y el espacio de vistas `files::` se registran igual** con el toggle apagado (ver abajo) | `FilesModuleServiceProvider`, `routes/console.php`, `AppServiceProvider::configureAbout()`, `Users\Http\Livewire\{FormComponent, TableUsers}` |
 | `NOTIFICATIONS_ENABLED` | `false`       | Módulo Notifications: binding de `App\Core\Contracts\Notifier`, campana del encabezado, rutas `/notifications*` y `api/v1/me/notifications*`, listener de `ApiTokenIssued` y `notifications:prune` en el scheduler. **Las tablas `notifications` y `notification_preferences` y el espacio de vistas `notifications::` se registran igual** con el toggle apagado | `NotificationsModuleServiceProvider`, `routes/console.php`, `AppServiceProvider::configureAbout()`, `resources/views/components/layouts/app.blade.php` |
 | `MX_ENABLED`           | `false`       | Módulo Mx (utilidades de México): rutas `api/v1/mx/*`, componente Livewire `mx.postal-code-field` y comando `mx:sepomex:import`. **Las tablas `mx_states` y `mx_postal_codes` y el espacio de vistas `mx::` se registran igual** con el toggle apagado, y las tablas nacen vacías: el catálogo de SEPOMEX es un dato de un tercero y no viaja en el repositorio | `MxModuleServiceProvider`, `AppServiceProvider::configureAbout()` |
+| `WEBHOOKS_ENABLED`     | `false`       | Módulo Webhooks: binding de `App\Core\Contracts\WebhookPublisher`, pantallas `/webhooks`, alias `webhook.signed`, listeners del outbox y de `ApiTokenIssued`, y `webhooks:dispatch` / `webhooks:prune` en el scheduler. **Las tablas `webhook_endpoints` y `webhook_deliveries` y el espacio de vistas `webhooks::` se registran igual** con el toggle apagado | `WebhooksModuleServiceProvider`, `routes/console.php`, `AppServiceProvider::configureAbout()`, `resources/views/components/layouts/app.blade.php` |
 | `E2E_HARNESS`          | `false`       | Harness de la suite E2E: rutas `/__e2e__/*` (módulo E2E). Sólo lo enciende `.env.e2e`, y aun así hacen falta el entorno y una base de pruebas | `E2EModuleServiceProvider` vía `HarnessGuard` |
 | `AUTH_2FA_ENABLED`     | `true`        | Fortify `twoFactorAuthentication` (rutas + pantalla)| `FortifyServiceProvider::register()` |
 | `AUTH_MAGIC_LINKS`     | `true`        | OTP via spatie/laravel-one-time-passwords           | `Auth/Routes/web.php`, `login.blade.php` |
@@ -94,7 +95,10 @@ lista de toggles.
 
 El check R11 sólo mira `kore-app`, a propósito: `kore-api` no declara
 capacidades, declara parámetros, y un parámetro sin lector no miente sobre lo
-que la aplicación hace. Ver [`../guides/api.md`](../guides/api.md).
+que la aplicación hace. Ver [`../guides/api.md`](../guides/api.md). `config/kore-webhooks.php`
+sigue el mismo reparto respecto de `WEBHOOKS_ENABLED`: guarda los timeouts, el
+backoff, la retención, la ventana de la firma y el catálogo de eventos
+publicables. Ver [`../modules/webhooks.md`](../modules/webhooks.md).
 
 `config/devices.php`, `config/files.php` y `config/kore-notifications.php`
 siguen el mismo reparto respecto de sus módulos: el toggle vive en `kore-app` y

@@ -35,7 +35,7 @@ app/Modules/Users/
 ```
 
 Ejemplos: `users.view`, `users.create`, `users.edit`, `users.delete`,
-`dashboard.view`, `invitations.manage`.
+`dashboard.view`, `invitations.manage`, `webhooks.manage`.
 
 Por default cada `Module` genera 4 permisos (view/create/edit/delete). Los módulos con permisos **no-CRUD** se declaran en `Module::specialPermissions()`:
 
@@ -48,6 +48,9 @@ private function specialPermissions(): array
         ],
         'invitations' => [
             ['value' => 'invitations.manage', 'label' => 'Gestionar Invitaciones'],
+        ],
+        'webhooks' => [
+            ['value' => 'webhooks.manage', 'label' => 'Gestionar webhooks'],
         ],
         // 'mi-modulo' => [...] — agrega aquí los que necesiten permisos custom
     ];
@@ -69,6 +72,16 @@ producción exigiría además acordarse de volver a sembrar permisos para que
 alguien pudiera entrar a la pantalla, justo cuando ya hay tráfico. Lo que el
 toggle apaga es la pantalla, no quién podría verla.
 Ver [`../modules/auth.md`](../modules/auth.md#invitaciones-y-estado-de-cuenta).
+
+**`webhooks.manage` es un permiso y no cuatro**, y conviene entender por qué
+antes de copiar el patrón: ver la lista de endpoints ya enseña a qué sistemas se
+les está contando lo que pasa dentro de la instalación, y quien la ve puede leer
+el payload de cada entrega. No hay un «sólo lectura» que sea menos sensible que
+el resto: o se administra la integración, o no se entra. Lo lleva el rol
+Administrador (y el superadmin por su `Gate::before`). El módulo se siembra
+siempre, también con `WEBHOOKS_ENABLED=false`: un toggle apaga rutas y
+comportamiento, no el catálogo de permisos. Ver
+[`../modules/webhooks.md`](../modules/webhooks.md).
 
 ## Roles que vienen con el boilerplate
 

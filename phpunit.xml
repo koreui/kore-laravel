@@ -113,6 +113,12 @@
             withEnvironment() (tests/Pest.php).
         -->
         <env name="MX_ENABLED" value="false" force="true"/>
+        <!--
+            El módulo Webhooks va apagado por defecto en la suite, por lo mismo
+            que los anteriores: los tests que lo necesitan lo encienden con
+            withEnvironment() (tests/Pest.php).
+        -->
+        <env name="WEBHOOKS_ENABLED" value="false" force="true"/>
         <env name="PULSE_ENABLED" value="false" force="true"/>
         <env name="TELESCOPE_ENABLED" value="false" force="true"/>
         <env name="NIGHTWATCH_ENABLED" value="false" force="true"/>

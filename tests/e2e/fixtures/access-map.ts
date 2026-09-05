@@ -453,6 +453,46 @@ export const RUTAS: RutaAcceso[] = [
             superadmin: 404,
         },
     },
+    {
+        /*
+         * Las dos pantallas del módulo Webhooks van con `WEBHOOKS_ENABLED=true`
+         * en `.env.e2e`, al revés que las de Pdf: aquí no hay ningún servicio
+         * externo que levantar, y encenderlas es lo que hace que el 403 de los
+         * perfiles sin `webhooks.manage` esté probado de verdad.
+         *
+         * Ese permiso no lo tiene ninguna de las tres cuentas con rol Usuario
+         * del `E2eSeeder` (es especial, no CRUD, y sólo lo lleva el rol
+         * Administrador, que el seeder no siembra), así que sólo entra el
+         * superadmin por su `Gate::before`.
+         *
+         * `/webhooks/{endpoint}` y `/webhooks/{endpoint}/edit` quedan fuera:
+         * llevan parámetro y no caben en un mapa de literales. Su autorización
+         * la cubre `specs/webhooks/crud.spec.ts`, que crea su propio endpoint y
+         * entra por la fila de la tabla.
+         */
+        path: '/webhooks',
+        nombre: 'Webhooks · listado',
+        heading: 'Webhooks',
+        roles: {
+            invitado: 'login',
+            member: 403,
+            viewer: 403,
+            editor: 403,
+            superadmin: 200,
+        },
+    },
+    {
+        path: '/webhooks/create',
+        nombre: 'Webhooks · alta',
+        heading: 'Nuevo endpoint',
+        roles: {
+            invitado: 'login',
+            member: 403,
+            viewer: 403,
+            editor: 403,
+            superadmin: 200,
+        },
+    },
 ];
 
 /** El resultado que este perfil debe obtener en esta ruta. */

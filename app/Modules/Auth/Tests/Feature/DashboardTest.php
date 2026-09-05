@@ -39,9 +39,9 @@ it('renders the dashboard with the three real counters', function (): void {
         $response->assertSee('>'.$count.'</div>', escape: false);
     }
 
-    // Los cinco que siembra ModulesSeeder: dashboard, users, roles,
-    // invitations y settings. El inactivo de arriba no entra.
-    expect($expected[2])->toBe(5);
+    // Los seis que siembra ModulesSeeder: dashboard, users, roles,
+    // invitations, settings y webhooks. El inactivo de arriba no entra.
+    expect($expected[2])->toBe(6);
 });
 
 it('exposes the counters as DTOs, not Eloquent', function (): void {
