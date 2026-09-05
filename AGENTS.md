@@ -18,7 +18,7 @@ El desarrollador trabaja en español. Comunícate en español.
 
 Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta `docs/`:
 
-- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **catálogo R1–R54**: cada regla con su enforcement, su válvula y su cicatriz
+- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **catálogo R1–R57**: cada regla con su enforcement, su válvula y su cicatriz
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) — stack y patrón modular monolith
 - [`docs/architecture/module-pattern.md`](docs/architecture/module-pattern.md) — cómo se construye un módulo (lista cerrada de carpetas)
 - [`docs/architecture/toggles.md`](docs/architecture/toggles.md) — `config/kore-app.php`
@@ -125,7 +125,7 @@ app/
 
 ### Reglas de oro (resumen — el catálogo completo es [`docs/architecture/rules.md`](docs/architecture/rules.md))
 
-Las reglas están numeradas `R1..R54` para poder citarlas en un review, en un
+Las reglas están numeradas `R1..R57` para poder citarlas en un review, en un
 commit o en un comentario. Aquí va el resumen; el detalle —enforcement,
 severidad, por qué existe y la cicatriz que la originó— está en el catálogo.
 
@@ -146,6 +146,7 @@ severidad, por qué existe y la cicatriz que la originó— está en el catálog
 15. **R49 · R50** — los skills viven en `.agents/skills/` y `.claude/skills/` son symlinks relativos, uno por skill; y `AGENTS.md` no se edita: se genera desde `CLAUDE.md` con `php artisan kore:agents:sync`.
 16. **R51 · R52 · R53** — el harness E2E sólo vive si coinciden flag, entorno y base de pruebas (los tres, no uno); toda ruta `GET` con nombre entra en `tests/e2e/fixtures/access-map.ts` con los roles que la abren; y al modificar una columna con `->change()` se repiten **todos** sus atributos previos o se pierden en silencio (usa el skill `kore-migration-change`).
 17. **R54** — toda respuesta de la API pasa por el contrato de Core: los controllers `Http/Controllers/Api/` extienden `ApiController`, los resources `BaseApiResource`, los requests `BaseApiRequest`, y los errores los rinde `ApiExceptionRenderer` (`{error:{code,message,details?}}`). Ver [`docs/guides/api.md`](docs/guides/api.md).
+18. **R55 · R56 · R57** — la URL de un archivo privado sale siempre de `App\Core\Contracts\FileStore::url()` (la firma **es** la autorización y el `v` que invalida la caché va dentro de ella), nunca de un `Storage::url()` ni de un `getUrl()` a mano; desde una pantalla los archivos se **archivan** (`archive()`, reversible) y `delete()` queda para `files:cleanup` y para el listener que limpia al borrarse el dueño; y toda hoja que acabe en PDF lleva el CSS en línea y las imágenes como `data:` URI, porque Gotenberg convierte desde otro contenedor y lo enlazado sale roto en silencio. Ver [`docs/modules/files.md`](docs/modules/files.md) y [`docs/modules/pdf.md`](docs/modules/pdf.md).
 
 ### Válvulas de escape
 
@@ -215,7 +216,7 @@ vía `API_DOCS`, `limiters`). El check R11 sólo vigila `kore-app`, porque
 `kore-api` declara cifras y no capacidades. `config/devices.php` y
 `config/files.php` siguen el mismo reparto respecto de sus toggles.
 
-Cuando un toggle está OFF, su `ServiceProvider` debe hacer `return` temprano y no registrar nada: ni rutas, ni middleware, ni comandos de dominio, ni traducciones. Dos excepciones, y sólo dos (R10): el comando que enciende el toggle, y el namespace de vistas (`loadViewsFrom`), que sin rutas no expone nada y que Larastan necesita para validar `view('docs::x')`.
+Cuando un toggle está OFF, su `ServiceProvider` debe hacer `return` temprano y no registrar nada: ni rutas, ni middleware, ni comandos de dominio, ni traducciones. Tres excepciones, y sólo tres (R10): el comando que enciende el toggle; el namespace de vistas (`loadViewsFrom`), que sin rutas no expone nada y que Larastan necesita para validar `view('docs::x')`; y ese mismo `loadViewsFrom` cuando el espacio contiene componentes Blade anónimos (`<x-files::slot-upload>`), porque Blade resuelve la etiqueta al **compilar** la plantilla y con el registro dentro del toggle la pantalla de usuarios devolvía un 500 con `FILES_ENABLED=false`.
 
 ⚠️ Un `config/*.php` no puede leer otro: se cargan en orden alfabético. Si un
 paquete necesita reaccionar a `kore-app`, múta su config desde el `register()`
@@ -274,7 +275,7 @@ composer e2e                        # suite E2E (ver docs/quality/e2e.md)
 # Calidad
 composer lint                       # Pint
 composer analyse                    # Larastan nivel 8 + PHPat + disallowed-calls
-composer arch                       # kore:arch:check (checks textuales: R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50, R52)
+composer arch                       # kore:arch:check (checks textuales: R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50, R52, R55, R57)
 composer refactor                   # Rector
 composer ci                         # todo lo anterior
 
@@ -319,6 +320,8 @@ php artisan mcp:inspector kore      # inspector oficial, para depurar el server 
 - ❌ No copiar un skill dentro de `.claude/skills/`: la carpeta real es `.agents/skills/` y ahí sólo van symlinks relativos (R49).
 - ❌ No construir a mano el JSON de una respuesta de API: `respond()` / `respondNoContent()` de `ApiController` (R54).
 - ❌ No extender `FormRequest` ni `JsonResource` directamente en un módulo para la API: `BaseApiRequest` y `BaseApiResource` (R54).
+- ❌ No construir a mano la URL de un archivo (`Storage::url()`, `getTemporaryUrl()`, `getFullUrl()`): sale de `App\Core\Contracts\FileStore::url()` (R55). Y desde una pantalla los archivos se archivan, no se borran (R56).
+- ❌ No enlazar CSS ni imágenes en una hoja que acabe en PDF (`@vite`, hoja de estilos enlazada, `asset()`, `src` absoluto): van embebidos (R57).
 - ❌ No construir a mano la URL de un archivo privado ni exponer su ruta de disco: sale de `FileStore::url()`, que la firma con el `v=` dentro.
 - ❌ No borrar archivos desde la interfaz: se archivan (`FileStore::archive()`). `delete()` es para el dueño que se borra a sí mismo y para `files:cleanup`.
 

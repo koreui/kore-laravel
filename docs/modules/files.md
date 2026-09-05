@@ -40,7 +40,7 @@ aquí son un contrato en `Core`, Actions, y un módulo que se puede apagar.
 |----------|---------|--------------|
 | `FILES_ENABLED` | `false` | Binding de `FileStore`, ruta `files.serve`, listeners de la tubería, comando `files:cleanup` y su tarea del scheduler |
 
-Es la decimotercera clave de `config/kore-app.php` y la leen
+Es una de las catorce claves de `config/kore-app.php` y la leen
 `FilesModuleServiceProvider`, `routes/console.php` (para el scheduler),
 `AppServiceProvider::configureAbout()` y las dos pantallas de Users que consumen
 el módulo.
@@ -155,8 +155,11 @@ vacío: el archivo que había ya no sería el vigente y el nuevo no existiría.
 | `archive()` | `is_current = false` + `replaced_at`. El fichero se queda. | La interfaz: `deleteUpload()` del trait, la papelera de `<x-kore::upload deletable>` |
 | `delete()` | Borra la fila y el fichero. Sin vuelta atrás. | El dueño que se borra a sí mismo y `files:cleanup` |
 
-Ningún botón del boilerplate llama a `delete()`. Es la regla del módulo: **los
-archivos no se borran desde la interfaz, se archivan.**
+Ningún botón del boilerplate llama a `delete()`, y desde la v2.3.0 no es una
+convención sino **R56**: disallowed-calls prohíbe `FileStore::delete()` en todas
+partes menos en el propio módulo, en los `Console/` y en los `Listeners/` de
+cualquier módulo, y un arch test barre además los componentes Livewire que
+consumen el contrato. Ver [`../architecture/rules.md`](../architecture/rules.md).
 
 ## La URL firmada y el `v=`
 
@@ -180,7 +183,9 @@ manipula el `v` y espera un 403.
 **Por qué la ruta no lleva `auth`.** La firma **es** la autorización: emitir la
 URL es afirmar que quien la pidió ya pasó por la policy del dueño del archivo, y
 por eso se construye desde las superficies que ya autorizaron —el componente, el
-resource de la API— y nunca desde una vista suelta. Poner `auth` no sería más
+resource de la API— y nunca desde una vista suelta. Eso es **R55**, y lo vigila
+`kore:arch:check`: fuera de este módulo nadie escribe un `Storage::url()`, un
+`temporaryUrl()` ni un `getUrl()` de media-library. Poner `auth` no sería más
 seguro y sí rompería los tres casos para los que existe una URL firmada: el
 `<img src>` de un correo, el PDF que un convertidor externo descarga y el enlace
 que se le da a alguien sin cuenta. Lo que la protege es que caduca, que no se

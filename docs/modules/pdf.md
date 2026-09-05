@@ -123,7 +123,7 @@ Dos decisiones que conviene no deshacer sin querer:
   internamente, y ninguna de las dos es «la buena». Por eso es un parámetro de
   la llamada y no un ajuste guardado.
 
-### Por qué las imágenes van embebidas
+### Por qué las imágenes van embebidas (R57)
 
 `App\Core\Support\PdfImage::embedded($ruta)` devuelve un `data:` URI, y todos los
 logos del tema pasan por ahí. No es una optimización: es lo único que funciona.
@@ -173,6 +173,8 @@ Tres decisiones del tema, con su razón:
 
 - **Todo el CSS va en línea.** Gotenberg no alcanza los assets de Vite; una hoja
   de estilos enlazada llegaría vacía y el PDF saldría sin maquetar, en silencio.
+  Desde la v2.3.0 lo comprueba **R57** (`kore:arch:check`) sobre las vistas del
+  módulo y sobre cualquier `pdf/` dentro de las vistas de otro módulo.
 - **El cromo NO usa `->headerView()` / `->footerView()`** de spatie/laravel-pdf.
   El paquete los manda como archivos aparte que sólo compone el convertidor, así
   que la vista previa dejaría de enseñar lo que se entrega. En su lugar,

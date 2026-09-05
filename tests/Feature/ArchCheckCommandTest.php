@@ -29,7 +29,7 @@ use Illuminate\Support\Facades\File;
  *
  * @param array<string, string> $files ruta relativa => contenido
  */
-function archFixture(array $files, string $catalog = "### R11 · toggles\n### R23 · authorize\n### R24 · locked\n### R29 · down\n### R30 · blade\n### R37 · testid\n### R38 · timeout\n### R40 · docs\n### R44 · valvulas\n### R45 · baseline\n### R52 · access map\n> Escape: `arch-accepted`\n"): string
+function archFixture(array $files, string $catalog = "### R11 · toggles\n### R23 · authorize\n### R24 · locked\n### R29 · down\n### R30 · blade\n### R37 · testid\n### R38 · timeout\n### R40 · docs\n### R44 · valvulas\n### R45 · baseline\n### R52 · access map\n> Escape: `arch-accepted`\n### R55 · urls de archivo\n> Escape: `arch-accepted`\n### R57 · hojas de pdf\n> Escape: ninguna\n"): string
 {
     $root = storage_path('framework/testing/arch-check/'.uniqid('case_', true));
 
@@ -758,6 +758,110 @@ it('R52 · no dice nada en un proyecto sin rutas', function (): void {
     [$exit, $output] = archCheck(archFixture([]), 'R52');
 
     expect($exit)->toBe(0)->and($output)->not->toContain('access-map');
+});
+
+/*
+|--------------------------------------------------------------------------
+| R55 · toda URL de un archivo privado sale de FileStore::url()
+|--------------------------------------------------------------------------
+*/
+
+it('R55 · falla ante cada forma de construir la URL de un archivo a mano', function (string $llamada): void {
+    $root = archFixture([
+        'app/Modules/Demo/Http/Livewire/DemoCard.php' => "<?php\n\nfinal class DemoCard extends Component\n{\n    public function url(): string\n    {\n        \$media = \$this->owner->getFirstMedia('avatar');\n\n        return {$llamada};\n    }\n}\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R55');
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('R55')
+        ->and($output)->toContain('DemoCard.php:9');
+})->with([
+    'Storage::url()' => "Storage::url('avatars/1.png')",
+    'Storage::temporaryUrl()' => "Storage::temporaryUrl('avatars/1.png', now()->addHour())",
+    'temporaryUrl() del disco' => "\$disk->temporaryUrl('avatars/1.png', now()->addHour())",
+    'getUrl() de media-library' => '$media->getUrl()',
+    'getTemporaryUrl() de media-library' => '$media->getTemporaryUrl(now()->addHour())',
+    'getFullUrl() de media-library' => '$media->getFullUrl()',
+]);
+
+it('R55 · no mira dentro del módulo Files, que es quien las emite', function (): void {
+    $root = archFixture([
+        'app/Modules/Files/Support/MediaFileStore.php' => "<?php\n\nfinal class MediaFileStore\n{\n    public function url(): string\n    {\n        return \$this->disk()->temporaryUrl(\$this->path, now()->addHour());\n    }\n}\n",
+    ]);
+
+    [$exit] = archCheck($root, 'R55');
+
+    expect($exit)->toBe(0);
+});
+
+it('R55 · deja pasar un asset del propio proyecto y el getUrl() de lo que no es media', function (): void {
+    $root = archFixture([
+        // Un logo de `public/` no es un archivo de usuario: no hay firma que poner.
+        'app/Modules/Pdf/Support/PdfLogo.php' => "<?php\n\nfinal class PdfLogo\n{\n    public function url(): string\n    {\n        return Storage::url(public_path('img/logo.png'));\n    }\n}\n",
+        // `getUrl()` también es el accesor de un nodo de CommonMark.
+        'app/Modules/Docs/Support/DocLinkExtension.php' => "<?php\n\nfinal class DocLinkExtension\n{\n    public function rewrite(Link \$node): void\n    {\n        \$node->setUrl(\$this->target(\$node->getUrl()));\n    }\n}\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R55');
+
+    expect($exit)->toBe(0)->and($output)->toContain('sin violaciones');
+});
+
+it('R55 · acepta la válvula de un módulo que sirve assets públicos', function (): void {
+    $root = archFixture([
+        'app/Modules/Demo/Http/Controllers/BrandController.php' => "<?php\n\n// arch-accepted: R55 · el branding es público y no tiene dueño que autorizar · @cesar\nfinal class BrandController\n{\n    public function show(): string\n    {\n        return Storage::url('branding/logo.svg');\n    }\n}\n",
+    ]);
+
+    [$exit] = archCheck($root, 'R55');
+
+    expect($exit)->toBe(0);
+});
+
+/*
+|--------------------------------------------------------------------------
+| R57 · las hojas de PDF se bastan a sí mismas
+|--------------------------------------------------------------------------
+*/
+
+it('R57 · falla ante un recurso enlazado en una hoja de PDF', function (string $etiqueta): void {
+    $root = archFixture([
+        'app/Modules/Pdf/Resources/views/layouts/base.blade.php' => "<html>\n<head>\n{$etiqueta}\n</head>\n<body>@yield('documento')</body>\n</html>\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R57');
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('R57')
+        ->and($output)->toContain('base.blade.php:3');
+})->with([
+    'vite' => '@vite([\'resources/css/app.css\'])',
+    'hoja enlazada' => '<link rel="stylesheet" href="/build/app.css">',
+    'asset()' => '<img src="{{ asset(\'img/logo.png\') }}">',
+    'src absoluto' => '<img src="http://127.0.0.1/img/logo.png">',
+    'src sin esquema' => '<img src="//cdn.example.com/logo.png">',
+]);
+
+it('R57 · también mira el pdf/ de un módulo cualquiera', function (): void {
+    $root = archFixture([
+        'app/Modules/Billing/Resources/views/pdf/factura.blade.php' => "@extends('pdf::layouts.base')\n\n@section('documento')\n    <img src=\"http://app.test/logo.png\">\n@endsection\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R57');
+
+    expect($exit)->toBe(1)->and($output)->toContain('pdf/factura.blade.php:4');
+});
+
+it('R57 · pasa con el CSS en línea y las imágenes embebidas, y no mira las demás vistas', function (): void {
+    $root = archFixture([
+        'app/Modules/Pdf/Resources/views/layouts/base.blade.php' => "<html>\n<head><style>.seccion { margin: 0 }</style></head>\n<body><img src=\"{{ \$brand['logo'] }}\"></body>\n</html>\n",
+        // Una pantalla normal sí puede enlazar los assets de Vite: la pinta un navegador.
+        'app/Modules/Users/Resources/views/pages/index.blade.php' => "@vite(['resources/css/app.css'])\n<img src=\"{{ asset('img/logo.png') }}\">\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R57');
+
+    expect($exit)->toBe(0)->and($output)->toContain('sin violaciones');
 });
 
 /*

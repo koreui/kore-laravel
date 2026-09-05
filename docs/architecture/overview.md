@@ -93,9 +93,11 @@ la cicatriz real que la originó. Este resumen sólo da el titular.
 | [R16](rules.md) | `CarbonImmutable` por defecto (forzado en `AppServiceProvider`) |
 | [R35](rules.md) | un test Pest por Action, componente Livewire y ruta |
 | [R54](rules.md) | toda respuesta de la API pasa por el contrato de `App\Core\Http\Api`: `{ data, meta? }` en éxito, `{ error: { code, … } }` en fallo |
+| [R55](rules.md) · [R56](rules.md) | la URL de un archivo privado sale de `App\Core\Contracts\FileStore::url()`, y desde una pantalla los archivos se archivan (`archive()`), no se borran |
+| [R57](rules.md) | las hojas que acaban en PDF llevan el CSS en línea y las imágenes como `data:` URI: Gotenberg convierte desde otro contenedor |
 
 Ver detalle en:
-- [`rules.md`](rules.md) — **el catálogo completo `R1..R54`** (fuente de verdad)
+- [`rules.md`](rules.md) — **el catálogo completo `R1..R57`** (fuente de verdad)
 - [`module-pattern.md`](module-pattern.md) — cómo se construye un módulo
 - [`toggles.md`](toggles.md) — `config/kore-app.php`
 - [`../guides/api.md`](../guides/api.md) — el contrato de la API REST

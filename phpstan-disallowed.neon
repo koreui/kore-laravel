@@ -71,6 +71,24 @@ parameters:
             message: 'R18: los helpers de depuración no se commitean. Ver docs/architecture/rules.md'
             errorIdentifier: 'kore.r18'
 
+    disallowedMethodCalls:
+        # R56 · los archivos no se borran desde la interfaz: se archivan
+        #
+        # `archive()` es reversible y es lo que hace la papelera de una
+        # pantalla; `delete()` destruye los bytes. Los dos sitios que sí
+        # borran de verdad son el comando `files:cleanup` y el listener que
+        # limpia cuando desaparece el dueño de la fila, y por eso son los
+        # únicos con permiso aquí (además del propio módulo Files, que es
+        # quien implementa el contrato).
+        -
+            method: 'App\Core\Contracts\FileStore::delete()'
+            message: 'R56: FileStore::delete() destruye el archivo. Desde una pantalla se archiva (FileStore::archive(), reversible); borrar de verdad es cosa de files:cleanup y del listener que limpia al borrarse el dueño. Ver docs/architecture/rules.md'
+            errorIdentifier: 'kore.r56'
+            allowIn:
+                - app/Modules/Files/*
+                - app/Modules/*/Console/*
+                - app/Modules/*/Listeners/*
+
     disallowedStaticCalls:
         # R21 · DB::table() sólo en migraciones y seeders
         #

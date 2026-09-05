@@ -568,3 +568,48 @@ test('R54 · el contrato de la API vive entero en App\Core\Http\Api', function (
         ->and(class_exists(ApiExceptionRenderer::class))->toBeTrue()
         ->and(trait_exists(HandlesCursorPagination::class))->toBeTrue();
 });
+
+/*
+|--------------------------------------------------------------------------
+| R56 · los archivos se archivan, no se borran
+|--------------------------------------------------------------------------
+|
+| El verificador principal es disallowed-calls sobre
+| `App\Core\Contracts\FileStore::delete()` (`kore.r56`), que sabe de tipos.
+| Éste es el mismo candado en `composer test`, y por texto: barre la capa que
+| pone los botones —los componentes Livewire y los traits de `App\Core\Concerns`
+| que consumen el contrato— y comprueba que ninguno llama a un `delete()`.
+|
+*/
+
+// R56
+test('R56 · ningún componente Livewire que consuma FileStore llama a delete()', function (): void {
+    $offenders = [];
+    $root = dirname(__DIR__, 2);
+
+    $files = [
+        ...(array) glob($root.'/app/Modules/*/Http/Livewire/*.php'),
+        ...(array) glob($root.'/app/Core/Concerns/*.php'),
+    ];
+
+    foreach ($files as $file) {
+        $contents = (string) file_get_contents((string) $file);
+
+        // Sólo los que tienen el contrato en la mano: un `->delete()` sobre un
+        // modelo cualquiera es asunto de su propia policy, no de R56.
+        if (! str_contains($contents, 'FileStore')) {
+            continue;
+        }
+
+        foreach (explode("\n", $contents) as $number => $line) {
+            if (str_contains($line, '->delete(')) {
+                $offenders[] = substr((string) $file, strlen($root) + 1).':'.($number + 1);
+            }
+        }
+    }
+
+    expect($offenders)->toBe([], implode("\n", [
+        ...$offenders,
+        'La papelera de una pantalla archiva (FileStore::archive(), reversible). Destruir los bytes es cosa de files:cleanup y del listener que limpia al borrarse el dueño. Ver R56 en docs/architecture/rules.md.',
+    ]));
+});

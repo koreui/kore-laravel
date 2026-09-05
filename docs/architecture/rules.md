@@ -1,4 +1,4 @@
-# Reglas de arquitectura (R1–R54)
+# Reglas de arquitectura (R1–R57)
 
 **TL;DR**: las reglas del boilerplate son numeradas, citables (`R5`) y cada una
 dice quién la verifica y con qué comando. Lo que se puede verificar, falla el
@@ -261,9 +261,21 @@ cada `view('docs::x')` contra el `ViewFactory` de la aplicación que arranca
 durante el análisis, y en CI el toggle vale su default. Un provider puede
 registrar su `loadViewsFrom()` antes del `return` (así lo hace
 `DocsModuleServiceProvider`): sin rutas no hay forma de llegar a esas vistas,
-así que no expone nada observable. Nada más pasa por ahí: rutas, middleware,
-comandos de dominio y traducciones siguen detrás del `return`.
-> Enforcement: **Manual** + el test del toggle (cada toggle tiene el suyo: `TwoFactorToggleTest`, `TenancyToggleTest`) · `composer test` · **Error**
+así que no expone nada observable.
+
+**Tercera excepción: el namespace de vistas que contiene componentes Blade
+anónimos.** Es la segunda otra vez, pero por una razón que no es de comodidad
+sino de mecánica del framework, y por eso no se puede saltar. Blade resuelve la
+etiqueta `<x-files::slot-upload>` **al compilar** la plantilla que la usa, no al
+ejecutarla: un `@if (config('kore-app.files.enabled'))` alrededor no evita nada,
+porque para cuando el `if` se evalúa el componente ya tuvo que existir. Con el
+`loadViewsFrom` detrás del `return`, la pantalla de edición de usuarios devolvía
+un 500 en toda instalación con `FILES_ENABLED=false`. El registro va siempre, y
+lo fija un test.
+
+Nada más pasa por ahí: rutas, middleware, comandos de dominio y traducciones
+siguen detrás del `return`.
+> Enforcement: **Manual** + el test del toggle (cada toggle tiene el suyo: `TwoFactorToggleTest`, `TenancyToggleTest`, `FilesToggleTest`) · `composer test` · **Error**
 > Escape: `arch-accepted`
 
 **Por qué.** Un toggle que registra «sólo un poquito» no es un toggle: deja
@@ -272,8 +284,15 @@ derivado que lo apagó descubre el resto por producción. El comando de activaci
 es la excepción justificada: sin él, `TENANCY_ENABLED=false` sería un callejón
 sin salida.
 
-**Cicatriz.** Sin cicatriz todavía. `TenancyModuleServiceProvider` es el ejemplo
-canónico de las dos mitades: `register()` registra `EnableTenancyCommand`
+**Cicatriz.** La de la tercera excepción, en la v2.3.0: con el espacio de vistas
+`files::` registrado **dentro** del toggle, la suite se puso en rojo en cuanto el
+módulo Users estrenó el avatar, y en una instalación real habría sido un 500 en
+la pantalla de edición de usuarios con `FILES_ENABLED=false`. El porqué está
+contado una sola vez, en [`toggles.md`](toggles.md) y en el docblock de
+`FilesModuleServiceProvider`; aquí sólo queda la regla.
+
+`TenancyModuleServiceProvider` sigue siendo el ejemplo canónico de las dos
+mitades: `register()` registra `EnableTenancyCommand`
 **antes** del `return` —para que `php artisan kore:tenancy:enable` exista con el
 toggle apagado— y a partir de ahí no registra absolutamente nada más;
 `boot()` hace el early return sin excepciones. `TenancyToggleTest` blinda las
@@ -680,6 +699,46 @@ lo lee.
 cicatriz de ésta es una filtración de credenciales, y no es de las que se
 esperan a tener.
 
+### R55 · Toda URL de un archivo privado sale de `FileStore::url()`
+Fuera de `app/Modules/Files/` nadie construye a mano la dirección de un archivo:
+ni `Storage::url()`, ni `Storage::temporaryUrl()`, ni el `getUrl()`,
+`getTemporaryUrl()` o `getFullUrl()` de media-library. Se pide a
+`App\Core\Contracts\FileStore::url()`.
+> Enforcement: `kore:arch:check` (`checkFileUrlsComeFromStore`) · `composer arch` · **Error**
+> Escape: `arch-accepted` (un módulo que sirve assets públicos suyos, por ejemplo)
+
+Relacionada: R56, que es la otra mitad del contrato de archivos —ésta gobierna
+cómo salen, aquélla cómo dejan de estar—, y R25: la URL firmada es el resultado
+de una decisión de la policy, no un atajo para saltársela.
+
+**Por qué.** Emitir la URL de un archivo privado es afirmar dos cosas a la vez, y
+las dos se olvidan por separado. La primera es que quien la va a usar ya pasó
+por la policy del dueño: la firma **es** la autorización, porque la ruta que
+sirve el archivo no lleva `auth` —no puede: la abre un `<img>`—. La segunda es
+que el `v` que invalida la caché del navegador va **dentro** de la firma; fuera,
+cambiarlo rompe la firma y el archivo deja de servirse, y no ponerlo deja al
+usuario mirando la foto vieja hasta que vacíe la caché.
+
+Un `Storage::temporaryUrl()` escrito en una Blade no cumple ninguna de las dos, y
+lo peor es que funciona: la imagen se ve, el bug es que también la ve quien no
+debería.
+
+**Cómo se verifica.** Por texto, sobre los `.php` de `app/` menos los del propio
+módulo Files. Dos límites que conviene conocer antes de fiarse: una línea con
+`public_path(` queda exenta —un logo del proyecto no es un archivo de usuario— y
+`getUrl()` sólo cuenta en un archivo que mencione «media» en alguna parte,
+porque es también el nombre del accesor de un nodo de CommonMark
+(`DocLinkExtension` lo llama para reescribir los enlaces de `/docs`) y un
+archivo que no habla de media no puede tener un `Media` en la mano. Los otros
+cinco patrones no son ambiguos y se miran siempre.
+
+**Cicatriz.** Doble, y de los dos derivados. **Notarium** pintaba
+`getTemporaryUrl()` directamente desde las Blade, en cada sitio donde se
+enseñaba un documento: la decisión de exponer un archivo estaba repartida por la
+capa de plantillas, donde no la ve ningún test. Y **asper-server** dejó escrito
+en `MediaUrl` por qué el `v` va dentro de la firma y no como query aparte; lo
+dejó escrito porque lo descubrió al revés.
+
 ---
 
 ## §4 · Datos
@@ -777,6 +836,36 @@ que tiene que inventarse una herramienta para no tropezar con el framework es la
 señal de que al padre le faltaba la regla; en la v2.1.0 subió, con el skill
 `kore-migration-change` detrás.
 
+### R56 · Los archivos no se borran desde la interfaz: se archivan
+`App\Core\Contracts\FileStore::archive()` es lo que hace la papelera de una
+pantalla: marca la versión como reemplazada y la deja donde está.
+`FileStore::delete()` destruye el archivo, y sólo lo llaman dos sitios: el
+listener que limpia cuando se borra el dueño de la fila, y `files:cleanup`.
+> Enforcement: disallowed-calls (`kore.r56`) · `composer analyse` · **Error** · + Pest arch (ningún componente Livewire que consuma `FileStore` llama a `delete()`) · `./vendor/bin/pest tests/Arch` · **Error**
+> Escape: `arch-accepted`
+
+Relacionada: R55 (la otra mitad del contrato de archivos) y R29, que es la misma
+idea aplicada al esquema: lo que se puede deshacer y lo que no se separan a
+propósito, y lo segundo se escribe.
+
+**Por qué.** «Eliminar» en una interfaz casi nunca significa destruir. Significa
+«quítamelo de delante», y quien lo pulsa da por hecho que hay vuelta atrás
+porque en todas las demás pantallas la hay. Un archivo, en cambio, no tiene
+papelera del sistema operativo detrás: si la Action llama a `delete()`, los bytes
+se han ido y la copia de seguridad de anoche es la única opción.
+
+Separar las dos operaciones en el contrato hace que la decisión se tome una vez
+—al escribir el método— y no en cada pantalla que suba algo. Y deja la
+destrucción donde se puede razonar sobre ella: un comando programado con
+`--days` y un listener que reacciona a que el dueño ya no existe.
+
+**Cicatriz.** Notarium, donde `archivar()` existía desde el principio y no por
+elegancia: un documento de un expediente es el soporte de un acto notarial, y
+«eliminar» nunca puede querer decir destruirlo. Lo que allí era una convención
+del dominio —recordada por quien la escribió— aquí es la forma del contrato:
+`archive()` y `delete()` son métodos distintos y sólo uno de los dos está a mano
+de la capa de entrega.
+
 ### Nota · La instalación limpia es un test, no un procedimiento
 
 `tests/Feature/CleanInstallTest.php` reproduce lo que hacen `composer setup` y
@@ -824,6 +913,43 @@ defecto, en silencio.
 
 **Cicatriz.** Las alertas de autenticación estuvieron pintadas de azul durante
 semanas por un `color="destructive"`; la prop del componente es `type`.
+
+### R57 · Las imágenes y el CSS de una hoja PDF van embebidos, nunca enlazados
+En una plantilla que acaba convertida a PDF —las del módulo Pdf y las que un
+módulo guarda bajo un `pdf/` dentro de sus vistas— el CSS va en un `<style>` en
+línea y las imágenes como `data:` URI
+(`App\Core\Support\PdfImage::embedded()`). Nada de `@vite`, de una hoja de
+estilos enlazada, de `asset()` ni de un `src` que empiece por `http` o por `//`.
+> Enforcement: `kore:arch:check` (`checkPdfSheetsAreSelfContained`) · `composer arch` · **Error**
+> Escape: ninguna
+
+Relacionada: R30, de la que ésta es la vecina —las dos dicen qué no puede hacer
+una Blade—, sólo que R30 mira hacia dentro (consultas) y R57 hacia fuera
+(recursos).
+
+**Por qué.** Quien convierte la hoja es Gotenberg, y corre en **otro
+contenedor**. Cuando la plantilla pide `http://127.0.0.1/build/app.css` se lo
+pide a sí mismo, no a la aplicación. Y el fallo no revienta: el PDF se genera
+igual, con el mismo peso y sin ningún error en los logs; lo único que pasa es
+que sale sin maquetar, o con el icono de imagen rota donde iba el logo.
+
+Peor todavía, el fallo depende del entorno. Con la dirección pública de
+producción el enlace sí resolvería, así que la hoja rota en local funciona al
+desplegar —o al revés—, y nadie sabe cuál de las dos es la buena. Embebido no
+hay dos entornos: lo que se revisa en la vista previa del navegador es
+exactamente lo que se imprime.
+
+Y hay una tercera razón que vale también en producción: los archivos que suben
+los usuarios viven en disco privado y se sirven por URL firmada y temporal
+(R55). Embebida, la hoja no depende de que el convertidor alcance la aplicación
+ni de que la firma siga viva cuando pase a buscarla.
+
+**Cicatriz.** asper-server, y está escrita en el docblock de sus `PdfImagen` y
+`PdfLogo`: el logo enlazado salía roto en el PDF y entero en la vista previa, así
+que el problema parecía del PDF y era de la dirección. El boilerplate heredó las
+dos clases como `App\Core\Support\PdfImage` y `App\Modules\Pdf\Support\PdfLogo`
+en la v2.3.0, y la regla existe para que la siguiente hoja no vuelva a
+descubrirlo.
 
 ### R33 · Español es el idioma fuente
 Se escribe `__('Texto en español')`; la traducción al inglés va en el
@@ -1270,13 +1396,13 @@ con `--no-verify`, y entonces no verifica nada.
 |------|-------------|--------|-----------|
 | **pre-commit** | ~2 s | **0,7 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
 | **commit-msg** | ~1 s | **0,3 s** | `ConventionalCommitMsgHook` — el asunto sigue Conventional Commits (R43) |
-| **pre-push** | ~30 s | **5 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
-| **`composer ci`** | ~90 s | **18 s** | `pint --test` (0,2 con caché, 2,6 en frío) + `phpstan` (0,8 con caché, 2,3 en frío) + `composer arch` (0,2) + `rector --dry-run` (3,2 con caché) + `pest` (14,8, secuencial) |
-| **CI (GitHub)** | ~3 min | — | `composer ci` en matriz PHP 8.4 / 8.5 + `composer audit` + `npm ci && npm run build` + E2E (163 tests en 18 archivos) |
+| **pre-push** | ~30 s | **7 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
+| **`composer ci`** | ~90 s | **31 s** | `pint --test` (1,9 con caché) + `phpstan` (0,9 con caché) + `composer arch` (0,2) + `rector --dry-run` (5,0 con caché) + `pest` (23,2, secuencial) |
+| **CI (GitHub)** | ~3 min | — | `composer ci` en matriz PHP 8.4 / 8.5 + `composer audit` + `npm ci && npm run build` + E2E (176 tests en 19 archivos) |
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + GitHub Release (R42) |
 
 Medido en un MacBook (Apple Silicon, PHP 8.4) sobre el repositorio a fecha de
-la v2.2.0, con 693 tests Pest y una suite E2E de 163 tests en 18 archivos
+la v2.3.0, con 831 tests Pest y una suite E2E de 176 tests en 19 archivos
 (31 s aparte). Las cuatro primeras capas caben holgadamente en su
 presupuesto: el margen es para que un proyecto derivado pueda crecer sin tener
 que rediseñar el pipeline.
@@ -1295,11 +1421,11 @@ se re-registran a mano con `php artisan git-hooks:register`.
 
 | Herramienta | Comando | Reglas |
 |-------------|---------|--------|
-| **Pest arch** (`tests/Arch/ArchitectureTest.php`) | `./vendor/bin/pest tests/Arch` | R1, R2, R3, R5, R6, R7, R8, R9, R13, R14, R17, R18, R25, R54 |
+| **Pest arch** (`tests/Arch/ArchitectureTest.php`) | `./vendor/bin/pest tests/Arch` | R1, R2, R3, R5, R6, R7, R8, R9, R13, R14, R17, R18, R25, R54, R56 |
 | **PHPat** (`tests/Arch/PhpatArchitecture.php`) | `composer analyse` | R1, R4, R5, R6, R7, R8, R19 |
-| **disallowed-calls** (`phpstan-disallowed.neon`) | `composer analyse` | R17, R18, R19, R20, R21, R22, R27 |
+| **disallowed-calls** (`phpstan-disallowed.neon`) | `composer analyse` | R17, R18, R19, R20, R21, R22, R27, R56 |
 | **Larastan nivel 8** | `composer analyse` | R15 |
-| **`kore:arch:check`** | `composer arch` | R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50, R52 |
+| **`kore:arch:check`** | `composer arch` | R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50, R52, R55, R57 |
 | **Pint** | `composer lint` | R13, R16 |
 | **Tests Pest** | `composer test` | R10, R12, R26, R27, R28, R29, R33, R34, R46, R47, R48, R51, R54 |
 | **Hooks de git** (`config/git-hooks.php`) | `git commit` | R43 |
@@ -1325,10 +1451,19 @@ Pest arch y la semántica del nombre (`{Domain}{Object}{Verb}`) en revisión
 humana; R14 tiene el `final` verificado en Actions, Data, Events, Rules,
 Policies y Providers, y a ojo en el resto.
 
-De las 54 reglas, **47 tienen al menos un verificador automático** que falla el
+De las 57 reglas, **50 tienen al menos un verificador automático** que falla el
 build (entero o en parte) y **7 son íntegramente manuales**: R31, R32, R35, R36,
 R39, R41 y R53. Ninguna regla está sin clasificar: si dice **Manual**, es porque
 hoy no hay forma barata de verificarla, no porque nadie lo haya mirado.
+
+Las tres de la v2.3.0 entran las tres en la primera columna, y con tres
+verificadores distintos: **R55** (las URL de archivo salen de `FileStore`) y
+**R57** (las hojas de PDF no enlazan nada) son checks textuales de
+`kore:arch:check`, y **R56** (archivar no es borrar) la vigila
+disallowed-calls sobre `FileStore::delete()` más un arch test que barre los
+componentes Livewire que consumen el contrato. Lo que ninguno de los tres ve es
+si la policy que hay detrás de la URL firmada dice lo que tiene que decir; eso
+sigue siendo review.
 
 La de la v2.2.0 entra en la primera columna: **R54** la verifican los tres
 `toExtend` de `tests/Arch/ArchitectureTest.php` —tolerantes a que un namespace

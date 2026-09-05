@@ -35,16 +35,16 @@ no verifica nada.
 |------|-------------|--------|-----------|
 | **pre-commit** | ~2 s | **0,7 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
 | **commit-msg** | ~1 s | **0,3 s** | `ConventionalCommitMsgHook` — el asunto sigue Conventional Commits (R43) |
-| **pre-push** | ~30 s | **5 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
-| **`composer ci`** | ~90 s | **16 s** | `pint --test` (0,2 con caché, 2,6 en frío) + `phpstan` (0,8 con caché, 2,3 en frío) + `composer arch` (0,2) + `rector --dry-run` (3,2 con caché) + `pest` (11,2, secuencial) |
+| **pre-push** | ~30 s | **7 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
+| **`composer ci`** | ~90 s | **31 s** | `pint --test` (1,9 con caché) + `phpstan` (0,9 con caché) + `composer arch` (0,2) + `rector --dry-run` (5,0 con caché) + `pest` (23,2, secuencial) |
 | **CI (GitHub)** | ~3 min | — | `composer ci` en matriz PHP 8.4 / 8.5 + `composer audit` + `npm ci && npm run build` + E2E |
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + `softprops/action-gh-release` |
 
-Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v2.2.0 y
-693 tests Pest. La suite E2E —163 tests en 18 archivos— va aparte y tarda
-31 s en local. Los 182 tests nuevos de la v2.2.0 son el contrato de la API
-(`tests/Feature/Api`, 55), la autenticación por token y el CRUD de Users por
-API (Auth 113, Users 78), el módulo Devices (54) y los arch tests de R54.
+Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v2.3.0 y
+831 tests Pest. La suite E2E —176 tests en 19 archivos— va aparte y tarda
+31 s en local. Los 138 tests nuevos de la v2.3.0 son el módulo Files (71), el
+módulo Pdf (29), el avatar de Users (10 de sus 88) y, en `tests/`, los DTOs y el
+trait de subida de `Core` más los fixtures de los checks de R55 y R57.
 
 > Nota de entorno: `composer test` limpia la config cacheada antes de correr
 > Pest a propósito. Con un `bootstrap/cache/config.php` viejo, `PulseAccessTest`
@@ -138,6 +138,7 @@ Una entrada por regla, con `message:` citando su número y `allowIn:` /
 | `kore.r21` | R21 | `DB::table()` | migraciones y seeders |
 | `kore.r22` | R22 | cliente HTTP y `Mail::send` / `Mail::raw` | todo menos controllers y componentes Livewire |
 | `kore.r27` | R27 | `Model::unguard()` | en ningún sitio |
+| `kore.r56` | R56 | `App\Core\Contracts\FileStore::delete()` | el módulo Files, los `Console/` y los `Listeners/` de cualquier módulo |
 
 > Otro detalle que cuesta caro: la firma que hay que escribir es la que ve
 > Larastan **después** de resolver el facade, no el facade. `DB::table()` se
@@ -174,9 +175,11 @@ php artisan kore:arch:check --root=/otro/repo  # otra raíz (lo usan sus tests)
 | R49 | cada `.agents/skills/{nombre}` tiene su symlink en `.claude/skills/{nombre}` apuntando a `../../.agents/skills/{nombre}`, y en `.claude/skills/` no hay nada que no sea uno de esos enlaces |
 | R50 | `AGENTS.md` es exactamente lo que generaría `php artisan kore:agents:sync` desde `CLAUDE.md` |
 | R52 | toda ruta `GET` con nombre de `routes/web.php` y `app/Modules/*/Routes/web.php` aparece en `tests/e2e/fixtures/access-map.ts`. Lee el texto de los archivos de rutas componiendo los `->prefix()` de los grupos; ignora las rutas con parámetro y las de `/__e2e__`. Si el mapa no existe todavía, avisa una vez y no falla. La válvula es **de línea** |
+| R55 | ningún `.php` de `app/` fuera de `app/Modules/Files/` construye la URL de un archivo (`Storage::url()`, `Storage::temporaryUrl()`, `temporaryUrl()`, `getUrl()`, `getTemporaryUrl()`, `getFullUrl()`). Una línea con `public_path(` queda exenta, y `getUrl()` sólo cuenta en un archivo que hable de media —es también el accesor de un nodo de CommonMark— |
+| R57 | ninguna hoja que acabe en PDF (`app/Modules/Pdf/Resources/views/**` y `app/Modules/*/Resources/views/**/pdf/**`) enlaza recursos: ni `@vite`, ni hoja de estilos enlazada, ni `asset()`, ni un `src` que empiece por `http` o por `//` |
 
 Salida: `R{n} archivo:línea mensaje`, y exit code 1 si hay algo. Tests:
-`tests/Feature/ArchCheckCommandTest.php` (94 casos, un árbol de fixtures que
+`tests/Feature/ArchCheckCommandTest.php` (110 casos, un árbol de fixtures que
 viola cada check y otro que lo cumple).
 
 ### Rector — `rector.php`
@@ -249,6 +252,7 @@ ignora. Lo consume PHPStan.
 | R14 | `App\Modules\*\Rules` son `final` e implementan `ValidationRule` |
 | R25 | `App\Modules\*\Policies` son `final` y con sufijo `Policy` |
 | R54 | los `Http/Controllers/Api`, `Http/Resources/Api` y `Http/Requests/Api` de cada módulo extienden `ApiController`, `BaseApiResource` y `BaseApiRequest`; y las cinco piezas del contrato existen |
+| R56 | ningún componente Livewire ni trait de `App\Core\Concerns` que consuma `FileStore` llama a un `delete()` (el candado con tipos es `kore.r56`; éste es el mismo en `composer test`) |
 
 Los namespaces usan comodín (`App\Modules\*\Actions`), así que un módulo nuevo
 queda cubierto sin tocar el archivo.
@@ -354,11 +358,16 @@ Para reinstalarlos a mano:
 php artisan git-hooks:register
 ```
 
-> En un **git worktree** `git-hooks:register` falla con «Git not initialized in
-> this project»: el paquete busca `.git/hooks` como directorio y en un worktree
-> `.git` es un archivo que apunta al repositorio principal. Los hooks se instalan
-> desde el clon normal; en un worktree se verifican llamando al comando a mano:
-> `php artisan git-hooks:commit-msg <ruta-al-mensaje>`.
+> En un **git worktree** los hooks no funcionan, y de dos maneras distintas.
+> `git-hooks:register` falla con «Git not initialized in this project»: el
+> paquete busca `.git/hooks` como directorio y en un worktree `.git` es un
+> archivo que apunta al repositorio principal. Y los hooks que ya estaban
+> instalados tampoco sirven: `.git/hooks/pre-commit` es el del clon principal e
+> invoca **su** `artisan` con rutas relativas, así que Pint recibe rutas de
+> archivos que allí no existen. Desde un worktree, la vía es correr a mano
+> `vendor/bin/pint --test` y `composer arch` y commitear con `--no-verify`, o
+> commitear desde el checkout principal; el `commit-msg` se puede comprobar
+> suelto con `php artisan git-hooks:commit-msg <ruta-al-mensaje>`.
 
 ## CI — GitHub Actions
 
@@ -416,15 +425,16 @@ $ composer ci
 ✓ Larastan nivel 8 + PHPat + disallowed-calls: 0 errors
 ✓ kore:arch:check: sin violaciones
 ✓ Rector: nothing to refactor
-✓ Pest: 693 passed (1961 assertions)
+✓ Pest: 831 passed (2342 assertions)
 ```
 
-Reparto de los 693 tests: 38 arch (`tests/Arch`: 27 en `ArchitectureTest` y 11
+Reparto de los 831 tests: 39 arch (`tests/Arch`: 28 en `ArchitectureTest` y 11
 en `PhpatArchitectureTest`), 113 del módulo Auth (incluida la API de tokens),
-78 del módulo Users (incluida su API v1), 3 de Tenancy, 43 del módulo Docs, 29
-del módulo E2E, 54 del módulo Devices y 333 en `tests/Feature` (plataforma,
-`kore:arch:check`, hooks, MCP, y el contrato de la API en `tests/Feature/Api`).
-Aparte, la suite E2E de Playwright (`npm run e2e`): 163 tests en 18 archivos,
+88 del módulo Users (incluidas su API v1 y el avatar), 3 de Tenancy, 43 del
+módulo Docs, 29 del módulo E2E, 54 del módulo Devices, 71 del módulo Files, 29
+del módulo Pdf, 351 en `tests/Feature` (plataforma, `kore:arch:check`, hooks,
+MCP, y el contrato de la API en `tests/Feature/Api`) y 11 en `tests/Unit`.
+Aparte, la suite E2E de Playwright (`npm run e2e`): 176 tests en 19 archivos,
 104 de ellos generados desde `tests/e2e/fixtures/access-map.ts`.
 
 Actualiza esta cifra cuando cambie (R41). Un número inventado en los docs es

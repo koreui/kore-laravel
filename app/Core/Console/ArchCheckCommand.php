@@ -83,6 +83,44 @@ final class ArchCheckCommand extends Command
      */
     private const string RULE_CITATION = '/(?<![A-Za-z0-9_$\/-])R\d{1,3}(?![A-Za-z0-9_\/-])(?!\.\d)/u';
 
+    /**
+     * R55 · llamadas que construyen a mano la URL de un archivo.
+     *
+     * Las tres primeras son del sistema de archivos (facade `Storage` y disco
+     * de Flysystem) y las tres últimas de spatie/laravel-medialibrary. La
+     * clave es el texto que se busca; el valor, el nombre que sale en el
+     * mensaje.
+     *
+     * @var array<string, string>
+     */
+    private const array FILE_URL_CALLS = [
+        'Storage::temporaryUrl(' => 'Storage::temporaryUrl()',
+        'Storage::url(' => 'Storage::url()',
+        '->getTemporaryUrl(' => 'getTemporaryUrl()',
+        '->getFullUrl(' => 'getFullUrl()',
+        '->temporaryUrl(' => 'temporaryUrl()',
+        '->getUrl(' => 'getUrl()',
+    ];
+
+    /**
+     * R57 · hojas que acaban en PDF: las del módulo Pdf y las que un módulo
+     * guarda bajo un `pdf/` dentro de sus vistas.
+     */
+    private const string PDF_SHEET = '#^app/Modules/(?:Pdf/Resources/views/|[^/]+/Resources/views/(?:.*/)?pdf/)#';
+
+    /**
+     * R57 · formas de traer un recurso de fuera en vez de embeberlo.
+     *
+     * @var array<string, string>
+     */
+    private const array PDF_LINKED_ASSETS = [
+        '@vite' => '@vite',
+        '<link rel="stylesheet"' => '<link rel="stylesheet">',
+        'src="http' => 'src="http…"',
+        'src="//' => 'src="//…"',
+        'asset(' => 'asset()',
+    ];
+
     /** @var array<int, array{rule: string, file: string, line: int, message: string}> */
     private array $violations = [];
 
@@ -126,6 +164,8 @@ final class ArchCheckCommand extends Command
             'R49' => 'checkSkillsAreLinked',
             'R50' => 'checkAgentsFileIsGenerated',
             'R52' => 'checkRoutesAreInAccessMap',
+            'R55' => 'checkFileUrlsComeFromStore',
+            'R57' => 'checkPdfSheetsAreSelfContained',
         ];
 
         if ($only !== null && ! isset($checks[$only])) {
@@ -1265,6 +1305,117 @@ final class ArchCheckCommand extends Command
         }
 
         return false;
+    }
+
+    /*
+    |----------------------------------------------------------------------
+    | R55 · toda URL de un archivo privado sale de FileStore::url()
+    |----------------------------------------------------------------------
+    */
+
+    /**
+     * Nadie fuera de `app/Modules/Files` construye la URL de un archivo.
+     *
+     * Emitir la URL de un archivo privado es afirmar dos cosas a la vez: que
+     * quien la va a usar ya pasó por la policy del dueño, y que la firma lleva
+     * dentro el `v` que invalida la caché del navegador cuando el archivo
+     * cambia. Las dos las cumple `App\Core\Contracts\FileStore::url()`, y
+     * ninguna la cumple un `Storage::temporaryUrl()` escrito a mano.
+     *
+     * Límites, escritos porque son los que hay que conocer antes de fiarse:
+     *
+     *   - `public_path(` en la línea la exime: un logo del propio proyecto no
+     *     es un archivo de usuario y no hay nada que firmar.
+     *   - `getUrl()` sólo cuenta en un archivo que hable de **media**. Es el
+     *     nombre que usa media-library, pero también el que usa cualquier nodo
+     *     de un parser de Markdown (`League\CommonMark\Node\Inline\Link`), y un
+     *     archivo que no menciona media en ninguna parte no puede tener un
+     *     `Media` en la mano. Los otros cinco patrones no son ambiguos y se
+     *     miran siempre.
+     */
+    private function checkFileUrlsComeFromStore(): void
+    {
+        foreach ($this->findFiles(['app'], ['*.php']) as $path) {
+            $relative = $this->relative($path);
+
+            // El módulo Files es quien las emite: es exactamente su trabajo.
+            if (str_starts_with($relative, 'app/Modules/Files/') || in_array($relative, self::SELF_REFERENTIAL, true)) {
+                continue;
+            }
+
+            $touchesMedia = mb_stripos($this->contents($path), 'media') !== false;
+
+            foreach ($this->lines($path) as $index => $line) {
+                foreach (self::FILE_URL_CALLS as $needle => $name) {
+                    if (! str_contains($line, $needle)) {
+                        continue;
+                    }
+
+                    if ($needle === '->getUrl(' && ! $touchesMedia) {
+                        continue;
+                    }
+
+                    if (str_contains($line, 'public_path(')) {
+                        continue 2;
+                    }
+
+                    if ($this->hasValve($path, 'R55')) {
+                        continue 3;
+                    }
+
+                    $this->violation(
+                        'R55',
+                        $path,
+                        $index + 1,
+                        "{$name} construye la URL de un archivo fuera de App\\Core\\Contracts\\FileStore::url(): la firma es la autorización y el «v» que invalida la caché va dentro de ella",
+                    );
+
+                    continue 2;
+                }
+            }
+        }
+    }
+
+    /*
+    |----------------------------------------------------------------------
+    | R57 · las hojas de PDF se bastan a sí mismas
+    |----------------------------------------------------------------------
+    */
+
+    /**
+     * Ni CSS enlazado ni imágenes remotas en una plantilla que acaba en PDF.
+     *
+     * Quien convierte la hoja es Gotenberg, desde **otro contenedor**: un
+     * `@vite`, un `<link rel="stylesheet">`, un `asset()` o un `src="http…"`
+     * se los pide a sí mismo, no a la aplicación. Y no revienta: el PDF se
+     * genera igual, sin maquetar o con el icono de imagen rota donde iba el
+     * logo. El CSS va en un `<style>` en línea y las imágenes por
+     * `App\Core\Support\PdfImage::embedded()`, que devuelve un `data:` URI.
+     */
+    private function checkPdfSheetsAreSelfContained(): void
+    {
+        foreach ($this->findFiles(['app/Modules'], ['*.blade.php']) as $path) {
+            if (preg_match(self::PDF_SHEET, $this->relative($path)) !== 1) {
+                continue;
+            }
+
+            foreach ($this->lines($path) as $index => $line) {
+                foreach (self::PDF_LINKED_ASSETS as $needle => $name) {
+                    if (! str_contains($line, $needle)) {
+                        continue;
+                    }
+
+                    $this->violation(
+                        'R57',
+                        $path,
+                        $index + 1,
+                        "{$name} enlaza un recurso que Gotenberg no alcanza: convierte desde otro contenedor y lo enlazado sale roto en silencio. El CSS va en línea y las imágenes como data: URI con PdfImage::embedded()",
+                    );
+
+                    continue 2;
+                }
+            }
+        }
     }
 
     /*
