@@ -24,8 +24,10 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - [`docs/modules/docs.md`](docs/modules/docs.md) — visor de `docs/` en `/docs` (toggle `DOCS_ENABLED`)
 - [`docs/modules/e2e.md`](docs/modules/e2e.md) — harness de la suite E2E (`/__e2e__/*`) y switcher de cuentas de desarrollo
 - [`docs/modules/devices.md`](docs/modules/devices.md) — dispositivos que consumen la API (toggle `DEVICES_ENABLED`)
+- [`docs/modules/pdf.md`](docs/modules/pdf.md) — generación de PDF con spatie/laravel-pdf y Gotenberg (toggle `PDF_ENABLED`)
 - [`docs/patterns/README.md`](docs/patterns/README.md) — la **regla de tres**: cuándo una solución sube al boilerplate, y el camino de vuelta de un proyecto hijo al padre
 - [`docs/guides/api.md`](docs/guides/api.md) — contrato de la API REST: envelope, errores, paginación, middleware, limiters y Scramble
+- [`docs/guides/exports.md`](docs/guides/exports.md) — la carpeta `Exports/`: CSV sin dependencias, Excel en el derivado y PDF delegando en el módulo Pdf
 - [`docs/guides/crud.md`](docs/guides/crud.md) — patrón CRUD del boilerplate
 - [`docs/ops/deployment.md`](docs/ops/deployment.md) — Docker en VPS
 - [`docs/ops/observability.md`](docs/ops/observability.md) — Sentry · Pulse · Health · ActivityLog
@@ -42,6 +44,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - Componentes UI: **koreUi** (`<x-kore::*>`), nunca Flux UI ni otras
 - Auth: Fortify (2FA, passkeys WebAuthn, toggles) + Sanctum (toggle) + spatie/laravel-permission
 - API: contrato en `App\Core\Http\Api` (envelope `{data, meta?}` / `{error:{code,message,details?}}`, R54) + OpenAPI con dedoc/scramble + módulo opcional **Devices** (`DEVICES_ENABLED`): inventario de los clientes que consumen la API, alimentado por los eventos de Auth
+- PDF: módulo opcional **Pdf** (`PDF_ENABLED`) sobre spatie/laravel-pdf con driver **Gotenberg** (servicio aparte); contrato `App\Core\Contracts\PdfRenderer`, tema base con vista previa y las imágenes de la hoja embebidas como `data:` URI
 - DTOs: spatie/laravel-data
 - Feature flags: Laravel Pennant
 - Tests: Pest 5 (con arch tests en `tests/Arch/ArchitectureTest.php`)
@@ -62,9 +65,10 @@ app/
 │   │   └── RedirectsWithToast.php         # toast en sesión + redirect
 │   ├── Console/                # comandos transversales (kore:arch:check) y hooks de git
 │   │   └── Concerns/SupportsDryRun.php    # opción --dry-run + helpers
-│   ├── Contracts/              # interfaces compartidas (fronteras entre módulos)
+│   ├── Contracts/              # interfaces compartidas (AuthorizationCatalog, PdfRenderer)
 │   ├── Data/Data.php           # base DTO (extiende spatie/laravel-data)
-│   ├── Enums/                  # valores compartidos (SystemRole, ApiErrorCode)
+│   │                           # + PdfBrandData · PdfOptionsData · PdfDocumentData
+│   ├── Enums/                  # valores compartidos (SystemRole, ApiErrorCode, PdfPaperFormat)
 │   ├── Http/Api/               # contrato de la API REST (R54)
 │   │   ├── Concerns/           # HandlesCursorPagination
 │   │   ├── Controllers/        # ApiController — respond() / respondNoContent()
@@ -73,7 +77,7 @@ app/
 │   │   ├── Requests/           # BaseApiRequest
 │   │   └── Resources/          # BaseApiResource · EnumResource
 │   ├── Mcp/                    # MCP server propio (KoreServer + Tools/)
-│   └── Support/                # helpers
+│   └── Support/                # helpers (PdfImage: imágenes embebidas para PDF)
 ├── Modules/{Domain}/           # lista CERRADA de carpetas (R3)
 │   ├── Actions/                # 1 clase = 1 caso de uso, método handle()
 │   ├── Console/                # comandos artisan del módulo
@@ -179,6 +183,7 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | `DOCS_ENABLED`          | `false`          | Visor de `docs/` en `/docs` (local sí, producción no) |
 | `E2E_HARNESS`           | `false`          | Harness de la suite E2E (`/__e2e__/*`); sólo `.env.e2e` |
 | `DEVICES_ENABLED`       | `false`          | Módulo Devices: rutas `api/v1/devices/*`, listeners de los eventos de token de Auth, alias `devices.version` y `devices:cleanup` |
+| `PDF_ENABLED`           | `false`          | Módulo Pdf: binding de `PdfRenderer`, gate `viewPdfPreview` y rutas `/pdf/preview*`. El motor es un servicio aparte (Gotenberg) |
 | `AUTH_2FA_ENABLED`      | `true`           | 2FA vía Fortify                     |
 | `AUTH_PASSKEYS`         | `true`           | Passkeys (WebAuthn) vía Fortify     |
 | `AUTH_MAGIC_LINKS`      | `true`           | spatie/laravel-one-time-passwords   |
@@ -186,7 +191,7 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | `SOCIAL_GOOGLE`         | `false`          | proveedor Google de Socialite       |
 | `SOCIAL_GITHUB`         | `false`          | proveedor GitHub de Socialite       |
 
-Esas doce claves son **todas** las de `config/kore-app.php`. Regla: un toggle
+Esas trece claves son **todas** las de `config/kore-app.php`. Regla: un toggle
 sólo existe si alguien lo lee. Reverb, Octane y Scout no son toggles sino
 módulos opcionales que se instalan bajo demanda; el modo `single-db`/`multi-db`
 de tenancy se elige en `config/tenancy.php` al correr `kore:tenancy:enable`.

@@ -950,6 +950,67 @@ agujero que el zip cifrado venía a tapar.
 
 ---
 
+## PDF con Gotenberg (perfil `pdf`)
+
+**TL;DR**: el motor de PDF es un contenedor aparte que sólo arranca con
+`--profile pdf`. Sin él, `PDF_ENABLED=true` no genera nada.
+
+```bash
+docker compose -f docker-compose.prod.yml --profile pdf up -d
+docker compose -f docker-compose.prod.yml exec gotenberg curl -sf http://localhost:3000/health
+```
+
+En el `.env` de producción:
+
+```dotenv
+PDF_ENABLED=true
+GOTENBERG_URL=http://gotenberg:3000   # el NOMBRE del servicio en kore_net
+```
+
+Tres cosas que conviene tener claras antes de encenderlo:
+
+- **No publica puertos, y no es un descuido.** Gotenberg convierte el HTML que
+  le manden: expuesto a internet es un renderizador de páginas gratis para
+  cualquiera, y desde dentro de tu red. Sólo lo alcanzan los servicios de
+  `kore_net`.
+- **Las imágenes de una hoja van embebidas, no enlazadas.** Gotenberg corre en
+  su propio contenedor: un `<img src="https://tu-dominio/logo.png">` lo obliga a
+  salir a la red y a volver a entrar, y en local directamente se lo pide a sí
+  mismo. Lo resuelve `App\Core\Support\PdfImage`; el detalle está en
+  [`../modules/pdf.md`](../modules/pdf.md).
+- **El perfil también apaga.** `docker compose up -d` sin `--profile pdf` no
+  arranca el servicio y **no lo para** si ya estaba: para retirarlo,
+  `docker compose --profile pdf down gotenberg`.
+
+### Convertir DOCX, XLSX y PPTX a PDF
+
+La misma imagen trae LibreOffice, así que el contenedor que ya está levantado
+convierte también documentos de Office en `POST /forms/libreoffice/convert`. El
+boilerplate **no** lo implementa —no tiene un caso de uso que lo pida y una
+Action sin consumidor es código muerto—, pero deja instalado
+`gotenberg/gotenberg-php`, que es el cliente oficial. En un proyecto derivado la
+Action sería así:
+
+```php
+use Gotenberg\Gotenberg;
+use Gotenberg\Stream;
+
+// En una Action del módulo dueño del documento, nunca en un controller (R22).
+$request = Gotenberg::libreOffice((string) config('laravel-pdf.gotenberg.url'))
+    ->convert(Stream::path($rutaDelDocx));
+
+$pdf = Gotenberg::send($request)->getBody()->getContents();
+```
+
+`Gotenberg::send()` habla HTTP con el mismo servicio que usa spatie/laravel-pdf,
+así que no hay una segunda URL que configurar ni un segundo contenedor que
+levantar. Lo que sí cambia es el tiempo: una conversión de LibreOffice tarda
+bastante más que una de Chromium, así que va en cola (un Listener
+`implements ShouldQueue` que reacciona a un evento del módulo) y no en la
+petición.
+
+---
+
 ## Activar multi-tenancy en producción
 
 ```bash

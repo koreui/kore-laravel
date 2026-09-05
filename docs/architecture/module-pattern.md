@@ -57,7 +57,7 @@ falla ante cualquier nombre que no esté en esta lista.
 | `Database/` | sólo `Migrations/`, `Factories/` y `Seeders/` | R3, R29 |
 | `Enums/` | enums **backed** (`string` o `int`) del dominio | Pest arch: «los Enums de módulo son enums backed» (R3) |
 | `Events/` | lo que otros módulos pueden escuchar: `final readonly`. Es la **frontera pública**: otro módulo sí puede importarlos | Pest arch (R5) |
-| `Exports/` | salida hacia fuera de la aplicación: Excel, CSV, PDF | R3 — lo de dentro lo fija el paquete de exportación |
+| `Exports/` | salida hacia fuera de la aplicación: Excel, CSV, PDF. Cómo se construye cada formato: [`../guides/exports.md`](../guides/exports.md) | R3 — lo de dentro lo fija el paquete de exportación |
 | `Forms/` | Livewire Form Objects: `rules()` + `toData()`, sin persistencia | R4, R24 |
 | `Http/` | sólo `Controllers/`, `Livewire/`, `Requests/`, `Middleware/` y `Resources/` | R3, R23 |
 | `Http/Resources/` | API Resources que extienden `Illuminate\Http\Resources\Json\JsonResource` | Pest arch: «los Http/Resources de módulo extienden JsonResource» (R3) |

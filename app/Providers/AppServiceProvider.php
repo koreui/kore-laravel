@@ -225,6 +225,9 @@ final class AppServiceProvider extends ServiceProvider
             'Social GitHub' => fn (): string => $state(config('kore-app.socialite.github')),
             'Docs' => fn (): string => $state(config('kore-app.docs.enabled')),
             'Devices' => fn (): string => $state(config('kore-app.devices.enabled')),
+            'PDF' => fn (): string => config('kore-app.pdf.enabled')
+                ? 'enabled (driver '.config('laravel-pdf.driver').')'
+                : 'disabled',
             'Backup' => fn (): string => config('kore-app.backup.enabled')
                 ? 'enabled'.(config('backup.backup.password') ? ' (zip cifrado)' : ' (zip SIN cifrar)')
                 : 'disabled',

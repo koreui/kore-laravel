@@ -20,11 +20,13 @@ Hub central de documentación. Las reglas vivas y resúmenes operativos están e
 - [`modules/docs.md`](modules/docs.md) — visor de `docs/` en `/docs` detrás de `DOCS_ENABLED`
 - [`modules/devices.md`](modules/devices.md) — inventario de dispositivos que consumen la API, detrás de `DEVICES_ENABLED`
 - [`modules/e2e.md`](modules/e2e.md) — harness de la suite E2E (`/__e2e__/*`) detrás de `E2E_HARNESS`
+- [`modules/pdf.md`](modules/pdf.md) — generación de PDF con spatie/laravel-pdf y Gotenberg, detrás de `PDF_ENABLED`
 
 ### Guías
 
 - [`guides/api.md`](guides/api.md) — API REST: el contrato de `App\Core\Http\Api`, cómo se añade un endpoint, middleware, limiters y Scramble
 - [`guides/crud.md`](guides/crud.md) — patrón CRUD: Form Object + Data + Actions + Events + KoreDataTable
+- [`guides/exports.md`](guides/exports.md) — la carpeta `Exports/`: CSV sin dependencias, Excel en el derivado y PDF delegando en el módulo Pdf
 - [`guides/i18n.md`](guides/i18n.md) — español como idioma fuente, inglés por módulo en JSON
 
 ### Calidad

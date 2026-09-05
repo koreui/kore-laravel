@@ -1,0 +1,21 @@
+{
+    "Cantidad": "Quantity",
+    "Conceptos": "Line items",
+    "Concepto": "Item",
+    "Datos del documento": "Document details",
+    "Documento de ejemplo": "Sample document",
+    "Emitido por": "Issued by",
+    "En la vista previa del navegador la paginación es aproximada; el corte definitivo lo decide Chromium al convertir.": "Page breaks in the browser preview are approximate; the final split is decided by Chromium at conversion time.",
+    "Esta sección abre en una hoja nueva porque lleva la clase salto-antes. El pie, la marca de agua, el código del documento y la numeración se repiten aquí sin escribir nada más: son el cromo del tema.": "This section starts on a new sheet because it carries the salto-antes class. The footer, the watermark, the document code and the page numbers repeat here with nothing else to write: they are the theme's chrome.",
+    "Fecha": "Date",
+    "Folio": "Reference",
+    "Formato": "Paper size",
+    "Hoja de ejemplo del tema base de PDF": "Sample sheet of the base PDF theme",
+    "Horas de soporte": "Support hours",
+    "Importe": "Amount",
+    "Las etiquetas y los valores llegan como arrays planos: la hoja no consulta la base de datos.": "Labels and values arrive as plain arrays: the sheet never queries the database.",
+    "Licencia anual": "Annual licence",
+    "Puesta en marcha": "Onboarding",
+    "Segunda hoja": "Second sheet",
+    "Una tabla que no cabe en la hoja se parte repitiendo su encabezado.": "A table that does not fit on the sheet splits, repeating its header."
+}

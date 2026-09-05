@@ -313,6 +313,45 @@ export const RUTAS: RutaAcceso[] = [
             superadmin: 404,
         },
     },
+    {
+        /*
+         * Las dos pantallas del módulo Pdf van con `PDF_ENABLED=false` en
+         * `.env.e2e`, así que para todo el mundo son 404 — igual que el
+         * switcher de arriba, y por una razón parecida: aquí se prueba que el
+         * toggle apagado no deja nada suelto.
+         *
+         * Y encenderlo no sería gratis. `/pdf/preview/download` convierte la
+         * hoja llamando a Gotenberg, que corre en su propio contenedor: en CI
+         * no lo hay, así que ese 200 no existiría y la suite entera quedaría
+         * colgada de un servicio externo por una pantalla de maquetación. La
+         * pantalla y el PDF los cubren los tests de Pest del módulo, que usan
+         * `Pdf::fake()` y no necesitan red.
+         *
+         * El día que un derivado levante Gotenberg en su CI, esto pasa a
+         * `superadmin: 200` (el gate `viewPdfPreview` deja entrar también al
+         * rol Administrador, que el `E2eSeeder` no siembra) y el resto a 403.
+         */
+        path: '/pdf/preview',
+        nombre: 'Pdf · vista previa del tema (toggle apagado)',
+        roles: {
+            invitado: 404,
+            member: 404,
+            viewer: 404,
+            editor: 404,
+            superadmin: 404,
+        },
+    },
+    {
+        path: '/pdf/preview/download',
+        nombre: 'Pdf · descarga del ejemplo (toggle apagado)',
+        roles: {
+            invitado: 404,
+            member: 404,
+            viewer: 404,
+            editor: 404,
+            superadmin: 404,
+        },
+    },
 ];
 
 /** El resultado que este perfil debe obtener en esta ruta. */

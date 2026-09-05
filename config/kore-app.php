@@ -53,6 +53,19 @@ return [
         'enabled' => (bool) env('DEVICES_ENABLED', false),
     ],
 
+    // Generación de PDF (módulo Pdf, sobre spatie/laravel-pdf + Gotenberg).
+    // Opt-in: el motor es un SERVICIO aparte —un contenedor con Chromium
+    // dentro—, así que encenderlo sin levantarlo deja los documentos rotos en
+    // producción y no en el momento del deploy. Con el toggle apagado no hay
+    // rutas, ni gate, ni binding de `App\Core\Contracts\PdfRenderer`: quien lo
+    // resuelva se lleva un error con nombre en vez de un PDF vacío. El módulo
+    // no tiene tablas, así que aquí no hay nada que migrar.
+    // La marca y el papel viven en `config/kore-pdf.php`; el driver y la URL de
+    // Gotenberg, en `config/laravel-pdf.php`. Ver docs/modules/pdf.md.
+    'pdf' => [
+        'enabled' => (bool) env('PDF_ENABLED', false),
+    ],
+
     'socialite' => [
         'google' => (bool) env('SOCIAL_GOOGLE', false),
         'github' => (bool) env('SOCIAL_GITHUB', false),

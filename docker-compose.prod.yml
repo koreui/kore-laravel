@@ -149,6 +149,46 @@ services:
       retries: 10
       start_period: 30s
 
+  # ── Gotenberg: conversión a PDF (perfil `pdf`) ──────────────────────────────
+  #
+  # Sólo arranca con el perfil puesto, porque sólo hace falta si el proyecto
+  # emite documentos:
+  #
+  #   docker compose --profile pdf up -d
+  #
+  # En el `.env` de producción: PDF_ENABLED=true y
+  # GOTENBERG_URL=http://gotenberg:3000 — el nombre del servicio en esta red.
+  #
+  # SIN puertos publicados, y es la diferencia importante con el compose de
+  # desarrollo: Gotenberg convierte el HTML que le manden, así que expuesto a
+  # internet es un renderizador de páginas gratis para cualquiera. Aquí sólo lo
+  # alcanzan los servicios de `kore_net`.
+  #
+  # `--api-timeout=60s` es el tope del lado del servidor. El del lado del
+  # cliente lo pone Laravel Http (30 s por defecto); un documento que tarde más
+  # que eso no es un problema de timeout sino de tamaño.
+  #
+  # Ver docs/modules/pdf.md y docs/ops/deployment.md § PDF con Gotenberg.
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    profiles: [pdf]
+    restart: unless-stopped
+    logging: *default-logging
+    networks:
+      - kore_net
+    command:
+      - "gotenberg"
+      - "--api-timeout=60s"
+    # `curl` viene en la imagen de Gotenberg; `/health` es su endpoint propio.
+    # start_period generoso: el contenedor levanta Chromium y LibreOffice antes
+    # de responder.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
   # ── Redis: sin puerto expuesto, con contraseña ──────────────────────────────
   redis:
     image: redis:7-alpine

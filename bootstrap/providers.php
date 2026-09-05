@@ -12,5 +12,6 @@ return [
     App\Modules\Users\Providers\UsersModuleServiceProvider::class,
     App\Modules\Docs\Providers\DocsModuleServiceProvider::class,
     App\Modules\Devices\Providers\DevicesModuleServiceProvider::class,
+    App\Modules\Pdf\Providers\PdfModuleServiceProvider::class,
     App\Modules\E2E\Providers\E2EModuleServiceProvider::class,
 ];
