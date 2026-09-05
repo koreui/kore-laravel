@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\E2E\Http\Controllers;
 
+use App\Core\Contracts\Notifier;
+use App\Core\Data\NotificationData;
+use App\Core\Enums\NotificationCategory;
 use App\Core\Enums\SystemRole;
 use App\Models\User;
 use App\Modules\E2E\Support\HarnessGuard;
@@ -163,6 +166,56 @@ final class HarnessController
         $deleted = User::query()->where('email', (string) $request->input('email'))->delete();
 
         return response()->json(['deleted' => $deleted]);
+    }
+
+    /**
+     * Manda una notificación a un usuario existente.
+     *
+     * Body: `{ email, title, body, category?, url? }`.
+     *
+     * Es atrezzo, como el resto del harness: un spec que prueba la bandeja
+     * necesita que haya algo dentro, y el producto no tiene ninguna pantalla
+     * desde la que crear una notificación a mano. Pasa por
+     * `App\Core\Contracts\Notifier` —el mismo contrato que usa la aplicación—
+     * y no por un `INSERT` fabricado, así que lo que el spec ve después es el
+     * resultado del camino real: preferencias, canales y forma del payload.
+     *
+     * 409 con el toggle apagado, y no un 500: el contrato sólo está bindeado
+     * con `NOTIFICATIONS_ENABLED=true`, y decirlo con su nombre ahorra el rato
+     * de leer un `BindingResolutionException` en el log de Playwright.
+     */
+    public function notify(Request $request): JsonResponse
+    {
+        $email = (string) $request->input('email');
+
+        $user = User::query()->where('email', $email)->first();
+
+        if (! $user instanceof User) {
+            return response()->json(['error' => "No existe el usuario «{$email}»."], 404);
+        }
+
+        if (! app()->bound(Notifier::class)) {
+            return response()->json([
+                'error' => 'El módulo Notifications está apagado (NOTIFICATIONS_ENABLED).',
+            ], 409);
+        }
+
+        resolve(Notifier::class)->notify($user->id, new NotificationData(
+            title: (string) $request->input('title', 'Aviso de prueba'),
+            body: (string) $request->input('body', 'Cuerpo del aviso de prueba.'),
+            category: (string) $request->input('category', NotificationCategory::System->value),
+            url: $request->filled('url') ? (string) $request->input('url') : null,
+            // El buzón de la suite se lee aparte (`/__e2e__/mail/last`); un
+            // correo por cada notificación sembrada sólo añadiría ruido.
+            mail: false,
+            push: false,
+        ));
+
+        return response()->json([
+            'ok' => true,
+            'user_id' => $user->id,
+            'unread' => $user->unreadNotifications()->count(),
+        ], 201);
     }
 
     /**

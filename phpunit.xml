@@ -89,6 +89,14 @@
         -->
         <env name="PDF_ENABLED" value="false" force="true"/>
         <env name="FILES_ENABLED" value="false" force="true"/>
+        <!--
+            El módulo Notifications va apagado por defecto en la suite, por lo
+            mismo que PDF y Files: si el desarrollador tuviera
+            NOTIFICATIONS_ENABLED=true en su .env, los tests del caso "toggle
+            apagado" fallarían sólo en su máquina. Los que necesitan el módulo lo
+            encienden con withEnvironment() (tests/Pest.php).
+        -->
+        <env name="NOTIFICATIONS_ENABLED" value="false" force="true"/>
         <env name="PULSE_ENABLED" value="false" force="true"/>
         <env name="TELESCOPE_ENABLED" value="false" force="true"/>
         <env name="NIGHTWATCH_ENABLED" value="false" force="true"/>

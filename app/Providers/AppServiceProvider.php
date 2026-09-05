@@ -228,6 +228,9 @@ final class AppServiceProvider extends ServiceProvider
             'PDF' => fn (): string => config('kore-app.pdf.enabled')
                 ? 'enabled (driver '.config('laravel-pdf.driver').')'
                 : 'disabled',
+            'Notifications' => fn (): string => config('kore-app.notifications.enabled')
+                ? 'enabled (poda a los '.config('kore-notifications.prune_days').' días)'
+                : 'disabled',
             'Files' => fn (): string => config('kore-app.files.enabled')
                 ? 'enabled (disco '.config('files.disk').')'
                 : 'disabled',

@@ -103,6 +103,37 @@ Tres decisiones que no son detalles:
   caduca o lo purga `sanctum:prune-expired`, la fila del dispositivo sobrevive
   para poder auditar desde dónde se entró. Lo que se pierde es el vínculo.
 
+## `PushTokenDirectory`: quién puede leer esos tokens
+
+El `push_token` de esta tabla es el único sitio del boilerplate donde se guardan
+las credenciales de envío de notificaciones a un teléfono, así que el módulo que
+**manda** los push —**Notifications**, detrás de `NOTIFICATIONS_ENABLED`— tiene
+que poder preguntarlos sin importar una sola clase de aquí (R5). La frontera es
+un contrato de Core:
+
+```php
+namespace App\Core\Contracts;
+
+interface PushTokenDirectory
+{
+    /** @return array<int, string> */
+    public function tokensFor(int $userId): array;
+}
+```
+
+- Lo implementa `Devices\Support\DevicePushTokens`, que devuelve los tokens de
+  los dispositivos **activos** —a un revocado no se le manda nada: es un teléfono
+  vendido, perdido o cuya sesión alguien cerró a propósito— y **sin repetir**,
+  porque reinstalar la app puede devolver el mismo token en dos filas.
+- El binding lo pone `DevicesModuleServiceProvider::register()` y **sólo con
+  `DEVICES_ENABLED=true`**. Con el módulo apagado no está bindeado, y quien lo
+  consume pregunta antes por `bound()` en vez de resolverlo: una instalación sin
+  inventario no tiene a dónde mandar un push, y eso no puede tumbar un aviso que
+  ya está en la bandeja.
+- Devices no sabe que Notifications existe, ni al revés: toda la relación son esa
+  interfaz y veinte líneas de implementación. Ver
+  [`notifications.md`](notifications.md).
+
 `Enums/Platform` tiene cuatro casos —`ios`, `android`, `web`, `cli`— con su
 `label()` (`iOS`, `Android`, `Web`, `CLI`) y un `supportsPush()`. No describe el
 aparato (para eso está `name`): separa los tres tipos de cliente que se tratan
