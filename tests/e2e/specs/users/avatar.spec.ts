@@ -88,10 +88,17 @@ test.describe('Users · avatar', () => {
             // EXISTA: `SubstituteBindings` corre antes que el middleware de
             // permisos, así que un id inventado daría 404 y este test estaría
             // probando otra cosa.
-            const respuesta = await page.goto('/users/1/edit');
+            //
+            // `page.request` y no `page.goto`, como en access/rbac.spec.ts: un
+            // 403 cargado en el navegador deja un «Failed to load resource» en
+            // la consola y `ErrorGuard` lo cuenta como error grave.
+            const respuesta = await page.request.get('/users/1/edit', {
+                maxRedirects: 0,
+                failOnStatusCode: false,
+            });
 
-            expect(respuesta?.status()).toBe(403);
-            await expect(page.getByLabel('Foto de perfil', { exact: true })).toHaveCount(0);
+            expect(respuesta.status()).toBe(403);
+            expect(await respuesta.text()).not.toContain('Foto de perfil');
         });
     });
 });

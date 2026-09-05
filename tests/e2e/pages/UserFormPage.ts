@@ -38,7 +38,7 @@ export class UserFormPage {
         this.password = page.getByLabel('Contraseña', { exact: true });
         this.passwordConfirmation = page.getByLabel('Confirmar contraseña', { exact: true });
         this.role = page.getByLabel('Rol', { exact: true });
-        this.submit = page.getByRole('button', { name: 'Guardar' });
+        this.submit = page.getByRole('button', { name: 'Guardar', exact: true });
         this.cancel = page.getByRole('link', { name: 'Cancelar' });
     }
 
