@@ -10,6 +10,432 @@ desde el upstream (`git remote add kore https://github.com/koreui/kore-laravel`)
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-09-05
+
+«Plataforma». Lo que un producto necesita para dejar de ser una aplicación y
+pasar a ser una instalación: que la organización se llame como se llama sin
+tocar el `.env`, que los documentos lleven folio, que la licencia diga qué
+módulos entran, que la gente se entere de lo que pasa, que otros sistemas se
+enteren también, y que el manual no lo escriba nadie a mano. Los dos proyectos
+de la cantera lo tenían resuelto entero y por separado: Notarium con
+`NotariaConfiguracion` (los ajustes en base con caída a config), `ReciboService`
+(la serie de folios con `lockForUpdate`), `Features` +
+`VerificaFirmaLicencia`/`EnviarEventosLicenciaJob` (qué incluye la licencia y
+cómo se avisa fuera), `MontoEnLetras` y el catálogo SEPOMEX; asper-server con su
+bandeja de notificaciones, su registro por invitación con estado de cuenta, y sus
+guías de usuario generadas desde los E2E.
+
+Aquí suben como **seis contratos en `Core`** —`Settings`, `NumberSeries`,
+`InstallationFeatures`, `Notifier`, `PushTokenDirectory` y `WebhookPublisher`—,
+un módulo `Platform` **sin toggle** que implementa los tres primeros porque
+ninguna instalación puede no tener nombre, y tres módulos opt-in que implementan
+el resto. Y un manual que se saca de la suite: los recorridos de
+`tests/e2e/manual/*.guia.ts` navegan la aplicación real, fotografían lo que ven y
+escriben el Markdown, así que arreglar una pantalla arregla también su
+documentación.
+
+La suite Pest pasa de 832 a **1245** tests (3469 assertions) y la E2E de 176 a
+**256** en 27 archivos, `config/kore-app.php` llega a **dieciocho** claves con
+`NOTIFICATIONS_ENABLED`, `WEBHOOKS_ENABLED`, `MX_ENABLED` y `AUTH_INVITATIONS`,
+`ModulesSeeder` pasa de tres a **seis** módulos sembrados, y el catálogo a
+`R1..R62` con **55** reglas con verificador automático y **7** manuales.
+
+### Añadido
+
+#### Core: los seis contratos y lo que viaja por ellos
+
+- **`App\Core\Contracts\Settings`** — los ajustes de la instalación, con una
+  cascada de tres escalones: la fila de `settings`, el valor de
+  `config/kore-settings.php` y el `$default` de quien pregunta. **Leer nunca
+  escribe**: una clave sin fila no es un error ni siembra nada. Quien cambia un
+  ajuste se pasa por parámetro (`$changedBy`), porque en `Core` `auth()` está
+  prohibido (R19).
+- **`App\Core\Contracts\NumberSeries`** — series de folio correlativas.
+  `next()` consume y `peek()` no, y son métodos distintos a propósito: enseñar
+  el siguiente folio en una pantalla no puede gastarlo.
+- **`App\Core\Contracts\InstallationFeatures`** — «qué incluye la licencia de
+  esta instalación»: `enabled(string)` y `all()`. Una clave que no existe es
+  `false`, nunca una excepción.
+- **`App\Core\Contracts\Notifier`** — `notify(int $userId, NotificationData)` y
+  `notifyMany()`. El destinatario es un `int` y no un `User`: quien avisa no
+  tiene por qué conocer el modelo, y así el contrato sirve igual desde un job.
+- **`App\Core\Contracts\PushTokenDirectory`** — de dónde salen los tokens de
+  push de un usuario. Es la frontera entre Notifications y Devices sin que
+  ninguno de los dos importe una clase del otro (R5): lo implementa Devices y lo
+  consume Notifications, los dos hablando con `Core`.
+- **`App\Core\Contracts\WebhookPublisher`** — `publish(string $event, array
+  $payload)`. **No hace HTTP**: escribe en la bandeja de salida. Un evento que no
+  esté en el catálogo de `config/kore-webhooks.php` lanza
+  `InvalidArgumentException`, para que el nombre de un evento sea una decisión y
+  no una cadena suelta.
+- **DTOs**: `IssuedNumberData` (serie, ámbito, número, formato e `issuedAt` en
+  ISO 8601 —no `CarbonImmutable`, por R8—), `NotificationData` (título, cuerpo,
+  categoría, URL, datos y los tres canales) y `OrganizationData`, que es lo que
+  el layout consume para pintar el nombre de la instalación.
+- **Enums**: `AccountStatus` (`pending`, `active`, `suspended`, con `label()`,
+  `color()` y `canOperate()`) y `NotificationCategory`. `AccountStatus` vive en
+  `Core` y no en Auth porque quien lo castea es `App\Models\User`, que es global.
+- **`App\Core\Concerns\HasIssuedNumber`** — el trait que le pone folio a un
+  modelo: `issueNumber()` consume la serie y lanza `ConflictException` si el
+  registro ya lo tiene. Es opt-in y hoy **ningún** modelo del boilerplate lo usa;
+  necesita las columnas `number` y `number_issued_at`.
+- **`App\Core\Support\WebhookSignature`** — HMAC-SHA256 sobre
+  `"{timestamp}.{body}"`, cabecera `X-Kore-Signature: t=…,v1=…`, ventana temporal
+  y `hash_equals()`. Es una clase pura, y la usan las dos puntas: el emisor para
+  firmar y el middleware receptor para verificar. El `timestamp` va **dentro** de
+  lo firmado; fuera, una entrega capturada se puede repetir para siempre.
+- **`App\Exceptions\AccountNotActiveException`** y el caso
+  `ApiErrorCode::AccountNotActive` (`account_not_active`, 403), para que una
+  cuenta suspendida no se confunda con un permiso que falta.
+
+#### Módulo `Platform` (sin toggle: siempre encendido)
+
+- **`Support/DatabaseSettings`**, **`DatabaseNumberSeries`** y
+  **`ConfigFeatures`**, los tres bindeados como singleton en el `register()` del
+  provider. No hay early return porque no hay toggle: una instalación sin nombre
+  de organización no es una instalación con una capacidad menos, es una que no
+  arranca bien.
+- **`Actions/`**: `SettingUpdateAction`, `SettingResetAction` (volver al valor de
+  config es distinto de escribir el valor de config) y `NumberIssueAction`, que
+  consume la serie dentro de una transacción con `lockForUpdate()` y devuelve el
+  **snapshot** del número emitido: el formato con el que se emitió viaja con el
+  folio, así que cambiar el formato mañana no reescribe los de ayer.
+- **Pantalla `/settings`** (`settings.edit`) con `permission:settings.manage` y
+  el componente `platform.settings-form`. La ruta **no** lleva `feature:`: los
+  ajustes no son una capacidad de licencia.
+- **Middleware `feature:`** (`Http/Middleware/EnsureFeatureEnabled`) y la
+  directiva Blade **`@feature('clave')`**. Es una capa distinta de `kore-app` y
+  de Pennant, y `toggles.md` explica cuál usar: `kore-app` es qué trae el
+  boilerplate, `features` es qué contrató esta instalación, Pennant es a quién se
+  le está enseñando algo.
+- **Comandos** `settings:show` (valor efectivo de cada ajuste y si viene de la
+  base o de la configuración) y `features:list`.
+- **View composer** sobre `components.layouts.*` que inyecta `$organization`
+  como `OrganizationData`, para que el layout no consulte Eloquent (R30).
+- **Tablas `settings` y `number_sequences`**, con índice único
+  `(series, scope, period)` en la segunda: el reinicio anual es parte de la
+  identidad de la serie, no un cálculo.
+- **Permiso `settings.manage`** y el módulo `settings` en `ModulesSeeder`, más
+  un `PlatformSeeder` que lo repone para el derivado que haya recortado el
+  catálogo.
+- **`config/kore-settings.php`**, **`config/kore-numbering.php`** y
+  **`config/features.php`**.
+- **62 tests Pest** en `app/Modules/Platform/Tests/`.
+
+#### Módulo `Notifications` (`NOTIFICATIONS_ENABLED`, apagado por defecto)
+
+- **`Support/DatabaseNotifier`** implementa `Notifier` sobre las notificaciones
+  de base de datos de Laravel, respetando las preferencias por categoría de cada
+  usuario. `PushChannel` hoy **sólo escribe un `Log::info()`**: el canal existe,
+  la integración con el proveedor la pone el derivado.
+- **Bandeja en `/notifications`**, preferencias en
+  `/notifications/preferences` y **campana en el layout**
+  (`notifications.bell`), con sondeo cada 30 s configurable. Ninguna de las dos
+  pantallas lleva `permission:`: la decisión es de la policy, porque lo que se ve
+  es lo propio.
+- **API v1 para el móvil**: `GET /api/v1/me/notifications`,
+  `POST …/read-all`, `POST …/{notification}/read`,
+  `GET /api/v1/me/notification-preferences` y `PUT` de las mismas.
+- **`Listeners/NotifyOnApiTokenIssued`** sobre `Auth\Events\ApiTokenIssued`:
+  entrar desde un dispositivo nuevo se avisa. Es el ejemplo de la frontera de
+  R5 —el listener importa el **evento** del módulo vecino y nada más—.
+- **`notifications:prune --days=`** y su entrada en el scheduler.
+- **`config/kore-notifications.php`**: categorías, poda y campana. No duplica el
+  toggle.
+- **Las tablas `notifications` y `notification_preferences` se migran siempre**,
+  también con el toggle apagado.
+- **81 tests Pest** y tres specs E2E (`smoke`, `inbox`, `preferences`).
+
+#### Invitaciones y estado de cuenta (`AUTH_INVITATIONS`, apagado por defecto)
+
+- **`Auth\Models\InvitationCode`** y la tabla `invitation_codes`: código, rol que
+  concede, usos máximos, caducidad y nota. `InvitationCreateAction`,
+  `InvitationRedeemAction` (con `lockForUpdate` sobre la fila, porque el cupo se
+  agota en la carrera entre validar y canjear) e `InvitationRevokeAction`.
+- **Dos columnas nuevas en `users`**: `account_status` (por defecto `active`) y
+  `activated_at`. **Se migran siempre**, esté el toggle como esté.
+- **Middleware `account.active`**, añadido a los grupos **`web` y `api`** con
+  `appendMiddlewareToGroup()` y no ruta por ruta: una cuenta suspendida no puede
+  depender de que alguien se acordara de poner el middleware en la ruta nueva.
+  En web manda a `/account/pending`; en API responde 403 con
+  `error.code = account_not_active`.
+- **Pantallas** `/invitations` e `/invitations/create` con
+  `permission:invitations.manage`, y `/account/pending` para quien todavía no
+  está activo (sin `verified`, porque el orden importa: primero se activa).
+- **`Fortify\CreateNewUser`** elige entre `AuthUserRegisterAction` (toggle
+  apagado, registro abierto como siempre) e `InvitationRedeemAction` (toggle
+  encendido, `/register` exige código y la cuenta nace con el rol que el código
+  concede). `SocialiteController` hace lo propio: con el toggle encendido las
+  cuentas de login social nacen `pending`.
+- **`invitations:prune --days=90`** y su tarea del scheduler.
+- **En Users**: `UserAccountStatusChangeAction` y el componente
+  `users.account-status-panel`, registrado **sólo** con el toggle encendido y
+  pintado **fuera** del formulario de edición. La guarda de «nadie cambia su
+  propio estado» vive en la Action y no en la policy, porque el `Gate::before`
+  del superadmin se la saltaría.
+- **El permiso `invitations.manage` se siembra siempre**, con el toggle apagado
+  también (R60).
+- Tests Pest en Auth (151 con esto dentro) y en Users (98), más los specs E2E
+  `auth/invitations` y `users/account-status`.
+
+#### Módulo `Webhooks` (`WEBHOOKS_ENABLED`, apagado por defecto)
+
+- **`Support/OutboxWebhookPublisher`** implementa `WebhookPublisher`
+  escribiendo en la tabla `webhook_deliveries`. Publicar **no** hace HTTP, y ésa
+  es la decisión de diseño de la que cuelga todo lo demás: la petición del
+  usuario no espera a un tercero, y una integración caída no rompe la operación
+  que la disparó.
+- **Siete Actions**: `WebhookDeliverAction` (firma, envía y anota el intento),
+  `WebhookDeliveryRetryAction`, `WebhookDeliveryPruneAction`, y el CRUD del
+  endpoint más `WebhookEndpointRotateSecretAction`.
+- **Reintentos con espera creciente**: 1 min, 5 min, 30 min, 2 h y 12 h, seis
+  intentos como máximo, repartidos en algo menos de quince horas.
+- **`webhooks:dispatch --limit=`** y **`webhooks:prune --days=30`**, los dos con
+  `--dry-run`, y sus entradas en el scheduler.
+- **Pantallas** `/webhooks`, `/webhooks/create`, `/webhooks/{endpoint:uuid}` y
+  `…/edit`, enrutadas por **uuid** y no por el id entero: un `/webhooks/7` diría
+  cuántas integraciones hay en la instalación.
+- **El secreto se enseña una sola vez**, se guarda cifrado y va `#[Hidden]`.
+- **Middleware `webhook.signed`** para el lado receptor —verifica la firma de un
+  webhook entrante—, registrado como alias y sin ninguna ruta del boilerplate
+  detrás: es para el derivado que reciba.
+- **Tablas `webhook_endpoints` y `webhook_deliveries`**, migradas siempre. La
+  columna se llama **`subscribed_events`** y no `events` a propósito (ver la nota
+  de R53 en el catálogo).
+- **`config/kore-webhooks.php`** con el catálogo de eventos publicables, hoy
+  `auth.api_token.issued`.
+- **Permiso `webhooks.manage`**, uno solo y no el CRUD de cuatro: quien puede
+  ver la lista de endpoints puede leer el payload de cada entrega, así que no hay
+  un «sólo lectura» que sea menos sensible.
+- **86 tests Pest** y dos specs E2E (`smoke`, `crud`).
+
+#### Módulo `Mx` (`MX_ENABLED`, apagado por defecto)
+
+- **`Support/PostalCodes`** — código postal → colonias, municipio y estado, con
+  caché configurable, y **`Support/MontoEnLetras`** — el importe en letra que
+  todo recibo mexicano lleva impreso.
+- **`mx:sepomex:import {path?} {--url=}`** — el catálogo entra por aquí y la
+  tabla nace vacía (R61). Lo que sí viaja en el repositorio son las **32
+  entidades federativas** (`MxStatesSeeder`) y una muestra de dos kilobytes para
+  los tests.
+- **API pública y cacheada**: `GET /api/v1/mx/postal-codes/{postalCode}` y
+  `GET /api/v1/mx/amount-in-words`, las dos con `api.cache:3600` y **sin**
+  `auth:sanctum` — es un catálogo público del Estado, no datos de nadie.
+- **Componente `mx.postal-code-field`**, embebible en cualquier formulario:
+  emite `mx-postal-code-resolved` y se desentiende, porque no sabe cómo se llaman
+  los campos del formulario que lo aloja. Su método de consulta se llama
+  `lookup()` y no `updatedPostalCode()` a propósito (ver la nota de R23).
+- **Tablas `mx_states` y `mx_postal_codes`**, migradas siempre.
+- **`config/mx.php`** (caché e importación) y **93 tests Pest**.
+
+#### El manual de usuario, generado desde los E2E
+
+- **`npm run manual`** recorre la aplicación real con Playwright, fotografía cada
+  paso y escribe `docs/manual/NN-slug.md` con sus capturas en
+  `docs/manual/imagenes/`. **`npm run manual:pdf`** lo pasa por Gotenberg.
+- **`playwright.manual.config.ts`** aparte del de la suite: un solo worker, sin
+  reintentos, `deviceScaleFactor: 2`, tema claro fijo y viewport 1440×900, porque
+  una captura de manual no se puede parecer «casi» a la anterior.
+- **`tests/e2e/manual/fixtures/guia.ts`** con `recorrido()` y la clase `Guia`
+  (`capitulo`, `paso`, `senalar`, `nota`, `cerrar`), y la guía de ejemplo
+  `01-usuarios.guia.ts`: entrar, listar, crear, editar y buscar usuarios.
+- **Lo generado está ignorado por git** salvo `docs/manual/README.md`: el manual
+  se regenera, no se versiona.
+- **`.github/workflows/manual.yml`** (`workflow_dispatch`) lo publica como
+  artifact, y **`docs/quality/manual.md`** cuenta cómo se escribe un recorrido.
+- **Ni un paquete nuevo**: el PDF se arma con `fetch`, `FormData` y `Blob` de
+  Node 20 contra el mismo Gotenberg que ya usaba el módulo Pdf.
+
+#### Reglas, documentación e infraestructura
+
+- **R58 · un API Resource no declara un campo llamado `data`.**
+  `ResourceResponse::wrap()` lo confunde con el sobre ya puesto y la respuesta
+  sale sin envelope, con `meta` colgando al lado, sin un error en ninguna parte.
+  Check textual `checkApiResourcesHaveNoDataField`; sin válvula. **Error**.
+- **R59 · el middleware de una ruta se declara en un solo array.**
+  `RouteRegistrar::middleware()` sustituye en vez de acumular. Check textual
+  `checkRouteMiddlewareIsDeclaredOnce`, que parte el archivo en sentencias con
+  `token_get_all()` para no sumar el middleware de un grupo con el de las rutas
+  de dentro; válvula `arch-accepted`. **Error**.
+- **R60 · un toggle no apaga el catálogo de autorización.** `ModulesSeeder` y
+  `Module::specialPermissions()` no leen `config('kore-app.…')` ni `env()`. Check
+  textual `checkAuthorizationCatalogIgnoresToggles`; sin válvula. **Error**.
+- **R61 · un catálogo de terceros no viaja en el repositorio.** Check textual
+  `checkNoBulkDataFiles` (256 KB en `database/data/**`,
+  `app/Modules/*/Database/data/**` y `app/Modules/*/Tests/fixtures/**`); válvula
+  `arch-accepted`. **Warning**: se imprime en amarillo y no cambia el exit code.
+- **R62 · un recorrido del manual toma los localizadores de
+  `tests/e2e/pages/`.** Check textual `checkManualGuidesUsePageObjects`; válvula
+  `arch-accepted`. **Warning**.
+- **`kore:arch:check` estrena canal de avisos.** Las reglas de severidad
+  **Warning** se imprimen aparte y no fallan el build, que es lo que su severidad
+  decía desde el principio y hasta ahora no tenía forma de expresarse.
+- **Cinco notas nuevas en el catálogo**, sin regla nueva detrás: los **dos**
+  motivos del `loadViewsFrom` fuera del toggle (R10), los hooks `updated*` de
+  Livewire como puerta abierta al cliente (R23), que el índice de `docs/` se
+  comprueba contra el **disco** y por eso un `.md` generado también entra (R40),
+  que un atributo de Eloquent no puede llamarse como una propiedad del framework
+  (§4, junto a R53) y que una clave de config con punto dentro no se lee con
+  `config('archivo.a.b')` (R12).
+- **Docs nuevos**: `docs/modules/platform.md`, `docs/modules/notifications.md`,
+  `docs/modules/webhooks.md`, `docs/modules/mx.md` y `docs/quality/manual.md`,
+  los cinco enlazados en `docs/README.md`, más las invitaciones en
+  `docs/modules/auth.md` y cuatro filas nuevas en
+  `docs/architecture/toggles.md`.
+
+### Cambiado
+
+- **`config/kore-app.php` pasa de catorce a dieciocho claves** con
+  `notifications.enabled`, `mx.enabled`, `webhooks.enabled` y
+  `auth.invitations`, y con ellas `KoreMcpTest` (`kore-list-toggles`), la tabla
+  de `docs/architecture/toggles.md`, la de `README.md` y el `about` de
+  `AppServiceProvider`.
+- **`ModulesSeeder` pasa de tres a seis módulos**: `dashboard`, `users` y `roles`
+  se le suman `invitations`, `settings` y `webhooks`, con sus tres permisos de
+  administración. Los seis se siembran siempre (R60), así que `CleanInstallTest`
+  y `DashboardTest` cuentan seis.
+- **`App\Models\User` gana `account_status` y `activated_at`**, casteadas a
+  `AccountStatus` e `immutable_datetime`, con `isActive()` y `accountStatus()`.
+  Las dos entran en la lista de `#[Fillable]` (R27) y `account_status` en el
+  activitylog.
+- **El layout deja de pintar `config('app.name')`** y usa `$organization->name`
+  del view composer de Platform, con la inicial del logo derivada del nombre en
+  vez de una «K» fija. El sidebar estrena los grupos «Accesos» (Invitaciones) e
+  «Integraciones» (Webhooks), el ítem «Ajustes», y la campana de notificaciones
+  en el encabezado; cada uno detrás de su toggle **y** de su `@can`.
+- **El grupo «Gestión» del sidebar deja de colgar entero de
+  `@can('users.view')`**: quien sólo tiene `settings.manage` veía el grupo vacío
+  —o, peor, no veía su enlace—. Ahora la condición del grupo es la unión y cada
+  ítem lleva su propio `@can`.
+- **`/register` cambia de forma con `AUTH_INVITATIONS`**: pide un código, lo
+  valida con `ValidInvitationCode` y crea la cuenta con el rol que ese código
+  concede. Con el toggle apagado el registro es exactamente el de siempre.
+- **El middleware `account.active` entra en los grupos `web` y `api`**, no en
+  rutas sueltas.
+- **`DevicesModuleServiceProvider` estrena `register()`** para bindear
+  `PushTokenDirectory` a `Devices\Support\DevicePushTokens`, detrás de
+  `DEVICES_ENABLED`. Es lo que hace que Notifications pueda mandar push sin saber
+  que Devices existe.
+- **Se remidió el pipeline** (R41): `composer ci` pasa de 31 s a 43 s y el
+  pre-push de 7 s a 10 s, con la suite ya en 1245 tests. Las cifras de
+  `docs/quality/pipeline.md`, `docs/quality/e2e.md`,
+  `docs/architecture/rules.md` y `tests/e2e/FLUJOS.md` se recontaron, y
+  `FLUJOS.md` estrena las secciones J (Notificaciones), K (Ajustes) y L
+  (Webhooks).
+- **Ningún paquete nuevo.** `composer.json` no se toca en toda la release; de
+  `package.json` sólo cambian los tres scripts del manual.
+
+### Corregido
+
+- **`UserFactory` escribe `account_status` y `activated_at` aunque coincidan con
+  el default de la columna.** `create()` no relee la fila, y con
+  `Model::shouldBeStrict()` leer un atributo no cargado **lanza**: sin esto,
+  cualquier test que pasara un usuario de factory por `EnsureAccountIsActive`
+  moría con «attribute does not exist» en vez de con lo que estuviera probando.
+  `User::accountStatus()` se defiende igual, consultando `getAttributes()`.
+- **El canje de una invitación agotada devuelve un error de campo y no un 500.**
+  El `ConflictException` que salta cuando el cupo se acaba en la carrera entre
+  validar y bloquear la fila se traduce a `ValidationException` sobre
+  `invitation_code`.
+- **Las rutas de Webhooks perdían el grupo `web` entero.**
+  `permission:webhooks.manage` iba encadenado detrás del grupo y
+  `RouteRegistrar::middleware()` sustituye en vez de acumular, así que con él se
+  iba `SubstituteBindings` y `/webhooks/{endpoint:uuid}` reventaba con un error
+  que no hablaba de rutas. Es la cicatriz de **R59**.
+- **La tabla del listado de usuarios se localizaba dentro de la guía del
+  manual.** Se movió a `UsersIndexPage`, que es el único sitio que habrá que
+  tocar si el listado deja de pintar un `<table>`. Es la cicatriz de **R62**.
+- **`WebhooksAuthorizationTest` pasaba el endpoint a una policy que no lo
+  recibe.** Los cinco métodos de `WebhookEndpointPolicy` toman sólo al usuario
+  —la decisión es la misma para todas las filas—, PHP descartaba el argumento de
+  más y Rector lo marcaba en cada `composer ci`.
+- **El título de `KoreMcpTest` decía «quince claves»** con la aserción en
+  dieciocho.
+
+### Nota de migración para derivados
+
+1. **`composer update`** no trae nada nuevo: la release no añade ni un paquete.
+   Basta con traer los archivos.
+
+2. **`php artisan migrate`**. Hay **nueve migraciones nuevas**, y todas se
+   aplican **aunque su toggle esté en `false`**: un toggle apaga rutas y
+   comportamiento, nunca el esquema.
+
+   | Migración | Qué crea |
+   |---|---|
+   | `Auth/…/2026_09_04_140000_create_invitation_codes_table.php` | `invitation_codes` |
+   | `Auth/…/2026_09_04_140001_add_account_status_to_users_table.php` | `users.account_status`, `users.activated_at` |
+   | `Platform/…/2026_09_04_120000_create_settings_table.php` | `settings` |
+   | `Platform/…/2026_09_04_120100_create_number_sequences_table.php` | `number_sequences` |
+   | `Notifications/…/2026_09_05_120000_create_notifications_table.php` | `notifications` |
+   | `Notifications/…/2026_09_05_120100_create_notification_preferences_table.php` | `notification_preferences` |
+   | `Mx/…/2026_09_05_100000_create_mx_states_table.php` | `mx_states` |
+   | `Mx/…/2026_09_05_100001_create_mx_postal_codes_table.php` | `mx_postal_codes` |
+   | `Webhooks/…/2026_09_05_100000_create_webhooks_tables.php` | `webhook_endpoints` y `webhook_deliveries` |
+
+   > **Si ya tienes una tabla `notifications`** (el `make:notifications-table`
+   > de Laravel), no apliques la del módulo: marca la migración como ya
+   > ejecutada en tu tabla `migrations`. El módulo sólo necesita las columnas
+   > estándar de `DatabaseNotification`.
+
+3. **`php artisan kore:regenerate-permissions`**. Es lo que trae los tres
+   permisos nuevos —`invitations.manage`, `settings.manage` y
+   `webhooks.manage`— y los sincroniza a los administradores. Sin esto las
+   pantallas existen y nadie puede abrirlas, ni siquiera el administrador. Si
+   prefieres el seeder a pelo,
+   `php artisan db:seed --class="App\Modules\Auth\Database\Seeders\ModulesSeeder"`
+   hace la primera mitad.
+
+4. **Variables nuevas de `.env`**, las cuatro opcionales y con su default en el
+   código:
+
+   ```
+   AUTH_INVITATIONS=false
+   NOTIFICATIONS_ENABLED=false
+   MX_ENABLED=false
+   WEBHOOKS_ENABLED=false
+   ```
+
+   `.env.example` trae además, comentadas, las que afinan cada módulo:
+   `SETTINGS_CACHE_TTL`, `FEATURE_REPORTS`, `FEATURE_EXPORTS`,
+   `FEATURE_API_WEBHOOKS`, `MX_CACHE_TTL`, `WEBHOOKS_INBOUND_SECRET`,
+   `WEBHOOKS_TIMEOUT`, `WEBHOOKS_MAX_ATTEMPTS`, `WEBHOOKS_TOLERANCE` y
+   `WEBHOOKS_REQUIRE_HTTPS`.
+
+5. **Seis archivos nuevos en `config/`**: `kore-settings.php`,
+   `kore-numbering.php`, `features.php`, `kore-notifications.php`,
+   `kore-webhooks.php` y `mx.php`. Ninguno es de un paquete, así que no hay nada
+   que reconciliar; los seis se copian tal cual y se editan después.
+
+   > `kore-settings.defaults` tiene claves **con punto dentro**
+   > (`organization.name`), porque el punto es parte del identificador del
+   > ajuste. Eso significa que **no** se leen con
+   > `config('kore-settings.defaults.organization.name')`: `Arr::get` parte la
+   > cadena y devuelve `null` en silencio. Se lee el array y se indexa (R12).
+
+6. **Qué le pasa a tu registro si enciendes `AUTH_INVITATIONS`.** Las cuentas
+   que ya existen no se enteran: la columna `account_status` nace con el default
+   `active`, así que todo el mundo sigue entrando. Lo que cambia es de ahí en
+   adelante — `/register` deja de aceptar altas sin código, y las cuentas de
+   login social nacen `pending` hasta que alguien las active desde la pantalla
+   de edición del usuario. Antes de encenderlo en producción, crea al menos un
+   código (`/invitations/create`) o no habrá forma de dar de alta a nadie.
+
+7. **Los cinco checks nuevos pueden ponerte código existente en rojo**, y es el
+   punto de la release:
+   - **R58** marcará cualquier API Resource tuyo con un campo `data`. Renómbralo
+     —`payload` es el nombre que usa el boilerplate— y revisa a los clientes: la
+     respuesta cambia de forma, porque hasta ahora salía **sin** envelope.
+   - **R59** marcará cada sentencia de rutas con dos `->middleware()`. Júntalos
+     en un array; si de verdad querías sustituir el grupo, ésa es la válvula
+     `arch-accepted` — y la pone una persona, no un agente (R44).
+   - **R60** marcará el `if` del toggle dentro de tu `ModulesSeeder`. Siembra
+     siempre: el permiso sin módulo no abre nada.
+   - **R61** y **R62** son **avisos**: se imprimen y no rompen el build. R61
+     encontrará el catálogo que tengas commiteado (a Notarium le encontró
+     `database/data/sepomex.csv`, catorce megas) y R62, los localizadores
+     escritos dentro de una guía del manual.
+
 ## [2.3.0] - 2026-09-04
 
 «Archivos y documentos». Las dos cosas que todo proyecto acaba necesitando y que
@@ -2227,7 +2653,8 @@ scaffold, cifras inventadas en los docs).
   el paquete cambiara. Republicarlas es un `vendor:publish` cuando de verdad
   haya que personalizarlas.
 
-[Unreleased]: https://github.com/koreui/kore-laravel/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/koreui/kore-laravel/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/koreui/kore-laravel/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/koreui/kore-laravel/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/koreui/kore-laravel/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/koreui/kore-laravel/compare/v2.0.0...v2.1.0

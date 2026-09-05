@@ -21,8 +21,8 @@ Lo que la suite **encuentra** va a [`HALLAZGOS.md`](./HALLAZGOS.md).
 | ⬜ | Sin cubrir todavía |
 | 🔒 | No se puede probar aquí (depende de un servicio externo o de otro entorno) |
 
-**Cifras de la suite**: 176 tests en 19 archivos (4 de ellos son el proyecto
-`setup`, que abre una sesión por rol). 104 salen generados del mapa de acceso.
+**Cifras de la suite**: 256 tests en 27 archivos (4 de ellos son el proyecto
+`setup`, que abre una sesión por rol). 171 salen generados del mapa de acceso.
 
 ---
 
@@ -43,6 +43,11 @@ Lo que la suite **encuentra** va a [`HALLAZGOS.md`](./HALLAZGOS.md).
 | A11 | Entrar con código por email (magic link), camino feliz | Todos | ✅ | `auth/magic-link` |
 | A12 | Código incorrecto y anti-enumeración de correos | Todos | ✅ | `auth/magic-link` |
 | A13 | `/magic-link` con sesión abierta responde 200 (no rebota) | Autenticado | ✅ | `access/rbac` · KORE-E2E-002 |
+| A14 | Crear un código de invitación y verlo en el listado | `invitations.manage` | ✅ | `auth/invitations` |
+| A15 | Revocar un código lo deja fuera de juego | `invitations.manage` | ✅ | `auth/invitations` |
+| A16 | Registrarse con un código recién repartido (`AUTH_INVITATIONS`) | Invitado | ✅ | `auth/invitations` |
+| A17 | Un código inventado no deja crear la cuenta | Invitado | ✅ | `auth/invitations` |
+| A18 | Una cuenta suspendida no puede entrar | Suspendido | ✅ | `users/account-status` |
 | A14 | Activar 2FA, confirmar con código y guardar los de recuperación | Todos | ⬜ | — |
 | A15 | Entrar con 2FA activo (reto de segundo factor) | Todos | ⬜ | — |
 | A16 | Confirmar la contraseña para una acción sensible | Todos | ✅ | `auth/passkeys`, `access/rbac` (`'confirm'`) |
@@ -79,6 +84,10 @@ Lo que la suite **encuentra** va a [`HALLAZGOS.md`](./HALLAZGOS.md).
 | C12 | Ordenar la tabla por columna | `users.view` | ⬜ | — |
 | C13 | Paginación de la tabla | `users.view` | ⬜ | — |
 | C14 | Exportar el listado | `users.view` | ⬜ | no existe todavía |
+| C15 | Subir la foto de un usuario y que quede como la vigente | `users.edit` | ✅ | `users/avatar` |
+| C16 | La foto subida aparece en la fila del listado | `users.view` | ✅ | `users/avatar` |
+| C17 | Sin `users.edit` no se ve la zona de subida | viewer | ✅ | `users/avatar` |
+| C18 | Suspender una cuenta cierra el acceso y activarla lo devuelve | `users.edit` | ✅ | `users/account-status` |
 
 ## D · Dashboard
 
@@ -129,8 +138,8 @@ Lo que la suite **encuentra** va a [`HALLAZGOS.md`](./HALLAZGOS.md).
 ## H · Control de acceso (transversal)
 
 Todo esto sale de [`fixtures/access-map.ts`](./fixtures/access-map.ts) y no se
-escribe a mano: **14 pantallas × 5 perfiles = 70 comprobaciones** de status en
-`access/rbac`, más **34 comprobaciones ruta × perfil que abren de verdad** en `access/smoke`.
+escribe a mano: **24 pantallas × 5 perfiles = 120 comprobaciones** de status en
+`access/rbac`, más **51 comprobaciones ruta × perfil que abren de verdad** en `access/smoke`.
 
 | # | Flujo | Cobertura | Spec |
 |---|---|---|---|
@@ -142,6 +151,43 @@ escribe a mano: **14 pantallas × 5 perfiles = 70 comprobaciones** de status en
 | H6 | Ninguna pantalla muestra claves de traducción sin resolver | ✅ | `access/smoke` · KORE-E2E-001 |
 | H7 | Ninguna pantalla lanza excepciones de JS ni provoca 5xx | ✅ | el guardia, en **todos** los tests |
 | H8 | `/users/{user}/edit`, que lleva parámetro | 🟡 | `users/edit` (se llega por la fila, no por el mapa) |
+
+## J · Notificaciones (`NOTIFICATIONS_ENABLED`)
+
+| # | Flujo | Quién | Cobertura | Spec |
+|---|---|---|---|---|
+| J1 | La bandeja carga con su heading y su título | Autenticado | ✅ | `notifications/smoke`, `access/smoke` |
+| J2 | La campana está en el encabezado con el toggle encendido | Autenticado | ✅ | `notifications/smoke` |
+| J3 | Navegar de la bandeja a las preferencias y volver | Autenticado | ✅ | `notifications/smoke` |
+| J4 | Un aviso recién llegado se ve, se abre y se marca como leído | Autenticado | ✅ | `notifications/inbox` |
+| J5 | «Marcar todas» vacía el contador de una vez | Autenticado | ✅ | `notifications/inbox` |
+| J6 | Sólo se ve la bandeja propia | Autenticado | ✅ | `notifications/inbox` |
+| J7 | Apagar el correo de una categoría persiste tras recargar | Autenticado | ✅ | `notifications/preferences` |
+| J8 | Sin el módulo Devices no se ofrece el interruptor de push | Autenticado | ✅ | `notifications/preferences` |
+| J9 | Cada categoría del catálogo tiene su bloque | Autenticado | ✅ | `notifications/preferences` |
+| J10 | El aviso llega por correo además de a la bandeja | Autenticado | ⬜ | lo cubre Pest |
+
+## K · Ajustes de la instalación (módulo Platform)
+
+| # | Flujo | Quién | Cobertura | Spec |
+|---|---|---|---|---|
+| K1 | Cambiar el nombre de la organización y verlo en el layout | `settings.manage` | ✅ | `platform/settings` |
+| K2 | El servidor rechaza un nombre demasiado largo | `settings.manage` | ✅ | `platform/settings` |
+| K3 | Un viewer no entra en `/settings` | viewer | ✅ | `platform/settings`, `access/rbac` |
+| K4 | Un invitado va al login | Invitado | ✅ | `platform/settings`, `access/rbac` |
+| K5 | Subir el logo de la organización | `settings.manage` | ⬜ | — |
+| K6 | Consumir un folio de una serie | — | 🔒 | no tiene pantalla; lo cubre Pest |
+
+## L · Webhooks (`WEBHOOKS_ENABLED`)
+
+| # | Flujo | Quién | Cobertura | Spec |
+|---|---|---|---|---|
+| L1 | El listado carga con su tabla | `webhooks.manage` | ✅ | `webhooks/smoke`, `access/smoke` |
+| L2 | «Nuevo endpoint» lleva al formulario con el catálogo de eventos | `webhooks.manage` | ✅ | `webhooks/smoke` |
+| L3 | Crear un endpoint enseña el secreto **una vez** y lo deja en la tabla | `webhooks.manage` | ✅ | `webhooks/crud` |
+| L4 | Un perfil sin `webhooks.manage` se lleva un 403 en el detalle | viewer | ✅ | `webhooks/crud`, `access/rbac` |
+| L5 | Rotar el secreto de un endpoint | `webhooks.manage` | ⬜ | lo cubre Pest |
+| L6 | Reencolar una entrega agotada desde el detalle | `webhooks.manage` | ⬜ | lo cubre Pest |
 
 ## I · El andamiaje de la suite
 

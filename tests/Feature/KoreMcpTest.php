@@ -97,7 +97,7 @@ test('kore-list-modules cuenta carpetas, Actions, Livewire, rutas y tests', func
 |--------------------------------------------------------------------------
 */
 
-test('kore-list-toggles devuelve las quince claves de kore-app con su variable de .env y un lector', function (): void {
+test('kore-list-toggles devuelve las dieciocho claves de kore-app con su variable de .env y un lector', function (): void {
     $payload = mcpToolPayload(ListTogglesTool::class);
 
     $toggles = collect(Arr::get($payload, 'toggles'))->keyBy('clave');

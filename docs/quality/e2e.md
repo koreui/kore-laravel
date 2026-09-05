@@ -8,7 +8,7 @@ guardia de errores monta en todos los tests: si la pantalla lanza una
 excepción de JavaScript o el servidor devuelve 500, el test falla aunque su
 aserción haya pasado.** Cada pantalla nueva se declara en
 `tests/e2e/fixtures/access-map.ts`, y con eso queda cubierta por RBAC y por el
-smoke sin escribir un test. Hoy: 176 tests en 19 archivos, 104 de ellos
+smoke sin escribir un test. Hoy: 256 tests en 27 archivos, 171 de ellos
 generados desde el mapa.
 
 ## Por qué Playwright standalone y no el browser testing de Pest
@@ -79,10 +79,10 @@ tiene tres candados —flag, entorno y base de pruebas— que se explican en
 [`tests/e2e/fixtures/access-map.ts`](../../tests/e2e/fixtures/access-map.ts) es
 la **fuente única** de dos specs que nadie escribe a mano:
 
-- `specs/access/rbac.spec.ts` — cada ruta × cada perfil (**19 × 5 = 95
+- `specs/access/rbac.spec.ts` — cada ruta × cada perfil (**24 × 5 = 120
   comprobaciones**): el status, o la redirección, que el servidor tiene que
   devolver.
-- `specs/access/smoke.spec.ts` — cada pantalla que da 200 para alguien (**40**):
+- `specs/access/smoke.spec.ts` — cada pantalla que da 200 para alguien (**51**):
   que carga, que muestra su heading, que Livewire hidrata y que no revienta.
 
 Añadir una pantalla al mapa la cubre en los dos. Es la forma automática de
@@ -402,6 +402,9 @@ tests/e2e/
     ├── smoke/landing.spec.ts
     ├── auth/{login,register,forgot-password,magic-link,passkeys,invitations}.spec.ts
     ├── users/{index,create,edit,delete,dashboard,account-status,avatar}.spec.ts
+    ├── notifications/{smoke,inbox,preferences}.spec.ts
+    ├── platform/settings.spec.ts
+    ├── webhooks/{smoke,crud}.spec.ts
     └── docs/{smoke,navigation,authorization}.spec.ts
 ```
 
