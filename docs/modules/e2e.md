@@ -95,6 +95,7 @@ producto y salta a la vista en un `route:list`.
 | `DELETE` | `/__e2e__/users` | `e2e.users.destroy` | `{email}` | `200 {deleted}` |
 | `GET` | `/__e2e__/mail/last` | `e2e.mail.last` | `?to=` | `200 {to, subject, body, otp, links[]}` · `404 {error}` |
 | `DELETE` | `/__e2e__/mail` | `e2e.mail.clear` | — | `200 {ok: true}` |
+| `POST` | `/__e2e__/notify` | `e2e.notify` | `{email, title?, body?, category?, url?}` | `201 {ok, user_id, unread}` · `404 {error}` · `409 {error}` |
 | `POST` | `/__e2e__/artisan` | `e2e.artisan` | `{command, arguments?}` | `200 {exit_code, output}` · `422 {error, allowed[]}` |
 | `POST` | `/__e2e__/throttle/clear` | `e2e.throttle.clear` | `{keys?}` | `200 {ok: true}` |
 
@@ -114,6 +115,16 @@ Detalles que son contrato:
 - **`artisan`** tiene lista blanca (`kore:regenerate-permissions`, `cache:clear`)
   y sólo esa. Un endpoint sin autenticación que ejecute artisan arbitrario es una
   shell remota, aunque viva detrás de tres candados.
+- **`notify`** mete una notificación en la bandeja de alguien pasando por
+  `App\Core\Contracts\Notifier`, el mismo contrato que usa la aplicación: lo que
+  el spec ve después es el resultado del camino real —preferencias incluidas— y
+  no un `INSERT` fabricado. Existe porque el producto no tiene ninguna pantalla
+  desde la que crear una notificación a mano, así que sin él un spec de la
+  bandeja tendría que provocar un login por API sólo para conseguir una fila que
+  mirar. Manda con `mail: false` y `push: false` para no llenar el buzón de la
+  suite. Responde **409** —y no un 500— cuando `NOTIFICATIONS_ENABLED` está
+  apagado: el contrato sólo se bindea con el toggle encendido, y decirlo con su
+  nombre ahorra leer un `BindingResolutionException` en el log de Playwright.
 - **`throttle/clear`** limpia las claves que se le pasen y además vacía el
   almacén de caché por defecto: el limitador de Fortify combina correo e IP y no
   hay forma de enumerar sus claves. Es una base de pruebas; no hay nada ahí que

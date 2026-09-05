@@ -348,6 +348,40 @@ export const RUTAS: RutaAcceso[] = [
         },
     },
     {
+        /*
+         * `auth` + `verified` y sin `permission:`: una bandeja no es una
+         * sección a la que se dé acceso, es algo que todo el mundo tiene. Por
+         * eso las dos pantallas del módulo son 200 para los cuatro perfiles
+         * autenticados y sólo el invitado rebota al login — es el primer par de
+         * entradas del mapa con esa forma, y conviene tenerlo escrito.
+         *
+         * `NOTIFICATIONS_ENABLED=true` en `.env.e2e`: al revés que el módulo
+         * Pdf, encenderlo no cuelga la suite de ningún servicio externo.
+         */
+        path: '/notifications',
+        nombre: 'Notifications · bandeja',
+        heading: 'Notificaciones',
+        roles: {
+            invitado: 'login',
+            member: 200,
+            viewer: 200,
+            editor: 200,
+            superadmin: 200,
+        },
+    },
+    {
+        path: '/notifications/preferences',
+        nombre: 'Notifications · preferencias',
+        heading: 'Preferencias de notificación',
+        roles: {
+            invitado: 'login',
+            member: 200,
+            viewer: 200,
+            editor: 200,
+            superadmin: 200,
+        },
+    },
+    {
         // Sólo se registra en `local` (AuthModuleServiceProvider). En E2E el
         // entorno es `e2e`, así que para todo el mundo tiene que ser un 404:
         // esta entrada prueba que el switcher no se filtra fuera de local.

@@ -46,6 +46,8 @@ Route::middleware('web')
         Route::post('/users', 'createUser')->name('users.store');
         Route::delete('/users', 'deleteUser')->name('users.destroy');
 
+        Route::post('/notify', 'notify')->name('notify');
+
         Route::get('/mail/last', 'lastMail')->name('mail.last');
         Route::delete('/mail', 'clearMail')->name('mail.clear');
 

@@ -26,6 +26,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - [`docs/modules/devices.md`](docs/modules/devices.md) — dispositivos que consumen la API (toggle `DEVICES_ENABLED`)
 - [`docs/modules/pdf.md`](docs/modules/pdf.md) — generación de PDF con spatie/laravel-pdf y Gotenberg (toggle `PDF_ENABLED`)
 - [`docs/modules/files.md`](docs/modules/files.md) — archivos con versionado por slot y URL firmada (toggle `FILES_ENABLED`)
+- [`docs/modules/notifications.md`](docs/modules/notifications.md) — bandeja in-app, campana, preferencias por categoría y API (toggle `NOTIFICATIONS_ENABLED`)
 - [`docs/patterns/README.md`](docs/patterns/README.md) — la **regla de tres**: cuándo una solución sube al boilerplate, y el camino de vuelta de un proyecto hijo al padre
 - [`docs/guides/api.md`](docs/guides/api.md) — contrato de la API REST: envelope, errores, paginación, middleware, limiters y Scramble
 - [`docs/guides/exports.md`](docs/guides/exports.md) — la carpeta `Exports/`: CSV sin dependencias, Excel en el derivado y PDF delegando en el módulo Pdf
@@ -47,6 +48,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - API: contrato en `App\Core\Http\Api` (envelope `{data, meta?}` / `{error:{code,message,details?}}`, R54) + OpenAPI con dedoc/scramble + módulo opcional **Devices** (`DEVICES_ENABLED`): inventario de los clientes que consumen la API, alimentado por los eventos de Auth
 - PDF: módulo opcional **Pdf** (`PDF_ENABLED`) sobre spatie/laravel-pdf con driver **Gotenberg** (servicio aparte); contrato `App\Core\Contracts\PdfRenderer`, tema base con vista previa y las imágenes de la hoja embebidas como `data:` URI
 - Archivos: módulo opcional **Files** (`FILES_ENABLED`) sobre spatie/laravel-medialibrary — contrato `App\Core\Contracts\FileStore`, versionado por slot (reemplazar **archiva**, no borra), URL firmada con el `v=` dentro de la firma, y compresión + subida a S3/R2 opcionales en cola
+- Notificaciones: módulo opcional **Notifications** (`NOTIFICATIONS_ENABLED`) — contrato `App\Core\Contracts\Notifier`, bandeja in-app + campana, preferencias por categoría × canal, API `api/v1/me/notifications*` y poda; el canal de push **sólo loguea** y sus tokens llegan desde Devices por `App\Core\Contracts\PushTokenDirectory`
 - DTOs: spatie/laravel-data
 - Feature flags: Laravel Pennant
 - Tests: Pest 5 (con arch tests en `tests/Arch/ArchitectureTest.php`)
@@ -70,9 +72,12 @@ app/
 │   │   └── Concerns/SupportsDryRun.php    # opción --dry-run + helpers
 │   ├── Contracts/              # interfaces compartidas (fronteras entre módulos)
 │   │                           #   AuthorizationCatalog · FileStore · PdfRenderer
+│   │                           #   Notifier · PushTokenDirectory
 │   ├── Data/Data.php           # base DTO (extiende spatie/laravel-data)
-│   │                           # + FileSlotData · StoredFileData · PdfBrandData · PdfOptionsData · PdfDocumentData
-│   ├── Enums/                  # valores compartidos (SystemRole, AccountStatus, ApiErrorCode, PdfPaperFormat)
+│   │                           # + FileSlotData · StoredFileData · NotificationData
+│   │                           # + PdfBrandData · PdfOptionsData · PdfDocumentData
+│   ├── Enums/                  # valores compartidos (SystemRole, AccountStatus, ApiErrorCode,
+│   │                           #   PdfPaperFormat, NotificationCategory)
 │   ├── Http/Api/               # contrato de la API REST (R54)
 │   │   ├── Concerns/           # HandlesCursorPagination
 │   │   ├── Controllers/        # ApiController — respond() / respondNoContent()
@@ -191,6 +196,7 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | `PDF_ENABLED`           | `false`          | Módulo Pdf: binding de `PdfRenderer`, gate `viewPdfPreview` y rutas `/pdf/preview*`. El motor es un servicio aparte (Gotenberg) |
 | `FILES_ENABLED`         | `false`          | Módulo Files: contrato `FileStore`, ruta firmada `/files/{file}`, listeners de compresión/sync y `files:cleanup` |
 | `AUTH_INVITATIONS`      | `false`          | Registro por invitación + estado de alta: `/register` pide código, pantallas `/invitations*` y `/account/pending`, middleware `account.active`, panel de estado en Users y `invitations:prune` |
+| `NOTIFICATIONS_ENABLED` | `false`          | Módulo Notifications: contrato `Notifier`, campana, `/notifications*`, `api/v1/me/notifications*` y `notifications:prune` |
 | `AUTH_2FA_ENABLED`      | `true`           | 2FA vía Fortify                     |
 | `AUTH_PASSKEYS`         | `true`           | Passkeys (WebAuthn) vía Fortify     |
 | `AUTH_MAGIC_LINKS`      | `true`           | spatie/laravel-one-time-passwords   |

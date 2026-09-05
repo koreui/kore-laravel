@@ -133,6 +133,15 @@
                     </button>
                 </x-slot:start>
 
+                {{-- La campana sólo existe con NOTIFICATIONS_ENABLED=true: con
+                     el toggle apagado el componente `notifications.bell` ni
+                     siquiera está registrado, así que pintarlo sería un error
+                     de Livewire y no un hueco vacío (R10). --}}
+                @if (config('kore-app.notifications.enabled'))
+                    <x-slot:end>
+                        <livewire:notifications.bell />
+                    </x-slot:end>
+                @endif
             </x-kore::navbar>
         </x-slot:navbar>
 

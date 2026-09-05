@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Modules\Auth\Database\Seeders\ModulesSeeder;
 use App\Modules\E2E\Providers\E2EModuleServiceProvider;
 use App\Modules\E2E\Support\MailLog;
+use App\Modules\Notifications\Providers\NotificationsModuleServiceProvider;
 use Illuminate\Mail\Mailable;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Hash;
@@ -42,6 +43,7 @@ function harnessRouteNames(): array
         'e2e.logout',
         'e2e.users.store',
         'e2e.users.destroy',
+        'e2e.notify',
         'e2e.mail.last',
         'e2e.mail.clear',
         'e2e.artisan',
@@ -310,5 +312,63 @@ it('empties the mailbox', function (): void {
         expect(trim((string) file_get_contents(MailLog::path())))->toBe('');
 
         $this->getJson('/__e2e__/mail/last')->assertNotFound();
+    });
+});
+
+/*
+|--------------------------------------------------------------------------
+| POST /__e2e__/notify
+|--------------------------------------------------------------------------
+|
+| Atrezzo para los specs de la bandeja: el producto no tiene ninguna pantalla
+| desde la que crear una notificación a mano, y sin esto un spec tendría que
+| provocar un login por API para conseguir una.
+|
+| Pasa por `App\Core\Contracts\Notifier`, el mismo contrato que usa la
+| aplicación, así que lo que el spec ve después es el resultado del camino real.
+|
+*/
+
+it('sends a notification through the Notifier contract', function (): void {
+    withHarness(function (): void {
+        Config::set('kore-app.notifications.enabled', true);
+        app()->register(NotificationsModuleServiceProvider::class, force: true);
+
+        $user = User::factory()->create(['email' => 'bandeja@e2e.test']);
+
+        $this->postJson('/__e2e__/notify', [
+            'email' => 'bandeja@e2e.test',
+            'title' => 'Aviso sembrado',
+            'body' => 'Cuerpo del aviso sembrado.',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('unread', 1);
+
+        expect((array) $user->notifications()->firstOrFail()->getAttribute('data'))
+            ->toMatchArray(['title' => 'Aviso sembrado', 'category' => 'system']);
+    });
+});
+
+it('answers 404 when the recipient does not exist', function (): void {
+    withHarness(function (): void {
+        Config::set('kore-app.notifications.enabled', true);
+        app()->register(NotificationsModuleServiceProvider::class, force: true);
+
+        $this->postJson('/__e2e__/notify', ['email' => 'nadie@e2e.test'])
+            ->assertNotFound()
+            ->assertJsonPath('error', 'No existe el usuario «nadie@e2e.test».');
+    });
+});
+
+it('answers 409 with the notifications module off, and not a 500', function (): void {
+    // El contrato sólo está bindeado con NOTIFICATIONS_ENABLED=true: decirlo con
+    // su nombre ahorra leer un BindingResolutionException en el log de Playwright.
+    withHarness(function (): void {
+        User::factory()->create(['email' => 'sin-modulo@e2e.test']);
+
+        $this->postJson('/__e2e__/notify', ['email' => 'sin-modulo@e2e.test'])
+            ->assertStatus(409)
+            ->assertJsonPath('error', 'El módulo Notifications está apagado (NOTIFICATIONS_ENABLED).');
     });
 });

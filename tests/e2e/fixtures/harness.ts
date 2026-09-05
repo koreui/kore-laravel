@@ -32,6 +32,7 @@ import { expect, type APIRequestContext, type APIResponse, type Page } from '@pl
  * | `DELETE /__e2e__/users` | `{email}` | `{deleted}` |
  * | `GET /__e2e__/mail/last?to=` | — | `{to, subject, body, otp?}` · 404 si no hay |
  * | `DELETE /__e2e__/mail` | — | `{ok}` |
+ * | `POST /__e2e__/notify` | `{email, title?, body?, category?, url?}` | 201 `{ok, user_id, unread}` |
  * | `POST /__e2e__/artisan` | `{command, arguments?}` | `{exit_code, output}` |
  * | `POST /__e2e__/throttle/clear` | `{keys?: string[]}` | `{ok}` |
  */
@@ -57,6 +58,23 @@ export type HarnessMail = {
     readonly body: string;
     /** Código de 6 dígitos del magic link, si el correo lo lleva. */
     readonly otp?: string | null;
+};
+
+export type NotificarUsuario = {
+    /** Email de un usuario que ya existe. */
+    email: string;
+    title?: string;
+    body?: string;
+    /** Clave del catálogo (`kore-notifications.categories`). Por defecto, `system`. */
+    category?: string;
+    /** Ruta a la que lleva el aviso. */
+    url?: string;
+};
+
+export type ResultadoNotificacion = {
+    readonly ok: boolean;
+    readonly user_id: number;
+    readonly unread: number;
 };
 
 export type CrearUsuario = {
@@ -137,6 +155,26 @@ export class Harness {
     /** Crea un usuario con su rol y, si hace falta, permisos directos. */
     async createUser(input: CrearUsuario): Promise<HarnessUser> {
         return this.json(await this.api.post('/__e2e__/users', { data: input }), 'crear usuario');
+    }
+
+    /**
+     * Mete una notificación en la bandeja de alguien.
+     *
+     * Es atrezzo: el producto no tiene ninguna pantalla desde la que crear una
+     * notificación a mano, así que sin esto un spec de la bandeja tendría que
+     * provocar un login por API sólo para conseguir una fila que mirar.
+     *
+     * Por dentro pasa por `App\Core\Contracts\Notifier`, el mismo contrato que
+     * usa la aplicación, así que lo que el spec ve después es el resultado del
+     * camino real —preferencias incluidas— y no un INSERT fabricado.
+     *
+     * Responde 409 si `NOTIFICATIONS_ENABLED` está apagado.
+     */
+    async notify(input: NotificarUsuario): Promise<ResultadoNotificacion> {
+        return this.json(
+            await this.api.post('/__e2e__/notify', { data: input }),
+            `notificar a ${input.email}`,
+        );
     }
 
     /** Borra un usuario sembrado por un test. */

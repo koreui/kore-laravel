@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Devices\Providers;
 
+use App\Core\Contracts\PushTokenDirectory;
 use App\Modules\Auth\Events\ApiTokenIssued;
 use App\Modules\Auth\Events\ApiTokenRevoked;
 use App\Modules\Devices\Console\Commands\DevicesCleanupCommand;
@@ -12,6 +13,7 @@ use App\Modules\Devices\Listeners\RegisterDeviceOnTokenIssued;
 use App\Modules\Devices\Listeners\RevokeDeviceOnTokenRevoked;
 use App\Modules\Devices\Models\Device;
 use App\Modules\Devices\Policies\DevicePolicy;
+use App\Modules\Devices\Support\DevicePushTokens;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
@@ -35,13 +37,27 @@ use Illuminate\Support\ServiceProvider;
  * día en que se migró, y encender el toggle en producción exigiría una
  * migración a mano justo cuando ya hay tráfico.
  *
- * No hay `register()`: nada del módulo necesita binding —el contenedor resuelve
- * las Actions y el controller solo— y así tampoco existe cuando está apagado.
+ * El único binding del módulo es `App\Core\Contracts\PushTokenDirectory` →
+ * `Devices\Support\DevicePushTokens`, y también va detrás del toggle: es la
+ * frontera por la que el módulo Notifications averigua a qué teléfonos mandar
+ * un push sin importar una sola clase de aquí (R5). Con `DEVICES_ENABLED=false`
+ * no hay binding, y quien lo consume pregunta por `bound()` antes de
+ * resolverlo: una instalación sin inventario no tiene a dónde mandar un push, y
+ * eso no puede tumbar un aviso que ya está en la bandeja.
  *
  * Ver `docs/modules/devices.md`.
  */
 final class DevicesModuleServiceProvider extends ServiceProvider
 {
+    public function register(): void
+    {
+        if (! $this->isDevicesEnabled()) {
+            return;
+        }
+
+        $this->app->singleton(PushTokenDirectory::class, DevicePushTokens::class);
+    }
+
     public function boot(): void
     {
         $base = __DIR__.'/..';

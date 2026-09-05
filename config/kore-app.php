@@ -78,6 +78,22 @@ return [
         'enabled' => (bool) env('FILES_ENABLED', false),
     ],
 
+    // Bandeja de notificaciones in-app, campana, preferencias por categoría y
+    // API para el móvil (módulo Notifications). Opt-in: un proyecto derivado
+    // que sólo manda correos no necesita una bandeja ni una tabla que podar.
+    // Con el toggle apagado no hay binding de `App\Core\Contracts\Notifier`
+    // —resolverlo lanza, que es la respuesta correcta y no un aviso perdido en
+    // silencio—, ni campana en el layout, ni rutas web o API, ni listener de
+    // los eventos de Auth, ni `notifications:prune` en el scheduler. Las TABLAS
+    // `notifications` y `notification_preferences` sí se migran siempre: un
+    // toggle apaga rutas y comportamiento, nunca el esquema (mismo criterio que
+    // devices, files y las passkeys). Los parámetros —categorías, poda,
+    // campana— viven en `config/kore-notifications.php`.
+    // Ver docs/modules/notifications.md.
+    'notifications' => [
+        'enabled' => (bool) env('NOTIFICATIONS_ENABLED', false),
+    ],
+
     'socialite' => [
         'google' => (bool) env('SOCIAL_GOOGLE', false),
         'github' => (bool) env('SOCIAL_GITHUB', false),

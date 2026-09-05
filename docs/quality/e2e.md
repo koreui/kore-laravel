@@ -195,6 +195,7 @@ test('el editor no puede borrar', async ({ harness, page }) => {
 | `lastMail(to?)` | `GET /__e2e__/mail/last?to=` | `{to, subject, body, otp?}` |
 | `esperarCorreo(to, timeout)` | ídem, con reintento | Espera a que llegue |
 | `clearMail()` | `DELETE /__e2e__/mail` | |
+| `notify({email, title?, body?, category?, url?})` | `POST /__e2e__/notify` | Siembra una notificación por `App\Core\Contracts\Notifier` |
 | `clearThrottle(keys?)` | `POST /__e2e__/throttle/clear` | Olvida los intentos del limitador |
 | `artisan(command, args?)` | `POST /__e2e__/artisan` | Lista blanca: `kore:regenerate-permissions`, `cache:clear` |
 
