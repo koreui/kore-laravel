@@ -98,29 +98,33 @@ it('el detalle y la edición enrutan por uuid, no por id', function (): void {
 |--------------------------------------------------------------------------
 */
 
+/*
+ * Los cinco métodos reciben SÓLO al usuario: la decisión es la misma para todos
+ * los endpoints y la policy no mira la fila (ver su docblock). Laravel le pasa
+ * el modelo igual y PHP descarta el argumento de más, pero escribirlo aquí
+ * sugeriría una regla por fila que no existe —y Rector lo quita—.
+ */
 it('la policy concede sólo con webhooks.manage', function (): void {
     withWebhooksUser(['webhooks.manage'], function (User $user): void {
-        $endpoint = WebhookEndpoint::factory()->create();
         $policy = new WebhookEndpointPolicy;
 
         expect($policy->viewAny($user))->toBeTrue()
-            ->and($policy->view($user, $endpoint))->toBeTrue()
+            ->and($policy->view($user))->toBeTrue()
             ->and($policy->create($user))->toBeTrue()
-            ->and($policy->update($user, $endpoint))->toBeTrue()
-            ->and($policy->delete($user, $endpoint))->toBeTrue();
+            ->and($policy->update($user))->toBeTrue()
+            ->and($policy->delete($user))->toBeTrue();
     });
 });
 
 it('la policy niega sin el permiso', function (): void {
     withWebhooksUser([], function (User $user): void {
-        $endpoint = WebhookEndpoint::factory()->create();
         $policy = new WebhookEndpointPolicy;
 
         expect($policy->viewAny($user))->toBeFalse()
-            ->and($policy->view($user, $endpoint))->toBeFalse()
+            ->and($policy->view($user))->toBeFalse()
             ->and($policy->create($user))->toBeFalse()
-            ->and($policy->update($user, $endpoint))->toBeFalse()
-            ->and($policy->delete($user, $endpoint))->toBeFalse();
+            ->and($policy->update($user))->toBeFalse()
+            ->and($policy->delete($user))->toBeFalse();
     });
 });
 

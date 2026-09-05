@@ -97,7 +97,7 @@ la cicatriz real que la originó. Este resumen sólo da el titular.
 | [R57](rules.md) | las hojas que acaban en PDF llevan el CSS en línea y las imágenes como `data:` URI: Gotenberg convierte desde otro contenedor |
 
 Ver detalle en:
-- [`rules.md`](rules.md) — **el catálogo completo `R1..R57`** (fuente de verdad)
+- [`rules.md`](rules.md) — **el catálogo completo `R1..R62`** (fuente de verdad)
 - [`module-pattern.md`](module-pattern.md) — cómo se construye un módulo
 - [`toggles.md`](toggles.md) — `config/kore-app.php`
 - [`../guides/api.md`](../guides/api.md) — el contrato de la API REST

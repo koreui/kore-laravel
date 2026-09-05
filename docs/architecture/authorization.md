@@ -67,7 +67,9 @@ middleware `permission:invitations.manage` de `/invitations*`.
 
 El módulo `invitations` se siembra **siempre**, también con `AUTH_INVITATIONS`
 apagado: el catálogo de permisos es forma, no capacidad —el mismo criterio que
-las tablas de un módulo apagado—. Si dependiera del toggle, encenderlo en
+las tablas de un módulo apagado—. Desde la v2.4.0 lo fija **R60**, y lo verifica
+`kore:arch:check`: ni `ModulesSeeder` ni `Module::specialPermissions()` pueden
+leer `config('kore-app.…')` ni `env()`. Si dependiera del toggle, encenderlo en
 producción exigiría además acordarse de volver a sembrar permisos para que
 alguien pudiera entrar a la pantalla, justo cuando ya hay tráfico. Lo que el
 toggle apaga es la pantalla, no quién podría verla.

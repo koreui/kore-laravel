@@ -18,7 +18,7 @@ El desarrollador trabaja en español. Comunícate en español.
 
 Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta `docs/`:
 
-- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **catálogo R1–R57**: cada regla con su enforcement, su válvula y su cicatriz
+- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **catálogo R1–R62**: cada regla con su enforcement, su válvula y su cicatriz
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) — stack y patrón modular monolith
 - [`docs/architecture/module-pattern.md`](docs/architecture/module-pattern.md) — cómo se construye un módulo (lista cerrada de carpetas)
 - [`docs/architecture/toggles.md`](docs/architecture/toggles.md) — `config/kore-app.php`
@@ -139,7 +139,7 @@ app/
 
 ### Reglas de oro (resumen — el catálogo completo es [`docs/architecture/rules.md`](docs/architecture/rules.md))
 
-Las reglas están numeradas `R1..R57` para poder citarlas en un review, en un
+Las reglas están numeradas `R1..R62` para poder citarlas en un review, en un
 commit o en un comentario. Aquí va el resumen; el detalle —enforcement,
 severidad, por qué existe y la cicatriz que la originó— está en el catálogo.
 
@@ -161,6 +161,7 @@ severidad, por qué existe y la cicatriz que la originó— está en el catálog
 16. **R51 · R52 · R53** — el harness E2E sólo vive si coinciden flag, entorno y base de pruebas (los tres, no uno); toda ruta `GET` con nombre entra en `tests/e2e/fixtures/access-map.ts` con los roles que la abren; y al modificar una columna con `->change()` se repiten **todos** sus atributos previos o se pierden en silencio (usa el skill `kore-migration-change`).
 17. **R54** — toda respuesta de la API pasa por el contrato de Core: los controllers `Http/Controllers/Api/` extienden `ApiController`, los resources `BaseApiResource`, los requests `BaseApiRequest`, y los errores los rinde `ApiExceptionRenderer` (`{error:{code,message,details?}}`). Ver [`docs/guides/api.md`](docs/guides/api.md).
 18. **R55 · R56 · R57** — la URL de un archivo privado sale siempre de `App\Core\Contracts\FileStore::url()` (la firma **es** la autorización y el `v` que invalida la caché va dentro de ella), nunca de un `Storage::url()` ni de un `getUrl()` a mano; desde una pantalla los archivos se **archivan** (`archive()`, reversible) y `delete()` no lo llama ninguna pantalla: hoy nadie lo invoca en el boilerplate (la purga usa `FileDeleteAction` y el borrado en cascada lo hace el observer de media-library), y el `allowIn` de `Console/` y `Listeners/` queda para el derivado que lo necesite; y toda hoja que acabe en PDF lleva el CSS en línea y las imágenes como `data:` URI, porque Gotenberg convierte desde otro contenedor y lo enlazado sale roto en silencio. Ver [`docs/modules/files.md`](docs/modules/files.md) y [`docs/modules/pdf.md`](docs/modules/pdf.md).
+19. **R58 · R59 · R60 · R61 · R62** — un API Resource nunca declara un campo llamado `data` (es el sobre del contrato: `ResourceResponse::wrap()` lo confunde con el envelope y la respuesta sale sin él, en silencio); el middleware de una ruta va en **un solo array**, porque `RouteRegistrar::middleware()` sustituye en vez de acumular y el segundo se lleva por delante al grupo `web` —y con él `SubstituteBindings`—; `ModulesSeeder` y `Module::specialPermissions()` siembran módulos y permisos **siempre**, sin mirar ningún toggle; un catálogo de terceros (SEPOMEX, SAT, GeoNames) no viaja en el repositorio: entra por un comando de importación y la tabla nace vacía; y los recorridos del manual (`tests/e2e/manual/*.guia.ts`) toman sus localizadores de `tests/e2e/pages/`, que es lo que hace que arreglar una pantalla arregle también el manual.
 
 ### Válvulas de escape
 
@@ -311,7 +312,7 @@ composer e2e                        # suite E2E (ver docs/quality/e2e.md)
 # Calidad
 composer lint                       # Pint
 composer analyse                    # Larastan nivel 8 + PHPat + disallowed-calls
-composer arch                       # kore:arch:check (checks textuales: R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50, R52, R55, R57)
+composer arch                       # kore:arch:check (checks textuales: R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50, R52, R55, R57, R58, R59, R60, R61, R62)
 composer refactor                   # Rector
 composer ci                         # todo lo anterior
 

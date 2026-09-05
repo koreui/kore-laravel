@@ -121,8 +121,90 @@ final class ArchCheckCommand extends Command
         'asset(' => 'asset()',
     ];
 
+    /**
+     * R58 · un campo llamado `data` en un API Resource.
+     *
+     * Se acepta la comilla simple y la doble, con o sin espacio antes del
+     * `=>`. Lo que se busca es la **clave** de la lista que devuelve
+     * `toArray()`, no cualquier mención de `data`: `$stored['data'] ?? null`
+     * lee la columna de la base y no declara nada.
+     */
+    private const string RESOURCE_DATA_FIELD = '/([\'"])data\1\s*=>/';
+
+    /**
+     * R58 · los API Resources de un módulo: `Http/Resources/Api/**`.
+     */
+    private const string API_RESOURCE = '#^app/Modules/[^/]+/Http/Resources/Api/#';
+
+    /**
+     * R59 · una llamada a `middleware()` sobre el registrador de rutas, sea
+     * estática (`Route::middleware(`) o encadenada (`->middleware(`).
+     */
+    private const string ROUTE_MIDDLEWARE_CALL = 'middleware';
+
+    /**
+     * R60 · los dos archivos que definen el catálogo de autorización.
+     *
+     * @var array<int, string>
+     */
+    private const array AUTHORIZATION_CATALOG = [
+        'app/Modules/Auth/Database/Seeders/ModulesSeeder.php',
+        'app/Modules/Auth/Models/Module.php',
+    ];
+
+    /**
+     * R60 · las dos formas de que un toggle se cuele en el catálogo.
+     *
+     * @var array<string, string>
+     */
+    private const array TOGGLE_READS = [
+        '/config\(\s*[\'"]kore-app\./' => "config('kore-app.…')",
+        '/(?<![A-Za-z0-9_>$])env\s*\(/' => 'env()',
+    ];
+
+    /**
+     * R61 · dónde puede aparecer un catálogo de terceros por error, y a partir
+     * de qué tamaño deja de ser una muestra y pasa a ser el catálogo entero.
+     *
+     * 256 KB es holgado para lo que estos directorios deben contener —las 32
+     * entidades federativas de México ocupan menos de 2 KB— y estrecho para lo
+     * que no debe entrar: el SEPOMEX completo son catorce megas.
+     *
+     * @var array<int, string>
+     */
+    private const array BULK_DATA_DIRECTORIES = [
+        'database/data',
+        'app/Modules/*/Database/data',
+        'app/Modules/*/Tests/fixtures',
+    ];
+
+    private const int BULK_DATA_MAX_BYTES = 262144;
+
+    /**
+     * R62 · formas de localizar un elemento sin pasar por el page object.
+     *
+     * `page.locator('.clase')` y `page.locator('#id')` atan el recorrido a la
+     * hoja de estilos; `page.$()` es la API vieja, sin espera automática. Un
+     * `page.locator('table tbody tr')` —CSS estable, sin clase ni id— no entra:
+     * R37 lo admite cuando no hay localizador accesible.
+     *
+     * @var array<string, string>
+     */
+    private const array MANUAL_RAW_LOCATORS = [
+        '/page\.locator\(\s*[\'"`][.#]/' => "page.locator('.clase' / '#id')",
+        '/page\.\$\$?\(/' => 'page.$()',
+    ];
+
     /** @var array<int, array{rule: string, file: string, line: int, message: string}> */
     private array $violations = [];
+
+    /**
+     * Avisos: las reglas de severidad **Warning** del catálogo (R61, R62) se
+     * reportan y se leen, pero no bloquean el build.
+     *
+     * @var array<int, array{rule: string, file: string, line: int, message: string}>
+     */
+    private array $warnings = [];
 
     /** @var array<int, string>|null Rutas absolutas del --files, o null si no se pasó. */
     private ?array $scope = null;
@@ -140,6 +222,7 @@ final class ArchCheckCommand extends Command
         // caché del catálogo se tira por lo mismo: cada corrida puede traer
         // otro `--root`.
         $this->violations = [];
+        $this->warnings = [];
         $this->allowedValves = null;
 
         $root = $this->option('root');
@@ -166,6 +249,11 @@ final class ArchCheckCommand extends Command
             'R52' => 'checkRoutesAreInAccessMap',
             'R55' => 'checkFileUrlsComeFromStore',
             'R57' => 'checkPdfSheetsAreSelfContained',
+            'R58' => 'checkApiResourcesHaveNoDataField',
+            'R59' => 'checkRouteMiddlewareIsDeclaredOnce',
+            'R60' => 'checkAuthorizationCatalogIgnoresToggles',
+            'R61' => 'checkNoBulkDataFiles',
+            'R62' => 'checkManualGuidesUsePageObjects',
         ];
 
         if ($only !== null && ! isset($checks[$only])) {
@@ -307,6 +395,26 @@ final class ArchCheckCommand extends Command
     private function violation(string $rule, string $path, int $line, string $message): void
     {
         $this->violations[] = [
+            'rule' => $rule,
+            'file' => $this->relative($path),
+            'line' => $line,
+            'message' => $message,
+        ];
+    }
+
+    /**
+     * Un aviso: se imprime y no cuenta para el código de salida.
+     *
+     * Lo usan las reglas que el catálogo declara **Warning** (R61 y R62). La
+     * diferencia con una violación no es de gravedad percibida sino de
+     * contrato: una `Error` la puede arreglar quien la provoca antes de
+     * commitear; una `Warning` señala algo que a veces es legítimo —una muestra
+     * grande de verdad, un selector CSS que no tiene alternativa accesible— y
+     * que bloquear convertiría en una válvula ceremonial.
+     */
+    private function warning(string $rule, string $path, int $line, string $message): void
+    {
+        $this->warnings[] = [
             'rule' => $rule,
             'file' => $this->relative($path),
             'line' => $line,
@@ -1420,11 +1528,304 @@ final class ArchCheckCommand extends Command
 
     /*
     |----------------------------------------------------------------------
+    | R58 · un API Resource no declara un campo llamado `data`
+    |----------------------------------------------------------------------
+    */
+
+    /**
+     * `data` es el sobre del contrato (R54), no un campo.
+     *
+     * `ResourceResponse::wrap()` mira si la lista que devuelve `toArray()` ya
+     * trae la clave del envoltorio y, si la encuentra, da por hecho que el
+     * recurso se envolvió solo. Un campo llamado `data` la engaña: la respuesta
+     * sale **sin** envelope, con `meta` colgando al lado en vez de dentro, y no
+     * hay error ni aviso en ninguna parte. El cliente lee `null` donde esperaba
+     * el recurso.
+     *
+     * Se busca la clave, no la palabra: leer `$stored['data']` para sacar la
+     * columna JSON de la base es legítimo y no declara nada.
+     */
+    private function checkApiResourcesHaveNoDataField(): void
+    {
+        foreach ($this->findFiles(['app/Modules'], ['*.php']) as $path) {
+            if (preg_match(self::API_RESOURCE, $this->relative($path)) !== 1) {
+                continue;
+            }
+
+            foreach ($this->lines($path) as $index => $line) {
+                if (preg_match(self::RESOURCE_DATA_FIELD, $line) !== 1) {
+                    continue;
+                }
+
+                $this->violation(
+                    'R58',
+                    $path,
+                    $index + 1,
+                    'el recurso declara un campo llamado «data», que es el nombre del sobre del contrato: ResourceResponse::wrap() lo confunde con el envelope ya puesto y la respuesta sale sin él, con «meta» al lado. Renombra el campo (por ejemplo «payload»)',
+                );
+
+                continue 2;
+            }
+        }
+    }
+
+    /*
+    |----------------------------------------------------------------------
+    | R59 · el middleware de una ruta se declara en un solo array
+    |----------------------------------------------------------------------
+    */
+
+    /**
+     * Dos `->middleware()` en la misma sentencia no se suman: el segundo gana.
+     *
+     * `Illuminate\Routing\RouteRegistrar::middleware()` **sustituye** el
+     * atributo en vez de acumularlo, así que
+     * `Route::middleware(['web','auth'])->middleware('permission:x')` se queda
+     * sólo con `permission:x` — y con el grupo `web` se va `SubstituteBindings`.
+     * El síntoma no menciona rutas: el controller recibe un modelo vacío y la
+     * pantalla revienta más abajo.
+     *
+     * Se mira sentencia a sentencia, con `token_get_all()` en vez de una
+     * expresión regular sobre el texto: hay que cortar también en `{` y en `}`
+     * para que el `Route::middleware(...)` de dentro de un `group()` no se
+     * cuente junto al de fuera, y hay que ignorar comentarios y literales para
+     * que un `'/{user}'` o un docblock que explica la regla no partan —ni
+     * inflen— la cuenta.
+     */
+    private function checkRouteMiddlewareIsDeclaredOnce(): void
+    {
+        $files = [
+            ...$this->globFiles(['routes/*.php']),
+            ...$this->globFiles(['app/Modules/*/Routes/*.php']),
+        ];
+
+        foreach ($files as $path) {
+            foreach ($this->routeStatements($path) as $statement) {
+                if ($statement['calls'] < 2) {
+                    continue;
+                }
+
+                if ($this->hasValve($path, 'R59')) {
+                    continue 2;
+                }
+
+                $this->violation(
+                    'R59',
+                    $path,
+                    $statement['line'],
+                    "la sentencia declara middleware {$statement['calls']} veces: RouteRegistrar::middleware() sustituye el atributo en vez de acumularlo, así que el segundo se lleva por delante al primero (y con el grupo «web» se va SubstituteBindings). Un solo array con todo",
+                );
+            }
+        }
+    }
+
+    /**
+     * Sentencias de un archivo de rutas, con su línea de inicio y cuántas
+     * veces llaman a `middleware()`.
+     *
+     * Delimitadores: `;`, `{` y `}`. El `{` es el que separa el grupo de lo que
+     * va dentro; sin él, `Route::middleware([...])->group(function () {` y el
+     * primer `Route::middleware(...)` de dentro serían la misma sentencia.
+     *
+     * @return array<int, array{line: int, calls: int}>
+     */
+    private function routeStatements(string $path): array
+    {
+        $statements = [];
+        $line = 1;
+        $start = null;
+        $calls = 0;
+        $previous = null;
+
+        foreach (token_get_all($this->contents($path)) as $token) {
+            if (is_array($token)) {
+                [$id, $text, $line] = [$token[0], $token[1], $token[2]];
+
+                // La etiqueta de apertura y el HTML suelto no son código: si
+                // contaran, toda sentencia empezaría en la línea 1.
+                if (in_array($id, [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT, T_OPEN_TAG, T_INLINE_HTML], true)) {
+                    continue;
+                }
+
+                $start ??= $line;
+
+                if (
+                    $id === T_STRING
+                    && $text === self::ROUTE_MIDDLEWARE_CALL
+                    && in_array($previous, [T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON], true)
+                ) {
+                    $calls++;
+                }
+
+                $previous = $id;
+
+                continue;
+            }
+
+            $previous = null;
+
+            if (! in_array($token, [';', '{', '}'], true)) {
+                continue;
+            }
+
+            if ($calls > 0) {
+                $statements[] = ['line' => $start ?? $line, 'calls' => $calls];
+            }
+
+            $start = null;
+            $calls = 0;
+        }
+
+        return $statements;
+    }
+
+    /*
+    |----------------------------------------------------------------------
+    | R60 · un toggle no apaga el catálogo de autorización
+    |----------------------------------------------------------------------
+    */
+
+    /**
+     * Módulos y permisos se siembran siempre, encendido o no el toggle.
+     *
+     * El catálogo de autorización es esquema, no capacidad: si `ModulesSeeder`
+     * o `Module::specialPermissions()` miran un toggle, encender el módulo en
+     * producción deja de ser una variable de entorno y pasa a exigir un
+     * `db:seed` que nadie recuerda —y hasta que se corra, la pantalla existe y
+     * el permiso que la abre no—.
+     *
+     * Es el mismo criterio con el que la tabla de un módulo apagado se migra
+     * igual (R10 · `docs/architecture/toggles.md`), aplicado a las filas que
+     * definen quién puede qué.
+     */
+    private function checkAuthorizationCatalogIgnoresToggles(): void
+    {
+        foreach ($this->globFiles(self::AUTHORIZATION_CATALOG) as $path) {
+            foreach ($this->lines($path) as $index => $line) {
+                foreach (self::TOGGLE_READS as $pattern => $name) {
+                    if (preg_match($pattern, $line) !== 1) {
+                        continue;
+                    }
+
+                    $this->violation(
+                        'R60',
+                        $path,
+                        $index + 1,
+                        "{$name} en el catálogo de autorización: los módulos y los permisos se siembran siempre, así que encender un toggle en producción no puede exigir volver a sembrar. Registra la fila y deja que el toggle apague las rutas",
+                    );
+
+                    continue 2;
+                }
+            }
+        }
+    }
+
+    /*
+    |----------------------------------------------------------------------
+    | R61 · un catálogo de terceros no viaja en el repositorio
+    |----------------------------------------------------------------------
+    */
+
+    /**
+     * SEPOMEX, los catálogos del SAT, GeoNames: entran por un comando de
+     * importación, y la tabla nace vacía.
+     *
+     * Lo que sí va en el repo es la parte pequeña y estable —las 32 entidades
+     * federativas— y una muestra para los tests. Todo lo demás se descarga: un
+     * catálogo commiteado engorda el clon para siempre, caduca sin avisar y
+     * arrastra la licencia de quien lo publica.
+     *
+     * Es un **aviso** y no un error a propósito: hay muestras legítimamente
+     * grandes, y bloquear el build por un fixture convertiría la regla en una
+     * válvula ceremonial en cada proyecto derivado.
+     */
+    private function checkNoBulkDataFiles(): void
+    {
+        $directories = [];
+
+        foreach (self::BULK_DATA_DIRECTORIES as $pattern) {
+            foreach ((array) glob($this->root.'/'.$pattern, GLOB_ONLYDIR) as $directory) {
+                $directories[] = $this->relative((string) $directory);
+            }
+        }
+
+        foreach ($this->findFiles($directories, ['*']) as $path) {
+            $size = filesize($path);
+
+            if ($size === false || $size <= self::BULK_DATA_MAX_BYTES) {
+                continue;
+            }
+
+            if ($this->hasValve($path, 'R61')) {
+                continue;
+            }
+
+            $this->warning(
+                'R61',
+                $path,
+                1,
+                sprintf(
+                    'el archivo pesa %d KB (el límite son %d): un catálogo de terceros entra por un comando de importación y la tabla nace vacía; en el repositorio sólo va la parte pequeña y estable',
+                    intdiv($size, 1024),
+                    intdiv(self::BULK_DATA_MAX_BYTES, 1024),
+                ),
+            );
+        }
+    }
+
+    /*
+    |----------------------------------------------------------------------
+    | R62 · un recorrido del manual toma los localizadores de los page objects
+    |----------------------------------------------------------------------
+    */
+
+    /**
+     * El manual se escribe con los mismos localizadores que los tests.
+     *
+     * Es lo que hace que arreglar una pantalla arregle el manual: si la guía
+     * busca por su cuenta con `page.locator('.btn-primary')`, el día que
+     * cambie la clase el spec sigue verde y el manual se queda con una captura
+     * de otra cosa —o con una guía que muere en un `timeout` que nadie mira,
+     * porque el manual no corre en CI—.
+     *
+     * Un CSS estable sin clase ni id (`table tbody tr`) no entra: R37 lo admite
+     * cuando no hay localizador accesible, y R62 no es más estricta que ella.
+     */
+    private function checkManualGuidesUsePageObjects(): void
+    {
+        foreach ($this->globFiles(['tests/e2e/manual/*.guia.ts']) as $path) {
+            foreach ($this->lines($path) as $index => $line) {
+                foreach (self::MANUAL_RAW_LOCATORS as $pattern => $name) {
+                    if (preg_match($pattern, $line) !== 1) {
+                        continue;
+                    }
+
+                    if ($this->hasValve($path, 'R62')) {
+                        continue 3;
+                    }
+
+                    $this->warning(
+                        'R62',
+                        $path,
+                        $index + 1,
+                        "{$name} localiza a mano en un recorrido del manual: los localizadores salen de tests/e2e/pages/, que es lo que hace que arreglar una pantalla arregle también el manual",
+                    );
+
+                    continue 2;
+                }
+            }
+        }
+    }
+
+    /*
+    |----------------------------------------------------------------------
     | Salida
     |----------------------------------------------------------------------
     */
     private function report(): int
     {
+        $this->reportWarnings();
+
         if ($this->violations === []) {
             $this->components->info('kore:arch:check — sin violaciones.');
 
@@ -1453,5 +1854,36 @@ final class ArchCheckCommand extends Command
         ));
 
         return self::FAILURE;
+    }
+
+    /**
+     * Las reglas de severidad Warning: se imprimen y no tocan el exit code.
+     */
+    private function reportWarnings(): void
+    {
+        if ($this->warnings === []) {
+            return;
+        }
+
+        usort(
+            $this->warnings,
+            fn (array $a, array $b): int => [$a['rule'], $a['file'], $a['line']] <=> [$b['rule'], $b['file'], $b['line']],
+        );
+
+        foreach ($this->warnings as $warning) {
+            $this->line(sprintf(
+                '<fg=yellow>%s</> %s:%d  %s',
+                $warning['rule'],
+                $warning['file'],
+                $warning['line'],
+                $warning['message'],
+            ));
+        }
+
+        $this->newLine();
+        $this->components->warn(sprintf(
+            '%d aviso(s) de arquitectura (severidad Warning: se leen, no bloquean).',
+            count($this->warnings),
+        ));
     }
 }

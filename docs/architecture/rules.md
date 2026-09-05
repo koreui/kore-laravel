@@ -1,4 +1,4 @@
-# Reglas de arquitectura (R1–R57)
+# Reglas de arquitectura (R1–R62)
 
 **TL;DR**: las reglas del boilerplate son numeradas, citables (`R5`) y cada una
 dice quién la verifica y con qué comando. Lo que se puede verificar, falla el
@@ -273,6 +273,18 @@ porque para cuando el `if` se evalúa el componente ya tuvo que existir. Con el
 un 500 en toda instalación con `FILES_ENABLED=false`. El registro va siempre, y
 lo fija un test.
 
+**Nota · los motivos del `loadViewsFrom` son dos, y hay que leerlos los dos.**
+La segunda y la tercera excepción son el mismo `loadViewsFrom` con dos razones
+distintas —Larastan valida los `view('x::…')` contra los namespaces registrados;
+Blade resuelve un componente anónimo al **compilar** la plantilla que lo usa—, y
+quien sólo conoce una lo mueve detrás del `return` en cuanto esa una no aplica.
+`toggles.md` las cuenta enteras y aquí están las dos a propósito. La v2.4.0 lo
+redescubrió: `NotificationsModuleServiceProvider` empezó con el `loadViewsFrom`
+dentro del toggle —el módulo no tiene componentes Blade anónimos, así que la
+tercera excepción no le aplicaba— y el análisis se puso en rojo con «expects
+view-string» en las cuatro vistas del módulo, que es exactamente la segunda. El
+registro va siempre.
+
 Nada más pasa por ahí: rutas, middleware, comandos de dominio y traducciones
 siguen detrás del `return`.
 > Enforcement: **Manual** + el test del toggle (cada toggle tiene el suyo: `TwoFactorToggleTest`, `TenancyToggleTest`, `FilesToggleTest`) · `composer test` · **Error**
@@ -349,6 +361,56 @@ sino moverla fuera de `config/`, al `register()` del provider:
 `twoFactorAuthentication` según el toggle, y corre antes del `boot()` en el que
 Fortify publica sus rutas. v1.0.0.
 
+**Nota · una clave con punto no se lee con `config('archivo.a.b')`.** Es el otro
+modo silencioso de que una configuración devuelva `null`, y no tiene que ver con
+el orden de carga sino con `Arr::get()`: el helper parte la cadena por los
+puntos, así que `config('kore-settings.defaults.organization.name')` busca la
+clave `organization`, luego `name`, y no encuentra nada — mientras que el array
+real tiene **una sola** clave literal `'organization.name'`. Se lee el array
+entero y se indexa:
+
+```php
+$defaults = config('kore-settings.defaults');          // array<string, mixed>
+$name = $defaults['organization.name'] ?? null;        // sí
+$name = config('kore-settings.defaults.organization.name'); // null, en silencio
+```
+
+Cicatriz: `config/kore-settings.php` en la v2.4.0, cuyas claves son
+`organization.name`, `organization.tax_id`… con el punto **dentro** del nombre
+porque son el identificador del ajuste en la tabla `settings`, no una jerarquía.
+
+### R60 · Un toggle no apaga el catálogo de autorización
+`ModulesSeeder` y `Module::specialPermissions()` siembran sus módulos, roles y
+permisos **siempre**, mire lo que mire el `.env`. Ninguno de los dos lee
+`config('kore-app.…')` ni `env()`.
+> Enforcement: `kore:arch:check` (`checkAuthorizationCatalogIgnoresToggles`) · `composer arch` · **Error**
+> Escape: ninguna
+
+Relacionada: R10, de la que ésta es la otra mitad. R10 dice que un toggle
+apagado no registra **comportamiento**; R60 dice que tampoco borra **datos de
+estructura**, que es la misma frontera que ya separa las migraciones (una tabla
+de un módulo apagado se migra igual, ver [`toggles.md`](toggles.md)).
+
+**Por qué.** Un permiso es esquema, no capacidad. Si el seeder lo siembra sólo
+con el toggle encendido, encender el módulo en producción deja de ser una
+variable de entorno y pasa a ser «cambia el `.env`, despliega, y acuérdate de
+volver a sembrar»; y hasta que alguien se acuerde, la pantalla existe, el
+middleware `permission:` la protege y **nadie** tiene el permiso que la abre —ni
+siquiera el administrador—. El fallo aparece como un 403 que no se puede
+explicar mirando los roles, porque el permiso no está en la base para
+asignarlo.
+
+Al revés no cuesta nada: un permiso sembrado cuyo módulo está apagado no abre
+nada, porque no hay ruta que proteger.
+
+**Cicatriz.** Preventiva, y con dos casos que la hicieron explícita. En la
+v2.4.0 las invitaciones (`invitations.manage`) y los webhooks
+(`webhooks.manage`) se sembraron **fuera** del toggle a propósito, y lo mismo
+hizo `settings.manage` del módulo Platform, que ni toggle tiene. Los tres lo
+hicieron bien; la regla existe para que el cuarto no tenga que volver a
+razonarlo, porque poner el `if` es exactamente lo que parece correcto cuando se
+escribe el seeder.
+
 ### R54 · Toda respuesta de la API pasa por el contrato de Core
 Los controllers de `App\Modules\*\Http\Controllers\Api` extienden
 `App\Core\Http\Api\Controllers\ApiController`; sus resources
@@ -398,6 +460,73 @@ el día del `git pull` —los `#[Hidden]` del modelo eran lo único entre la API
 el `two_factor_secret`— y sin sobre, así que el primer endpoint que hubiera
 devuelto una colección habría tenido que inventarse otro formato. Se cerró en la
 v2.2.0 con `App\Core\Http\Api` y `UserMeResource`.
+
+### R58 · Un API Resource no declara un campo llamado `data`
+En `Http/Resources/Api/`, la lista que devuelve `toArray()` no puede tener una
+clave `data`. Si el recurso necesita publicar un objeto libre, se llama de otra
+cosa: `payload`, `attributes`, `meta_*`.
+> Enforcement: `kore:arch:check` (`checkApiResourcesHaveNoDataField`) · `composer arch` · **Error**
+> Escape: ninguna
+
+Relacionada: R54, de la que ésta es una consecuencia mecánica. R54 fija el sobre;
+R58 impide que un campo se disfrace de sobre.
+
+**Por qué.** `data` es el nombre del envoltorio, y el framework lo comprueba por
+el nombre. `Illuminate\Http\Resources\Json\ResourceResponse::wrap()` mira si la
+lista que devolvió el recurso ya contiene la clave del envoltorio y, si la
+encuentra, da por hecho que el recurso se envolvió solo y no vuelve a envolver.
+Un campo llamado `data` la engaña: la respuesta sale **sin** envelope y con
+`meta` colgando al lado en vez de dentro.
+
+Y no hay error, ni aviso, ni excepción. El endpoint responde 200, el recurso
+está entero, y lo único que pasa es que la forma es otra: el cliente que hacía
+`respuesta.data.read` lee `null` y el que hacía `respuesta.data` recibe el valor
+del campo. Es el tipo de fallo que un test de contrato encuentra y una revisión
+a ojo no, porque el JSON «se ve bien».
+
+**Cicatriz.** `NotificationResource`, v2.4.0. Laravel guarda el contenido de una
+notificación en una columna JSON llamada `data`, así que el recurso empezó
+publicándola con su nombre; el test del contrato empezó a leer `null` en
+`data.read` y el envelope había desaparecido. El campo se llama **`payload`**, y
+el porqué está escrito en el docblock del recurso para que nadie lo «arregle»
+devolviéndole el nombre original.
+
+### R59 · El middleware de una ruta se declara en un solo array
+Una sentencia de rutas llama a `middleware()` **una vez**, con todo dentro:
+`Route::middleware(['web', 'auth', 'verified', 'permission:x'])`. Nada de
+encadenar un segundo `->middleware(...)`.
+> Enforcement: `kore:arch:check` (`checkRouteMiddlewareIsDeclaredOnce`) · `composer arch` · **Error**
+> Escape: `arch-accepted`
+
+Relacionada: R23. Las dos hablan de la misma puerta desde lados opuestos: R59
+se ocupa de que el middleware de la ruta llegue entero, y R23 de que el
+componente Livewire vuelva a autorizar porque `/livewire/update` no pasa por él.
+
+**Por qué.** `Illuminate\Routing\RouteRegistrar::middleware()` **sustituye** el
+atributo en vez de acumularlo. Un
+`Route::middleware(['web', 'auth'])->middleware('permission:x')` no protege con
+las tres cosas: protege con `permission:x` y **pierde el grupo `web` entero**, y
+con él `StartSession`, `VerifyCsrfToken` y —la que duele—
+`SubstituteBindings`.
+
+El síntoma es lo que hace falta la regla. No es un 403 ni un 404, que apuntarían
+a las rutas: sin `SubstituteBindings`, el parámetro `{endpoint}` llega al
+controller como el **string** de la URL y no como el modelo, así que la
+excepción salta más abajo —en la policy, en el `->uuid` de un accesor, en la
+vista— con un mensaje que no menciona ni middleware ni rutas. Se pierde media
+tarde antes de mirar el archivo correcto.
+
+**Cómo se verifica.** Sentencia a sentencia, con `token_get_all()` en vez de una
+expresión regular: hay que cortar también en `{` y en `}` para que el
+`Route::middleware(...)` de dentro de un `group()` no se cuente junto al de
+fuera, y hay que ignorar comentarios y literales para que un `'/{user}'` no
+parta la sentencia ni un docblock que explica la regla la infle.
+
+**Cicatriz.** El módulo Webhooks, v2.4.0. Las cuatro pantallas llevaban
+`permission:webhooks.manage` encadenado detrás del grupo, y `/webhooks/{endpoint:uuid}`
+reventaba con un error que hablaba de un `string` donde se esperaba un modelo. El
+docblock de `app/Modules/Webhooks/Routes/web.php` lo cuenta en el sitio donde se
+volvería a escribir.
 
 ---
 
@@ -572,6 +701,25 @@ pida— no lo miraba nadie. Al ampliar la lista saltó, y la respuesta correcta 
 fue añadir un `authorize()` sino escribir por qué no lo lleva: es un flujo de
 invitado, no hay sesión que autorizar, y lo que lo protege es el rate limit de
 R28. Eso es exactamente para lo que existe `arch-accepted`.
+
+**Nota · los hooks `updated*` / `updating*` de Livewire también entran por
+`/livewire/update`, y el check los marca a propósito.** Un
+`updatedSelectedRole()` no lo llama tu código: lo llama Livewire cuando el
+cliente manda un valor nuevo, y el cliente decide cuándo y con qué. Es un método
+público más, con la misma superficie que un `save()`, y por eso la lista de
+prefijos de escritura (`update`) lo captura. La salida **no** es una válvula.
+Son dos, según lo que haga el hook:
+
+- **Autoriza dentro**, aunque el hook sólo lea. Es el caso de
+  `TableNotifications::updatedCategory()` y `updatedOnlyUnread()` en la v2.4.0:
+  son dos filtros que llaman a `authorize('viewAny', …)` antes de `resetPage()`.
+  No es ceremonia —cuesta una llamada al Gate— y evita la discusión de si el
+  hook «lee» o «escribe», que es exactamente la que se pierde dentro de seis
+  meses.
+- **Si no escribe, renómbralo.** `Mx\Http\Livewire\PostalCodeField` tenía un
+  `updatedPostalCode()` que sólo consulta el catálogo y rellena el formulario;
+  se llama `lookup()` y el hook se limita a delegar. El nombre pasó a decir la
+  verdad, que es lo que la regla quería en primer lugar.
 
 ### R24 · `#[Locked]` en toda propiedad pública identificadora
 En `Forms/` y en `Http/Livewire/`, cualquier `public $id`, `public $model` o
@@ -836,6 +984,58 @@ misión era leer el esquema antes de generar la migración. Un proyecto derivado
 que tiene que inventarse una herramienta para no tropezar con el framework es la
 señal de que al padre le faltaba la regla; en la v2.1.0 subió, con el skill
 `kore-migration-change` detrás.
+
+**Nota · un atributo de Eloquent no puede llamarse como una propiedad del
+modelo.** Es la misma familia de fallo silencioso que R53, un escalón más
+arriba: la columna se llama igual que algo que `Illuminate\Database\Eloquent\Model`
+ya usa —`events`, `attributes`, `casts`, `table`, `connection`, `dates`,
+`original`, `relations`, `visible`, `hidden`— y a partir de ahí el modelo
+sobrescribe una pieza del framework sin decirlo. Lo detecta **Rector**
+(`RenamePropertyRector`) y el aviso **no** es un falso positivo: si sale, la
+columna se renombra.
+
+Cicatriz: `subscribed_events` en `webhook_endpoints` (v2.4.0). El nombre natural
+era `events`, y con él `$endpoint->events` habría chocado con la propiedad
+`$events` que Eloquent renombró a `$dispatchesEvents`: el
+`LaravelLevelSetList::UP_TO_LARAVEL_130` de `rector.php` trae esa regla y
+reescribía cada lectura del atributo. El prefijo `subscribed_` cuesta once
+caracteres y además dice mejor lo que guarda.
+
+### R61 · Un catálogo de terceros no viaja en el repositorio
+SEPOMEX, los catálogos del SAT, GeoNames: entran por un comando de importación
+y la tabla nace vacía. En el repositorio va sólo la parte pequeña y estable —las
+32 entidades federativas del seeder— y las muestras que necesiten los tests.
+> Enforcement: `kore:arch:check` (`checkNoBulkDataFiles`: ningún archivo de más de 256 KB en `database/data/**`, `app/Modules/*/Database/data/**` ni `app/Modules/*/Tests/fixtures/**`) · `composer arch` · **Warning**
+> Escape: `arch-accepted`
+
+Relacionada: R29 · R53, con las que comparte la idea de que el esquema y los
+datos son cosas distintas: aquí lo que no viaja son los datos, y lo que sí viaja
+es el comando que los trae.
+
+**Por qué.** Un catálogo commiteado cuesta tres veces. Engorda el clon **para
+siempre** —git guarda cada versión, así que actualizarlo el año que viene suma
+otros catorce megas y no sustituye a los de este—, caduca sin avisar (nadie
+revisa si el archivo del repo sigue siendo el que publica el organismo) y
+arrastra la licencia de quien lo publica hasta cada proyecto derivado, que ya no
+puede decir con qué se distribuye. Un comando de importación resuelve las tres:
+la fuente es la oficial, la fecha es la del día en que se corrió y el repositorio
+no distribuye nada de nadie.
+
+Lo que sí entra son los datos que **no** cambian y que sin ellos el sistema no
+arranca: las 32 entidades federativas ocupan menos de dos kilobytes y llevan
+décadas siendo las mismas.
+
+**Por qué es un aviso y no un error.** Porque hay muestras legítimamente
+grandes, y bloquear el build por un fixture convertiría la regla en una válvula
+ceremonial repetida en cada proyecto derivado. 256 KB es holgado para lo que
+estos directorios deben contener y estrecho para lo que no.
+
+**Cicatriz.** Notarium llevaba `database/data/sepomex.csv`, **14 MB** en el
+repositorio, clonado entero por cada persona y cada corrida de CI que tocara el
+proyecto. El módulo Mx de la v2.4.0 hace lo contrario: `mx:sepomex:import`
+recibe una ruta o una `--url`, las tablas `mx_states` y `mx_postal_codes` nacen
+vacías y lo único que viaja en el repositorio es `MxStatesSeeder` con las 32
+entidades y un `sepomex-sample.txt` de dos kilobytes para los tests.
 
 ### R56 · Los archivos no se borran desde la interfaz: se archivan
 `App\Core\Contracts\FileStore::archive()` es lo que hace la papelera de una
@@ -1160,6 +1360,41 @@ responde 403 a un invitado en vez de mandarlo al login (KORE-E2E-003). Ninguna
 de las dos es un agujero; las dos llevaban ahí desde siempre y nadie las había
 visto.
 
+### R62 · Un recorrido del manual toma los localizadores de `tests/e2e/pages/`
+En `tests/e2e/manual/*.guia.ts` no se localiza a mano: nada de
+`page.locator('.clase')`, `page.locator('#id')` ni `page.$()`. Lo que la guía
+necesita señalar sale del page object de esa pantalla, y si no está, se añade
+allí.
+> Enforcement: `kore:arch:check` (`checkManualGuidesUsePageObjects`) · `composer arch` · **Warning**
+> Escape: `arch-accepted`
+
+Relacionada: R37, que es la misma idea un piso más abajo —los specs localizan por
+rol, etiqueta o texto, y sólo bajan a CSS estable cuando no hay alternativa
+accesible—. R62 no es más estricta: un `page.locator('table tbody tr')` no entra,
+porque no ata nada a la hoja de estilos.
+
+**Por qué.** El manual es la única capa de la suite que **no corre en CI**: se
+genera a mano con `npm run manual`. Un recorrido que busca por su cuenta se rompe
+en silencio el día que cambia una clase —el spec de esa pantalla sigue verde,
+porque él localiza por rol— y nadie se entera hasta que alguien abre el PDF y ve
+una captura de otra cosa, o un capítulo que murió en un `timeout`.
+
+Compartir el page object invierte eso: arreglar la pantalla arregla el spec **y**
+el manual en el mismo commit, y el manual deja de ser documentación que hay que
+mantener aparte para ser una salida más de la suite.
+
+**Por qué es un aviso y no un error.** Por lo mismo que R61: hay pantallas
+—tablas de terceros, widgets sin rol— donde el CSS es lo único que hay, y un
+error obligaría a una válvula por cada una. El aviso se lee y se decide.
+
+**Cicatriz.** Las guías de asper, escritas antes que sus page objects, con los
+selectores copiados de la consola del navegador. En kore-laravel la regla llegó
+a tiempo: el recorrido `01-usuarios.guia.ts` de la v2.4.0 empezó recortando la
+captura con un `page.locator('table')` escrito en la propia guía y se corrigió en
+el mismo ciclo (`refactor(e2e): la tabla del listado de usuarios, en su page
+object`) moviéndolo a `UsersIndexPage`, que es el único sitio que habrá que tocar
+si el listado deja de pintar un `<table>`.
+
 ---
 
 ## §7 · Documentación, versionado y excepciones
@@ -1179,6 +1414,17 @@ número en ruido.
 existe. `ModulesSeeder` afirmaba que el `Gate::before` del superadmin está en
 `AppServiceProvider`, cuando está en `AuthModuleServiceProvider`. Ambos
 corregidos en la v1.0.0.
+
+**Nota · el check recorre el disco, no el índice de git.** `checkDocs` lista
+`docs/**/*.md` con el sistema de archivos, así que un `.md` **generado** y
+listado en `.gitignore` también tiene que aparecer en `docs/README.md`: si no,
+`composer arch` falla en la máquina de quien lo generó y pasa en CI, que es el
+peor reparto posible. Es el caso del manual de usuario de la v2.4.0
+(`npm run manual` escribe `docs/manual/NN-slug.md`, ignorados salvo el
+`README.md` del directorio): el índice enlaza `docs/manual/README.md`, que es el
+que sí viaja, y desde ahí se llega a lo generado. La alternativa —enseñarle al
+check a leer `.gitignore`— haría que un doc de verdad desapareciera del índice el
+día que alguien añadiera un patrón demasiado ancho.
 
 ### R41 · Toda cifra de un doc se puede verificar
 Y se actualiza en el commit que la cambia. Si no se puede verificar
@@ -1397,18 +1643,18 @@ con `--no-verify`, y entonces no verifica nada.
 
 | Capa | Presupuesto | Medido | Qué corre |
 |------|-------------|--------|-----------|
-| **pre-commit** | ~2 s | **0,7 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
+| **pre-commit** | ~2 s | **1,1 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
 | **commit-msg** | ~1 s | **0,3 s** | `ConventionalCommitMsgHook` — el asunto sigue Conventional Commits (R43) |
-| **pre-push** | ~30 s | **7 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
-| **`composer ci`** | ~90 s | **31 s** | `pint --test` (1,9 con caché) + `phpstan` (0,9 con caché) + `composer arch` (0,2) + `rector --dry-run` (5,0 con caché) + `pest` (23,2, secuencial) |
-| **CI (GitHub)** | ~3 min | — | `composer ci` en matriz PHP 8.4 / 8.5 + `composer audit` + `npm ci && npm run build` + E2E (176 tests en 19 archivos) |
+| **pre-push** | ~30 s | **10 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
+| **`composer ci`** | ~90 s | **43 s** | `pint --test` (0,5 con caché) + `phpstan` (1,3 con caché) + `composer arch` (0,4) + `rector --dry-run` (3,7 con caché) + `pest` (36,9, secuencial) |
+| **CI (GitHub)** | ~3 min | — | `composer ci` en matriz PHP 8.4 / 8.5 + `composer audit` + `npm ci && npm run build` + E2E (256 tests en 27 archivos) |
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + GitHub Release (R42) |
 
 Medido en un MacBook (Apple Silicon, PHP 8.4) sobre el repositorio a fecha de
-la v2.3.0, con 832 tests Pest y una suite E2E de 176 tests en 19 archivos
-(31 s aparte). Las cuatro primeras capas caben holgadamente en su
-presupuesto: el margen es para que un proyecto derivado pueda crecer sin tener
-que rediseñar el pipeline.
+la v2.4.0, con 1245 tests Pest. La suite E2E —256 tests en 27 archivos— va
+aparte y no entra en ninguna de estas capas. Las cuatro primeras caben
+holgadamente en su presupuesto: el margen es para que un proyecto derivado pueda
+crecer sin tener que rediseñar el pipeline.
 
 El `commit-msg` es la capa más barata del pipeline —una expresión regular sobre
 una línea— y casi todo su tiempo medido es el arranque de `artisan`. Va aparte y
@@ -1428,7 +1674,7 @@ se re-registran a mano con `php artisan git-hooks:register`.
 | **PHPat** (`tests/Arch/PhpatArchitecture.php`) | `composer analyse` | R1, R4, R5, R6, R7, R8, R19 |
 | **disallowed-calls** (`phpstan-disallowed.neon`) | `composer analyse` | R17, R18, R19, R20, R21, R22, R27, R56 |
 | **Larastan nivel 8** | `composer analyse` | R15 |
-| **`kore:arch:check`** | `composer arch` | R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50, R52, R55, R57 |
+| **`kore:arch:check`** | `composer arch` | R11, R23, R24, R29, R30, R37, R38, R40, R44, R45, R49, R50, R52, R55, R57, R58, R59, R60, R61, R62 |
 | **Pint** | `composer lint` | R13, R16 |
 | **Tests Pest** | `composer test` | R10, R12, R26, R27, R28, R29, R33, R34, R46, R47, R48, R51, R54 |
 | **Hooks de git** (`config/git-hooks.php`) | `git commit` | R43 |
@@ -1454,10 +1700,29 @@ Pest arch y la semántica del nombre (`{Domain}{Object}{Verb}`) en revisión
 humana; R14 tiene el `final` verificado en Actions, Data, Events, Rules,
 Policies y Providers, y a ojo en el resto.
 
-De las 57 reglas, **50 tienen al menos un verificador automático** que falla el
-build (entero o en parte) y **7 son íntegramente manuales**: R31, R32, R35, R36,
-R39, R41 y R53. Ninguna regla está sin clasificar: si dice **Manual**, es porque
-hoy no hay forma barata de verificarla, no porque nadie lo haya mirado.
+De las 62 reglas, **55 tienen al menos un verificador automático** y **7 son
+íntegramente manuales**: R31, R32, R35, R36, R39, R41 y R53. Ninguna regla está
+sin clasificar: si dice **Manual**, es porque hoy no hay forma barata de
+verificarla, no porque nadie lo haya mirado.
+
+Una aclaración que la v2.4.0 hizo necesaria: «verificador automático» no es lo
+mismo que «falla el build». R61 y R62 son **Warning**, así que
+`kore:arch:check` las imprime en amarillo y devuelve 0. Están en la primera
+columna porque las verifica una herramienta y no un par de ojos, que es lo que
+separa las dos listas; su severidad dice otra cosa —si bloquean o no—, y esa
+está en su entrada.
+
+Las cinco de la v2.4.0 son las cinco checks textuales de `kore:arch:check`, tres
+de ellas **Error** y dos **Warning**: **R58** (ningún API Resource declara un
+campo `data`) y **R60** (el catálogo de autorización no lee toggles) leen dos
+listas de archivos muy concretas; **R59** (el middleware va en un solo array) es
+la única que no se puede hacer con una expresión regular —hace falta partir el
+archivo en sentencias con `token_get_all()`—; y **R61** (un catálogo de terceros
+no viaja en el repositorio) y **R62** (el manual toma los localizadores de los
+page objects) avisan sin bloquear, porque las dos tienen casos legítimos y un
+error las convertiría en una válvula ceremonial. Lo que ninguna de las cinco ve
+es si el campo que sustituye a `data` está bien elegido, ni si el permiso que se
+siembra siempre es el correcto; eso sigue siendo review.
 
 Las tres de la v2.3.0 entran las tres en la primera columna, y con tres
 verificadores distintos: **R55** (las URL de archivo salen de `FileStore`) y

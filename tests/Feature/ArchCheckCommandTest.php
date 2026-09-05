@@ -29,7 +29,7 @@ use Illuminate\Support\Facades\File;
  *
  * @param array<string, string> $files ruta relativa => contenido
  */
-function archFixture(array $files, string $catalog = "### R11 · toggles\n### R23 · authorize\n### R24 · locked\n### R29 · down\n### R30 · blade\n### R37 · testid\n### R38 · timeout\n### R40 · docs\n### R44 · valvulas\n### R45 · baseline\n### R52 · access map\n> Escape: `arch-accepted`\n### R55 · urls de archivo\n> Escape: `arch-accepted`\n### R57 · hojas de pdf\n> Escape: ninguna\n"): string
+function archFixture(array $files, string $catalog = "### R11 · toggles\n### R23 · authorize\n### R24 · locked\n### R29 · down\n### R30 · blade\n### R37 · testid\n### R38 · timeout\n### R40 · docs\n### R44 · valvulas\n### R45 · baseline\n### R52 · access map\n> Escape: `arch-accepted`\n### R55 · urls de archivo\n> Escape: `arch-accepted`\n### R57 · hojas de pdf\n> Escape: ninguna\n### R58 · campo data\n> Escape: ninguna\n### R59 · middleware en un solo array\n> Escape: `arch-accepted`\n### R60 · catalogo de autorizacion\n> Escape: ninguna\n### R61 · catalogos de terceros\n> Escape: `arch-accepted`\n### R62 · guias del manual\n> Escape: `arch-accepted`\n"): string
 {
     $root = storage_path('framework/testing/arch-check/'.uniqid('case_', true));
 
@@ -862,6 +862,215 @@ it('R57 · pasa con el CSS en línea y las imágenes embebidas, y no mira las de
     [$exit, $output] = archCheck($root, 'R57');
 
     expect($exit)->toBe(0)->and($output)->toContain('sin violaciones');
+});
+
+/*
+|--------------------------------------------------------------------------
+| R58 · un API Resource no declara un campo llamado `data`
+|--------------------------------------------------------------------------
+*/
+
+it('R58 · falla cuando un API Resource declara un campo llamado data', function (string $clave): void {
+    $root = archFixture([
+        'app/Modules/Demo/Http/Resources/Api/V1/ThingResource.php' => "<?php\n\nfinal class ThingResource extends BaseApiResource\n{\n    public function toArray(Request \$request): array\n    {\n        return [\n            'id' => 1,\n            {$clave} => ['a' => 1],\n        ];\n    }\n}\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R58');
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('R58')
+        ->and($output)->toContain('ThingResource.php:9');
+})->with([
+    'comilla simple' => "'data'",
+    'comilla doble' => '"data"',
+]);
+
+it('R58 · pasa cuando el campo se llama de otra cosa, aunque lea la columna data', function (): void {
+    $root = archFixture([
+        'app/Modules/Demo/Http/Resources/Api/V1/ThingResource.php' => "<?php\n\nfinal class ThingResource extends BaseApiResource\n{\n    public function toArray(Request \$request): array\n    {\n        \$stored = (array) \$this->resource->getAttribute('data');\n\n        return [\n            'id' => 1,\n            'payload' => \$stored['data'] ?? [],\n        ];\n    }\n}\n",
+        // Un DTO o un controller sí pueden llamar `data` a lo que quieran: la
+        // regla es del sobre de la API, no del vocabulario del proyecto.
+        'app/Modules/Demo/Http/Controllers/Api/V1/ThingController.php' => "<?php\n\nfinal class ThingController extends ApiController\n{\n    public function index(): array\n    {\n        return ['data' => []];\n    }\n}\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R58');
+
+    expect($exit)->toBe(0)->and($output)->toContain('sin violaciones');
+});
+
+/*
+|--------------------------------------------------------------------------
+| R59 · el middleware de una ruta se declara en un solo array
+|--------------------------------------------------------------------------
+*/
+
+it('R59 · falla cuando una sentencia encadena dos veces middleware()', function (): void {
+    $root = archFixture([
+        'app/Modules/Demo/Routes/web.php' => "<?php\n\nRoute::middleware(['web', 'auth', 'verified'])\n    ->middleware('permission:demo.manage')\n    ->group(function (): void {\n        Route::get('/demo/{thing:uuid}', 'show')->name('demo.show');\n    });\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R59');
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('R59')
+        ->and($output)->toContain('web.php:3')
+        ->and($output)->toContain('sustituye');
+});
+
+/*
+ * El `{` de un `group()` cierra la sentencia: sin ese corte, el
+ * `Route::middleware('permission:…')` de dentro se contaría junto al del grupo
+ * y todo `Routes/web.php` del repositorio saldría en rojo.
+ */
+it('R59 · no suma el middleware del grupo con el de las rutas de dentro', function (): void {
+    $root = archFixture([
+        'app/Modules/Demo/Routes/web.php' => "<?php\n\nRoute::middleware(['web', 'auth', 'verified'])\n    ->prefix('demo')\n    ->group(function (): void {\n        Route::middleware('permission:demo.view')->get('/', 'index')->name('demo.index');\n        Route::middleware('permission:demo.edit')->get('/{thing}/edit', 'edit')->name('demo.edit');\n    });\n",
+        'routes/web.php' => "<?php\n\nRoute::get('/', fn () => view('welcome'))->name('home');\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R59');
+
+    expect($exit)->toBe(0)->and($output)->toContain('sin violaciones');
+});
+
+it('R59 · no cuenta el docblock que explica la regla', function (): void {
+    $root = archFixture([
+        'app/Modules/Demo/Routes/web.php' => "<?php\n\n/*\n * `->middleware('permission:…')` encadenado se lleva por delante al grupo `web`:\n * `->middleware()` sustituye en vez de acumular.\n */\nRoute::middleware(['web', 'auth', 'permission:demo.manage'])->group(function (): void {\n    Route::get('/demo', 'index')->name('demo.index');\n});\n",
+    ]);
+
+    [$exit] = archCheck($root, 'R59');
+
+    expect($exit)->toBe(0);
+});
+
+it('R59 · acepta la válvula de una sentencia que sabe lo que hace', function (): void {
+    $root = archFixture([
+        'app/Modules/Demo/Routes/web.php' => "<?php\n\n// arch-accepted: R59 · el segundo grupo es intencional y no lleva bindings · @cesar\nRoute::middleware(['web'])->middleware('throttle:demo')->group(function (): void {\n    Route::get('/demo', 'index')->name('demo.index');\n});\n",
+    ]);
+
+    [$exit] = archCheck($root, 'R59');
+
+    expect($exit)->toBe(0);
+});
+
+/*
+|--------------------------------------------------------------------------
+| R60 · un toggle no apaga el catálogo de autorización
+|--------------------------------------------------------------------------
+*/
+
+it('R60 · falla cuando el catálogo de autorización mira un toggle', function (string $archivo, string $lectura): void {
+    $root = archFixture([
+        $archivo => "<?php\n\nfinal class Catalogo\n{\n    public function modules(): array\n    {\n        return {$lectura} ? ['webhooks'] : [];\n    }\n}\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R60');
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('R60')
+        ->and($output)->toContain(':7');
+})->with([
+    'seeder con config()' => ['app/Modules/Auth/Database/Seeders/ModulesSeeder.php', "config('kore-app.webhooks.enabled')"],
+    'seeder con env()' => ['app/Modules/Auth/Database/Seeders/ModulesSeeder.php', "env('WEBHOOKS_ENABLED')"],
+    'modelo con config()' => ['app/Modules/Auth/Models/Module.php', "config('kore-app.webhooks.enabled')"],
+]);
+
+it('R60 · pasa cuando el catálogo siembra siempre', function (): void {
+    $root = archFixture([
+        'app/Modules/Auth/Database/Seeders/ModulesSeeder.php' => "<?php\n\nfinal class ModulesSeeder extends Seeder\n{\n    public function run(): void\n    {\n        \$this->module('webhooks', ['Admin']);\n    }\n}\n",
+        'app/Modules/Auth/Models/Module.php' => "<?php\n\nfinal class Module extends Model\n{\n    public static function specialPermissions(): array\n    {\n        return ['webhooks' => ['webhooks.manage' => 'Gestionar webhooks']];\n    }\n}\n",
+        // Un provider sí lee el toggle: lo que apaga son las rutas.
+        'app/Modules/Webhooks/Providers/WebhooksModuleServiceProvider.php' => "<?php\n\nfinal class WebhooksModuleServiceProvider extends ServiceProvider\n{\n    public function boot(): void\n    {\n        if (! config('kore-app.webhooks.enabled')) {\n            return;\n        }\n    }\n}\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R60');
+
+    expect($exit)->toBe(0)->and($output)->toContain('sin violaciones');
+});
+
+/*
+|--------------------------------------------------------------------------
+| R61 · un catálogo de terceros no viaja en el repositorio
+|--------------------------------------------------------------------------
+*/
+
+/*
+ * R61 es **Warning**: avisa y no bloquea. Hay muestras legítimamente grandes, y
+ * un error obligaría a una válvula ceremonial en cada proyecto derivado.
+ */
+it('R61 · avisa, sin fallar, ante un catálogo commiteado', function (string $ruta): void {
+    $root = archFixture([
+        $ruta => str_repeat("06600,Roma Norte,Colonia,Cuauhtemoc,CDMX,09\n", 8000),
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R61');
+
+    expect($exit)->toBe(0)
+        ->and($output)->toContain('R61')
+        ->and($output)->toContain('comando de importación')
+        ->and($output)->toContain('aviso(s)');
+})->with([
+    'database/data' => 'database/data/sepomex.csv',
+    'data de un módulo' => 'app/Modules/Mx/Database/data/sepomex.csv',
+    'fixtures de un módulo' => 'app/Modules/Mx/Tests/fixtures/sepomex.txt',
+]);
+
+it('R61 · no dice nada de una muestra pequeña ni de una válvula', function (): void {
+    $root = archFixture([
+        'app/Modules/Mx/Tests/fixtures/sepomex-sample.txt' => "06600|Roma Norte|Colonia|Cuauhtemoc|CDMX|09\n",
+        'database/data/entidades.csv' => "01,Aguascalientes,AGS\n02,Baja California,BC\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R61');
+
+    expect($exit)->toBe(0)
+        ->and($output)->not->toContain('R61')
+        ->and($output)->toContain('sin violaciones');
+});
+
+/*
+|--------------------------------------------------------------------------
+| R62 · los recorridos del manual usan los page objects
+|--------------------------------------------------------------------------
+*/
+
+it('R62 · avisa, sin fallar, cuando una guía localiza a mano', function (string $localizador): void {
+    $root = archFixture([
+        'tests/e2e/manual/01-usuarios.guia.ts' => "recorrido('Usuarios', async ({ page, guia }) => {\n    await guia.paso('El listado', {\n        senalar: {$localizador},\n    });\n});\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R62');
+
+    expect($exit)->toBe(0)
+        ->and($output)->toContain('R62')
+        ->and($output)->toContain('01-usuarios.guia.ts:3')
+        ->and($output)->toContain('tests/e2e/pages/');
+})->with([
+    'clase' => "page.locator('.datatable__wrapper')",
+    'id' => 'page.locator("#users-table")',
+    'API vieja' => "page.\$('.btn-primary')",
+]);
+
+it('R62 · pasa cuando la guía toma el localizador del page object', function (): void {
+    $root = archFixture([
+        'tests/e2e/manual/01-usuarios.guia.ts' => "recorrido('Usuarios', async ({ page, guia, usuarios }) => {\n    await guia.paso('El listado', { senalar: usuarios.table });\n    await guia.paso('Las filas', { senalar: page.locator('table tbody tr') });\n});\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R62');
+
+    expect($exit)->toBe(0)
+        ->and($output)->not->toContain('R62')
+        ->and($output)->toContain('sin violaciones');
+});
+
+it('R62 · acepta la válvula de una pantalla sin localizador accesible', function (): void {
+    $root = archFixture([
+        'tests/e2e/manual/02-pulse.guia.ts' => "// arch-accepted: R62 · el dashboard de Pulse es de un paquete y no expone roles · @cesar\nrecorrido('Pulse', async ({ page, guia }) => {\n    await guia.paso('El panel', { senalar: page.locator('.pulse-card') });\n});\n",
+    ]);
+
+    [$exit, $output] = archCheck($root, 'R62');
+
+    expect($exit)->toBe(0)->and($output)->not->toContain('R62');
 });
 
 /*

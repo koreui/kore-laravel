@@ -33,18 +33,19 @@ no verifica nada.
 
 | Capa | Presupuesto | Medido | Qué corre |
 |------|-------------|--------|-----------|
-| **pre-commit** | ~2 s | **0,7 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
+| **pre-commit** | ~2 s | **1,1 s** | `pint --dirty` + `kore:arch:check --files=<staged>` |
 | **commit-msg** | ~1 s | **0,3 s** | `ConventionalCommitMsgHook` — el asunto sigue Conventional Commits (R43) |
-| **pre-push** | ~30 s | **7 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
-| **`composer ci`** | ~90 s | **31 s** | `pint --test` (1,9 con caché) + `phpstan` (0,9 con caché) + `composer arch` (0,2) + `rector --dry-run` (5,0 con caché) + `pest` (23,2, secuencial) |
+| **pre-push** | ~30 s | **10 s** | `phpstan` (Larastan + PHPat + disallowed-calls) + `pest --parallel` |
+| **`composer ci`** | ~90 s | **43 s** | `pint --test` (0,5 con caché) + `phpstan` (1,3 con caché) + `composer arch` (0,4) + `rector --dry-run` (3,7 con caché) + `pest` (36,9, secuencial) |
 | **CI (GitHub)** | ~3 min | — | `composer ci` en matriz PHP 8.4 / 8.5 + `composer audit` + `npm ci && npm run build` + E2E |
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + `softprops/action-gh-release` |
 
-Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v2.3.0 y
-832 tests Pest. La suite E2E —176 tests en 19 archivos— va aparte y tarda
-31 s en local. Los 138 tests nuevos de la v2.3.0 son el módulo Files (71), el
-módulo Pdf (29), el avatar de Users (10 de sus 88) y, en `tests/`, los DTOs y el
-trait de subida de `Core` más los fixtures de los checks de R55 y R57.
+Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v2.4.0 y
+1245 tests Pest. La suite E2E —256 tests en 27 archivos— va aparte. Los 413
+tests nuevos de la v2.4.0 son los cuatro módulos que entraron (Webhooks 86, Mx
+93, Notifications 81, Platform 62), las invitaciones y el estado de cuenta en
+Auth y Users, `PushTokenDirectory` en Devices, y en `tests/` los DTOs y los
+contratos de `Core` más los fixtures de los cinco checks nuevos (R58 a R62).
 
 > Nota de entorno: `composer test` limpia la config cacheada antes de correr
 > Pest a propósito. Con un `bootstrap/cache/config.php` viejo, `PulseAccessTest`
@@ -177,10 +178,16 @@ php artisan kore:arch:check --root=/otro/repo  # otra raíz (lo usan sus tests)
 | R52 | toda ruta `GET` con nombre de `routes/web.php` y `app/Modules/*/Routes/web.php` aparece en `tests/e2e/fixtures/access-map.ts`. Lee el texto de los archivos de rutas componiendo los `->prefix()` de los grupos; ignora las rutas con parámetro y las de `/__e2e__`. Si el mapa no existe todavía, avisa una vez y no falla. La válvula es **de línea** |
 | R55 | ningún `.php` de `app/` fuera de `app/Modules/Files/` construye la URL de un archivo (`Storage::url()`, `Storage::temporaryUrl()`, `temporaryUrl()`, `getUrl()`, `getTemporaryUrl()`, `getFullUrl()`). Una línea con `public_path(` queda exenta, y `getUrl()` sólo cuenta en un archivo que hable de media —es también el accesor de un nodo de CommonMark— |
 | R57 | ninguna hoja que acabe en PDF (`app/Modules/Pdf/Resources/views/**` y `app/Modules/*/Resources/views/**/pdf/**`) enlaza recursos: ni `@vite`, ni hoja de estilos enlazada, ni `asset()`, ni un `src` que empiece por `http` o por `//` |
+| R58 | ningún API Resource de `app/Modules/*/Http/Resources/Api/**` declara un campo llamado `data`: es el nombre del sobre, y `ResourceResponse::wrap()` lo confunde con el envelope ya puesto |
+| R59 | ninguna sentencia de `routes/*.php` ni de `app/Modules/*/Routes/*.php` llama a `middleware()` dos veces (parte el archivo en sentencias con `token_get_all()`, cortando también en `{` y `}`, para no sumar el middleware de un grupo con el de las rutas de dentro) |
+| R60 | `app/Modules/Auth/Database/Seeders/ModulesSeeder.php` y `app/Modules/Auth/Models/Module.php` no leen `config('kore-app.…')` ni `env()`: el catálogo de autorización se siembra siempre |
+| R61 | ningún archivo de `database/data/**`, `app/Modules/*/Database/data/**` ni `app/Modules/*/Tests/fixtures/**` pasa de 256 KB. **Aviso**: se imprime en amarillo y no cambia el exit code |
+| R62 | ningún `tests/e2e/manual/*.guia.ts` localiza con `page.locator('.clase')`, `page.locator('#id')` ni `page.$()`. **Aviso**, como R61 |
 
-Salida: `R{n} archivo:línea mensaje`, y exit code 1 si hay algo. Tests:
-`tests/Feature/ArchCheckCommandTest.php` (110 casos, un árbol de fixtures que
-viola cada check y otro que lo cumple).
+Salida: `R{n} archivo:línea mensaje` en rojo para las reglas **Error** y en
+amarillo para las **Warning** (R61 y R62), y exit code 1 sólo si hay alguna de
+las primeras. Tests: `tests/Feature/ArchCheckCommandTest.php` (130 casos, un
+árbol de fixtures que viola cada check y otro que lo cumple).
 
 ### Rector — `rector.php`
 
@@ -425,17 +432,19 @@ $ composer ci
 ✓ Larastan nivel 8 + PHPat + disallowed-calls: 0 errors
 ✓ kore:arch:check: sin violaciones
 ✓ Rector: nothing to refactor
-✓ Pest: 832 passed (2344 assertions)
+✓ Pest: 1245 passed (3469 assertions)
 ```
 
-Reparto de los 832 tests: 39 arch (`tests/Arch`: 28 en `ArchitectureTest` y 11
-en `PhpatArchitectureTest`), 113 del módulo Auth (incluida la API de tokens),
-88 del módulo Users (incluidas su API v1 y el avatar), 3 de Tenancy, 43 del
-módulo Docs, 29 del módulo E2E, 54 del módulo Devices, 72 del módulo Files, 29
-del módulo Pdf, 351 en `tests/Feature` (plataforma, `kore:arch:check`, hooks,
-MCP, y el contrato de la API en `tests/Feature/Api`) y 11 en `tests/Unit`.
-Aparte, la suite E2E de Playwright (`npm run e2e`): 176 tests en 19 archivos,
-104 de ellos generados desde `tests/e2e/fixtures/access-map.ts`.
+Reparto de los 1245 tests: 39 arch (`tests/Arch`: 28 en `ArchitectureTest` y 11
+en `PhpatArchitectureTest`), 151 del módulo Auth (incluidas la API de tokens y
+las invitaciones), 98 del módulo Users (incluidas su API v1, el avatar y el
+estado de cuenta), 3 de Tenancy, 43 del módulo Docs, 32 del módulo E2E, 60 del
+módulo Devices, 72 del módulo Files, 29 del módulo Pdf, 62 del módulo Platform,
+81 del módulo Notifications, 93 del módulo Mx, 86 del módulo Webhooks, 355 en
+`tests/Feature` (plataforma, `kore:arch:check`, hooks, MCP, y el contrato de la
+API en `tests/Feature/Api`) y 21 en `tests/Unit`. Aparte, la suite E2E de
+Playwright (`npm run e2e`): 256 tests en 27 archivos, 171 de ellos generados
+desde `tests/e2e/fixtures/access-map.ts`.
 
 Actualiza esta cifra cuando cambie (R41). Un número inventado en los docs es
 peor que no ponerlo: la auditoría de septiembre de 2026 encontró aquí «15 tests»

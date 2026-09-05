@@ -52,9 +52,9 @@ Para desactivarlo, `TENANCY_ENABLED=false` en `.env` y todo el módulo deja de b
 
 Reglas vivas y resúmenes en `CLAUDE.md` / `AGENTS.md`. Detalles en [`docs/`](docs/README.md):
 
-- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **las 57 reglas del boilerplate** (`R1..R57`), cada una con su verificador, su severidad y la cicatriz que la originó
+- [`docs/architecture/rules.md`](docs/architecture/rules.md) — **las 62 reglas del boilerplate** (`R1..R62`), cada una con su verificador, su severidad y la cicatriz que la originó
 - [`docs/architecture/`](docs/architecture/) — overview, module-pattern, toggles, authorization
-- [`docs/modules/`](docs/modules/) — auth, tenancy, users, docs, e2e, devices, files, pdf
+- [`docs/modules/`](docs/modules/) — auth, tenancy, users, docs, e2e, devices, files, pdf, platform, notifications, webhooks, mx
 - [`docs/ops/`](docs/ops/) — deployment, observability
 - [`docs/quality/`](docs/quality/) — pipeline (Pint, Larastan, PHPat, disallowed-calls, `kore:arch:check`, Rector, Pest, hooks, CI) y E2E
 - [`docs/ai/`](docs/ai/) — trabajar con la AI (Boost, MCP `kore`, skills)
@@ -81,9 +81,13 @@ documentos reescritos y la UI del proyecto. En producción se deja apagado.
 | `DEVICES_ENABLED`    | `false`       | Módulo Devices (clientes de la API) |
 | `PDF_ENABLED`        | `false`       | Módulo Pdf (spatie/laravel-pdf + Gotenberg) |
 | `FILES_ENABLED`      | `false`       | Módulo Files (archivos con versiones y URL firmada) |
+| `NOTIFICATIONS_ENABLED` | `false`    | Módulo Notifications (bandeja in-app, campana, preferencias) |
+| `WEBHOOKS_ENABLED`   | `false`       | Módulo Webhooks (outbox con firma HMAC y reintentos) |
+| `MX_ENABLED`         | `false`       | Módulo Mx (catálogo SEPOMEX e importe en letra) |
 | `AUTH_2FA_ENABLED`   | `true`        | 2FA de Fortify                  |
 | `AUTH_PASSKEYS`      | `true`        | Passkeys (WebAuthn)             |
 | `AUTH_MAGIC_LINKS`   | `true`        | Magic links / OTP               |
+| `AUTH_INVITATIONS`   | `false`       | Registro por invitación + estado de alta de la cuenta |
 | `AUTH_SOCIAL_LOGIN`  | `false`       | Socialite                       |
 | `SOCIAL_GOOGLE`      | `false`       | proveedor Google                |
 | `SOCIAL_GITHUB`      | `false`       | proveedor GitHub                |
