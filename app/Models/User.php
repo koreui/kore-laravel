@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Core\Enums\AccountStatus;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -29,12 +30,21 @@ use Spatie\Permission\Traits\HasRoles;
  * crear. Ninguna ruta vuelca input crudo del request en el modelo, así que no
  * abre escalada (R27). Laravel 13: `#[Fillable]` / `#[Hidden]` en vez de las
  * propiedades `$fillable` / `$hidden`.
+ *
+ * `account_status` y `activated_at` son asignables por la misma razón y con la
+ * misma condición: quien los escribe es una Action —`InvitationRedeemAction` al
+ * canjear un código, `UserAccountStatusChangeAction` desde el panel de
+ * Users—, nunca un `fill($request->all())`. El único formulario que llega al
+ * modelo (`Users\Forms\UserForm`) no tiene ninguno de los dos campos, así que
+ * nadie se auto-activa por la puerta de atrás.
  */
 #[Fillable([
     'name',
     'email',
     'password',
     'email_verified_at',
+    'account_status',
+    'activated_at',
 ])]
 #[Hidden([
     'password',
@@ -83,9 +93,47 @@ class User extends Authenticatable implements HasMedia, MustVerifyEmail, Passkey
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['name', 'email'])
+            ->logOnly(['name', 'email', 'account_status'])
             ->logOnlyDirty()
             ->dontLogEmptyChanges();
+    }
+
+    /**
+     * ¿Esta cuenta puede usar la aplicación?
+     *
+     * Es la pregunta que hace `EnsureAccountIsActive` en cada petición, y la
+     * que decide si el panel de Users pinta el botón de activar o el de
+     * suspender. Con `AUTH_INVITATIONS` apagado siempre es `true`: la columna
+     * existe (el esquema no depende del toggle) pero nadie la mueve de
+     * `active`.
+     */
+    public function isActive(): bool
+    {
+        return $this->accountStatus()->canOperate();
+    }
+
+    /**
+     * El estado de alta ya tipado.
+     *
+     * Se pregunta primero por `getAttributes()` y no por `getAttribute()`
+     * porque `Model::shouldBeStrict()` está encendido fuera de producción
+     * (`AppServiceProvider`) y leer un atributo que no se cargó **lanza**. Y no
+     * cargado es un caso normal: un `User::factory()->create()` no relee la fila,
+     * así que el default de la columna no está en el modelo; tampoco lo está
+     * tras un `select('id', 'email')`.
+     *
+     * En todos esos casos la respuesta es `Active`, que es el default de la
+     * columna: ante la duda el boilerplate no deja a nadie fuera.
+     */
+    public function accountStatus(): AccountStatus
+    {
+        if (! array_key_exists('account_status', $this->getAttributes())) {
+            return AccountStatus::Active;
+        }
+
+        $status = $this->getAttribute('account_status');
+
+        return $status instanceof AccountStatus ? $status : AccountStatus::Active;
     }
 
     /**
@@ -113,6 +161,8 @@ class User extends Authenticatable implements HasMedia, MustVerifyEmail, Passkey
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'account_status' => AccountStatus::class,
+            'activated_at' => 'immutable_datetime',
         ];
     }
 }

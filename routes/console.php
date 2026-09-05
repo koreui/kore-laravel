@@ -134,6 +134,25 @@ if ((bool) config('kore-app.files.enabled')) {
         ->sentryMonitor();
 }
 
+// Purga de códigos de invitación caducados (módulo Auth): sólo con
+// AUTH_INVITATIONS=true, porque con el toggle apagado `invitations:prune` ni
+// siquiera está registrado —y `Schedule::command()` no falla aunque el comando
+// no exista, así que sin este `if` el scheduler intentaría correr un comando
+// inexistente cada noche. Es la misma pieza que aprendieron los toggles de
+// backup, devices y files.
+//
+// A las 04:45, detrás del backup de las 02:00: si la purga se lleva un código
+// que hacía falta consultar, el zip de la noche todavía lo tiene. Los 90 días
+// se escriben AQUÍ y no en un config: borrar es destructivo y la cifra tiene
+// que verse en la línea que la aplica.
+if ((bool) config('kore-app.auth.invitations')) {
+    Schedule::command('invitations:prune --days=90')
+        ->dailyAt('04:45')
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->sentryMonitor();
+}
+
 // `model:prune` se deja fuera a propósito: hoy ningún modelo del boilerplate
 // usa el trait Prunable / MassPrunable, y el comando aborta si no encuentra
 // ninguno. Descoméntalo cuando añadas el primero.

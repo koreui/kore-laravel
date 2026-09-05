@@ -31,6 +31,16 @@ export const SEEDED_USERS: Readonly<Record<Role, SeededUser>> = {
 export const ROLES = Object.keys(SEEDED_USERS) as Role[];
 
 /**
+ * El código de invitación que siembra `E2eSeeder`, sin caducidad ni tope.
+ *
+ * `.env.e2e` enciende `AUTH_INVITATIONS`, así que `/register` EXIGE código para
+ * todo el mundo: sin éste, los specs de registro no tendrían por dónde entrar.
+ * Es dato sembrado, igual que las cuatro cuentas, y ningún spec lo modifica —
+ * los códigos con límite o caducados los crea cada test que quiera probarlos.
+ */
+export const SEEDED_INVITATION_CODE = 'E2E-INVITE';
+
+/**
  * Archivo de `storageState` de un rol.
  *
  * Sin `worker` devuelve el que deja el proyecto `setup`; con `worker`, el de

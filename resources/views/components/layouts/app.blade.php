@@ -61,6 +61,22 @@
                     </x-kore::sidebar.group>
                 @endcan
 
+                {{-- Igual que Passkeys: la ruta sólo existe con
+                     AUTH_INVITATIONS=true, así que el enlace pregunta por la
+                     ruta y no por el toggle. El `@can` va además porque el
+                     toggle dice si la pantalla existe, no quién puede abrirla. --}}
+                @if (Route::has('invitations.index'))
+                    @can('invitations.manage')
+                        <x-kore::sidebar.group label="{{ __('Accesos') }}">
+                            <x-kore::sidebar.item
+                                label="{{ __('Invitaciones') }}"
+                                icon="ticket"
+                                route="invitations.index"
+                                match="invitations.*" />
+                        </x-kore::sidebar.group>
+                    @endcan
+                @endif
+
                 {{-- La ruta sólo existe con AUTH_PASSKEYS=true (R10), así que el
                      enlace se pregunta por ella y no por el toggle. --}}
                 @if (Route::has('passkeys.index'))

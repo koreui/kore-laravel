@@ -19,6 +19,12 @@ use Illuminate\Support\Facades\Hash;
  * Sin `auth()` / `request()` / `session()`: el adaptador de Fortify valida el
  * input y esta Action ejecuta el caso de uso, así que sirve igual desde un
  * comando artisan o un job de importación.
+ *
+ * **Este es el camino con `AUTH_INVITATIONS` apagado.** La cuenta nace activa
+ * —el default de la columna `account_status`— y sin rol: el registro abierto no
+ * sabe qué rol darle a nadie. Con el toggle encendido el adaptador manda a
+ * `InvitationRedeemAction`, que sí conoce las dos cosas porque las trae escritas
+ * el código.
  */
 final class AuthUserRegisterAction extends Action
 {

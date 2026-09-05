@@ -43,7 +43,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 
 - PHP 8.4+ · Laravel 13 · Livewire 4 · Alpine.js · Tailwind CSS v4
 - Componentes UI: **koreUi** (`<x-kore::*>`), nunca Flux UI ni otras
-- Auth: Fortify (2FA, passkeys WebAuthn, toggles) + Sanctum (toggle) + spatie/laravel-permission
+- Auth: Fortify (2FA, passkeys WebAuthn, toggles) + Sanctum (toggle) + spatie/laravel-permission + registro por invitación y estado de alta de la cuenta opcionales (`AUTH_INVITATIONS`)
 - API: contrato en `App\Core\Http\Api` (envelope `{data, meta?}` / `{error:{code,message,details?}}`, R54) + OpenAPI con dedoc/scramble + módulo opcional **Devices** (`DEVICES_ENABLED`): inventario de los clientes que consumen la API, alimentado por los eventos de Auth
 - PDF: módulo opcional **Pdf** (`PDF_ENABLED`) sobre spatie/laravel-pdf con driver **Gotenberg** (servicio aparte); contrato `App\Core\Contracts\PdfRenderer`, tema base con vista previa y las imágenes de la hoja embebidas como `data:` URI
 - Archivos: módulo opcional **Files** (`FILES_ENABLED`) sobre spatie/laravel-medialibrary — contrato `App\Core\Contracts\FileStore`, versionado por slot (reemplazar **archiva**, no borra), URL firmada con el `v=` dentro de la firma, y compresión + subida a S3/R2 opcionales en cola
@@ -72,7 +72,7 @@ app/
 │   │                           #   AuthorizationCatalog · FileStore · PdfRenderer
 │   ├── Data/Data.php           # base DTO (extiende spatie/laravel-data)
 │   │                           # + FileSlotData · StoredFileData · PdfBrandData · PdfOptionsData · PdfDocumentData
-│   ├── Enums/                  # valores compartidos (SystemRole, ApiErrorCode, PdfPaperFormat)
+│   ├── Enums/                  # valores compartidos (SystemRole, AccountStatus, ApiErrorCode, PdfPaperFormat)
 │   ├── Http/Api/               # contrato de la API REST (R54)
 │   │   ├── Concerns/           # HandlesCursorPagination
 │   │   ├── Controllers/        # ApiController — respond() / respondNoContent()
@@ -112,7 +112,7 @@ app/
 │   ├── Tests/                  # Feature/ y Unit/ del módulo
 │   ├── Fortify/                # única carpeta de adaptadores de paquete (sólo Auth)
 │   └── Providers/{Module}ServiceProvider.php
-├── Exceptions/                 # excepciones de dominio compartidas (409 · 403 · 426)
+├── Exceptions/                 # excepciones de dominio compartidas (409 · 403 · 403 cuenta no activa · 426)
 ├── Models/User.php             # único modelo verdaderamente global
 └── Providers/
 ```
@@ -190,6 +190,7 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | `DEVICES_ENABLED`       | `false`          | Módulo Devices: rutas `api/v1/devices/*`, listeners de los eventos de token de Auth, alias `devices.version` y `devices:cleanup` |
 | `PDF_ENABLED`           | `false`          | Módulo Pdf: binding de `PdfRenderer`, gate `viewPdfPreview` y rutas `/pdf/preview*`. El motor es un servicio aparte (Gotenberg) |
 | `FILES_ENABLED`         | `false`          | Módulo Files: contrato `FileStore`, ruta firmada `/files/{file}`, listeners de compresión/sync y `files:cleanup` |
+| `AUTH_INVITATIONS`      | `false`          | Registro por invitación + estado de alta: `/register` pide código, pantallas `/invitations*` y `/account/pending`, middleware `account.active`, panel de estado en Users y `invitations:prune` |
 | `AUTH_2FA_ENABLED`      | `true`           | 2FA vía Fortify                     |
 | `AUTH_PASSKEYS`         | `true`           | Passkeys (WebAuthn) vía Fortify     |
 | `AUTH_MAGIC_LINKS`      | `true`           | spatie/laravel-one-time-passwords   |

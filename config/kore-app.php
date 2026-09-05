@@ -94,6 +94,26 @@ return [
         // `FortifyServiceProvider::register()` (añade o quita la feature) y
         // `Auth/Routes/web.php` (la pantalla `/user/passkeys`).
         'passkeys' => (bool) env('AUTH_PASSKEYS', true),
+
+        // Registro por invitación + estado de alta de la cuenta. Opt-in: el
+        // boilerplate por defecto tiene el registro abierto, que es lo que
+        // espera un proyecto nuevo. Con esto encendido `/register` exige un
+        // código, la cuenta nace con el rol que dice ese código, y el
+        // middleware `account.active` deja fuera a quien esté `pending` o
+        // `suspended`. Con el toggle apagado no hay pantalla de invitaciones,
+        // ni middleware, ni comando: el registro funciona como siempre y toda
+        // cuenta nace activa.
+        //
+        // Las TABLAS sí se migran siempre —`invitation_codes` y las dos
+        // columnas de `users`—, por lo mismo que la tabla `devices` o la
+        // `media`: un toggle apaga rutas y comportamiento, nunca el esquema
+        // (ver docs/architecture/toggles.md).
+        //
+        // Sus lectores son `AuthModuleServiceProvider`, `Auth/Routes/web.php`,
+        // `Auth/Fortify/CreateNewUser`, `SocialiteController`,
+        // `Users\Http\Livewire\AccountStatusPanel`, el layout de la aplicación
+        // y `routes/console.php`. Ver docs/modules/auth.md.
+        'invitations' => (bool) env('AUTH_INVITATIONS', false),
     ],
 
     /*

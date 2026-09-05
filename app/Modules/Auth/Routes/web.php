@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Modules\Auth\Http\Controllers\AccountController;
+use App\Modules\Auth\Http\Controllers\InvitationsController;
 use App\Modules\Auth\Http\Controllers\SocialiteController;
 use App\Modules\Auth\Http\Livewire\Dashboard;
 use App\Modules\Auth\Http\Livewire\DevAccountSwitcher;
@@ -73,4 +75,32 @@ if ((bool) config('kore-app.auth.passkeys')) {
     Route::middleware(['web', 'auth', 'verified', 'password.confirm'])->group(function (): void {
         Route::get('/user/passkeys', Passkeys::class)->name('passkeys.index');
     });
+}
+
+/*
+ * Invitaciones y estado de cuenta (`AUTH_INVITATIONS`).
+ *
+ * Las tres rutas existen o no existen juntas, y con el toggle apagado ninguna:
+ * `/invitations` es un 404 como cualquier URL inventada, no un 403 que delataría
+ * que hay algo detrás. Es la misma forma que usan `magic-link` y `passkeys`.
+ *
+ * `/account/pending` no lleva `verified` a propósito: quien está pendiente de
+ * activación puede estar además pendiente de verificar su correo, y encadenar
+ * las dos esperas dejaría la pantalla de espera inalcanzable. Tampoco lleva
+ * `permission:*`: es la pantalla a la que `EnsureAccountIsActive` manda a la
+ * gente, y esa lista de rutas libres la incluye por su nombre.
+ */
+if ((bool) config('kore-app.auth.invitations')) {
+    Route::middleware(['web', 'auth'])->group(function (): void {
+        Route::get('/account/pending', [AccountController::class, 'pending'])->name('account.pending');
+    });
+
+    Route::middleware(['web', 'auth', 'verified', 'permission:invitations.manage'])
+        ->prefix('invitations')
+        ->as('invitations.')
+        ->controller(InvitationsController::class)
+        ->group(function (): void {
+            Route::get('/', 'index')->name('index');
+            Route::get('/create', 'create')->name('create');
+        });
 }

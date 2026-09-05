@@ -10,6 +10,13 @@ export class RegisterPage {
 
     readonly passwordConfirmation: Locator;
 
+    /**
+     * Sólo existe con `AUTH_INVITATIONS`, que `.env.e2e` enciende. El
+     * localizador se declara siempre; `register()` decide si lo rellena
+     * mirando si está en la página.
+     */
+    readonly invitationCode: Locator;
+
     readonly submit: Locator;
 
     readonly errorAlert: Locator;
@@ -25,6 +32,7 @@ export class RegisterPage {
         // <x-kore::password> se llama "Mostrar la contraseña".
         this.password = page.getByLabel('Contraseña *', { exact: true });
         this.passwordConfirmation = page.getByLabel('Confirmar contraseña *', { exact: true });
+        this.invitationCode = page.getByLabel('Código de invitación *', { exact: true });
         this.submit = page.getByRole('button', { name: 'Crear cuenta' });
         // Fortify repinta el error dos veces: la alerta general y el mensaje
         // del campo. Ambas son role="alert".
@@ -41,11 +49,20 @@ export class RegisterPage {
         email: string;
         password: string;
         passwordConfirmation?: string;
+        invitationCode?: string;
     }): Promise<void> {
         await this.name.fill(input.name);
         await this.email.fill(input.email);
         await this.password.fill(input.password);
         await this.passwordConfirmation.fill(input.passwordConfirmation ?? input.password);
+
+        // El campo sólo está cuando el toggle lo pone. Se pregunta por el DOM y
+        // no por una variable de entorno: el spec no tiene por qué saber cómo
+        // está configurada la instalación contra la que corre.
+        if (input.invitationCode !== undefined && (await this.invitationCode.count()) > 0) {
+            await this.invitationCode.fill(input.invitationCode);
+        }
+
         await this.submit.click();
     }
 }

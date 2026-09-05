@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Users\Providers;
 
 use App\Models\User;
+use App\Modules\Users\Http\Livewire\AccountStatusPanel;
 use App\Modules\Users\Http\Livewire\FormComponent;
 use App\Modules\Users\Http\Livewire\TableUsers;
 use App\Modules\Users\Policies\UserPolicy;
@@ -39,6 +40,20 @@ final class UsersModuleServiceProvider extends ServiceProvider
 
         foreach (self::LIVEWIRE_COMPONENTS as $alias => $class) {
             Livewire::component($alias, $class);
+        }
+
+        /*
+         * El panel de estado de la cuenta sólo existe con `AUTH_INVITATIONS`
+         * encendido: es la palanca del estado que ese toggle pone en marcha, y
+         * registrarlo apagado dejaría montable —desde cualquier vista de un
+         * derivado— un componente que mueve una columna que nadie mira (R10).
+         *
+         * El toggle es de Auth y lo lee Users: R5 prohíbe importar clases entre
+         * módulos, no leer una clave de configuración compartida. La pantalla de
+         * edición pregunta lo mismo antes de pintarlo.
+         */
+        if ((bool) config('kore-app.auth.invitations')) {
+            Livewire::component('users.account-status-panel', AccountStatusPanel::class);
         }
 
         Gate::policy(User::class, UserPolicy::class);

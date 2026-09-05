@@ -18,6 +18,7 @@
 | `AUTH_MAGIC_LINKS`     | `true`        | OTP via spatie/laravel-one-time-passwords           | `Auth/Routes/web.php`, `login.blade.php` |
 | `AUTH_SOCIAL_LOGIN`    | `false`       | Socialite (con sub-toggles por proveedor)           | `Auth/Routes/web.php`, `login.blade.php` |
 | `AUTH_PASSKEYS`        | `true`        | Passkeys (WebAuthn) vía Fortify: rutas `passkey.*` + pantalla `/user/passkeys` | `FortifyServiceProvider::register()`, `Auth/Routes/web.php` |
+| `AUTH_INVITATIONS`     | `false`       | Registro por invitación y estado de alta: campo `invitation_code` en `/register`, pantallas `/invitations*` (permiso `invitations.manage`), pantalla de espera `/account/pending`, middleware `account.active` sobre los grupos `web` y `api`, panel de estado en `/users/{id}/edit` y `invitations:prune` en el scheduler. **La tabla `invitation_codes`, las columnas `account_status`/`activated_at` y el permiso `invitations.manage` existen igual** con el toggle apagado | `AuthModuleServiceProvider`, `Auth/Routes/web.php`, `Auth/Fortify/CreateNewUser`, `SocialiteController`, `UsersModuleServiceProvider`, `Users\Resources/views/pages/edit`, `resources/views/components/layouts/app.blade.php`, `routes/console.php`, `AppServiceProvider::configureAbout()` |
 | `SOCIAL_GOOGLE`        | `false`       | proveedor Google de Socialite                       | `SocialiteController`, `login.blade.php` |
 | `SOCIAL_GITHUB`        | `false`       | proveedor GitHub de Socialite                       | `SocialiteController`, `login.blade.php` |
 

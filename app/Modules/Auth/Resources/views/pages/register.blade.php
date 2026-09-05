@@ -24,6 +24,16 @@
 
             <x-kore::password name="password_confirmation" :label="__('Confirmar contraseña')" required />
 
+            {{-- Sólo con AUTH_INVITATIONS: sin el toggle el registro es abierto
+                 y pedir un código que nadie reparte cerraría la puerta a todos.
+                 Quien valida es `Auth\Fortify\CreateNewUser`, que mira el mismo
+                 toggle. --}}
+            @if (config('kore-app.auth.invitations'))
+                <x-kore::input name="invitation_code" :label="__('Código de invitación')"
+                    value="{{ old('invitation_code') }}" placeholder="ABCD1234" icon="ticket"
+                    :hint="__('Te lo dio quien te invitó.')" required />
+            @endif
+
             <button type="submit"
                     class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-kore-primary px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-kore-primary/25 transition-opacity hover:opacity-90">
                 {{ __('Crear cuenta') }}

@@ -1,7 +1,15 @@
 import { expect, test } from '../../fixtures';
 import { RegisterPage } from '../../pages/RegisterPage';
 import { STRONG_PASSWORD, uniqueEmail, uniqueName } from '../../support/data';
+import { SEEDED_INVITATION_CODE } from '../../support/users';
 
+/*
+ * `.env.e2e` enciende `AUTH_INVITATIONS`, así que /register pide código. Todos
+ * los casos de aquí usan el que siembra `E2eSeeder` —sin caducidad ni tope— y
+ * siguen probando lo mismo que antes: lo que se ejercita es el registro, no la
+ * invitación. El flujo de la invitación tiene su propio spec
+ * (`auth/invitations.spec.ts`).
+ */
 test.describe('Registro', () => {
     test('un registro válido lleva a la pantalla de verificación de email', async ({ page }) => {
         const register = new RegisterPage(page);
@@ -11,6 +19,7 @@ test.describe('Registro', () => {
             name: uniqueName('Nuevo'),
             email: uniqueEmail('registro'),
             password: STRONG_PASSWORD,
+            invitationCode: SEEDED_INVITATION_CODE,
         });
 
         // El User implementa MustVerifyEmail y /dashboard lleva middleware
@@ -27,6 +36,7 @@ test.describe('Registro', () => {
             name: uniqueName('Corta'),
             email: uniqueEmail('corta'),
             password: 'abc123',
+            invitationCode: SEEDED_INVITATION_CODE,
         });
 
         await expect(page).toHaveURL(/\/register$/);
@@ -42,6 +52,7 @@ test.describe('Registro', () => {
             email: uniqueEmail('distinta'),
             password: STRONG_PASSWORD,
             passwordConfirmation: `${STRONG_PASSWORD}-otra`,
+            invitationCode: SEEDED_INVITATION_CODE,
         });
 
         await expect(page).toHaveURL(/\/register$/);
@@ -53,13 +64,23 @@ test.describe('Registro', () => {
         const email = uniqueEmail('duplicado');
 
         await register.goto();
-        await register.register({ name: uniqueName('Primero'), email, password: STRONG_PASSWORD });
+        await register.register({
+            name: uniqueName('Primero'),
+            email,
+            password: STRONG_PASSWORD,
+            invitationCode: SEEDED_INVITATION_CODE,
+        });
         await expect(page).toHaveURL(/\/email\/verify$/);
 
         // Segundo intento con el mismo email, ya como invitado otra vez.
         await page.context().clearCookies();
         await register.goto();
-        await register.register({ name: uniqueName('Segundo'), email, password: STRONG_PASSWORD });
+        await register.register({
+            name: uniqueName('Segundo'),
+            email,
+            password: STRONG_PASSWORD,
+            invitationCode: SEEDED_INVITATION_CODE,
+        });
 
         await expect(page).toHaveURL(/\/register$/);
         await expect(register.errorAlert).toBeVisible();

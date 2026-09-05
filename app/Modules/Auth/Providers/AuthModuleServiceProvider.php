@@ -6,19 +6,26 @@ namespace App\Modules\Auth\Providers;
 
 use App\Core\Contracts\AuthorizationCatalog as AuthorizationCatalogContract;
 use App\Models\User;
+use App\Modules\Auth\Console\Commands\InvitationsPruneCommand;
 use App\Modules\Auth\Console\Commands\RegeneratePermissionsCommand;
 use App\Modules\Auth\Http\Livewire\Dashboard;
 use App\Modules\Auth\Http\Livewire\DevAccountSwitcher;
+use App\Modules\Auth\Http\Livewire\Invitations\FormInvitation;
+use App\Modules\Auth\Http\Livewire\Invitations\TableInvitations;
 use App\Modules\Auth\Http\Livewire\MagicLink;
 use App\Modules\Auth\Http\Livewire\Passkeys;
+use App\Modules\Auth\Http\Middleware\EnsureAccountIsActive;
 use App\Modules\Auth\Listeners\RevokeApiTokensOnPermissionChange;
+use App\Modules\Auth\Models\InvitationCode;
 use App\Modules\Auth\Models\Role;
+use App\Modules\Auth\Policies\InvitationCodePolicy;
 use App\Modules\Auth\Policies\PasskeyPolicy;
 use App\Modules\Auth\Support\AuthorizationCatalog;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Passkeys\Passkey;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
@@ -44,6 +51,20 @@ final class AuthModuleServiceProvider extends ServiceProvider
         'auth.passkeys' => Passkeys::class,
     ];
 
+    /**
+     * Componentes que sólo existen con `AUTH_INVITATIONS` encendido.
+     *
+     * Van aparte de la lista de arriba porque un alias registrado es una
+     * capacidad observable: sin este reparto, `<livewire:auth.invitations.…>`
+     * seguiría montándose desde cualquier vista con el toggle apagado (R10).
+     *
+     * @var array<string, class-string>
+     */
+    private const array INVITATION_COMPONENTS = [
+        'auth.invitations.table-invitations' => TableInvitations::class,
+        'auth.invitations.form-invitation' => FormInvitation::class,
+    ];
+
     #[Override]
     public function register(): void
     {
@@ -63,10 +84,53 @@ final class AuthModuleServiceProvider extends ServiceProvider
         $this->registerObservabilityGates();
         $this->registerPasskeyPolicy();
         $this->registerApiTokenRevocation();
+        $this->registerInvitations();
 
         if ($this->app->runningInConsole()) {
             $this->commands([
                 RegeneratePermissionsCommand::class,
+            ]);
+        }
+    }
+
+    /**
+     * Todo lo que enciende `AUTH_INVITATIONS`, en un solo sitio (R10, R11).
+     *
+     * Con el toggle apagado no queda nada observable: ni los alias de los dos
+     * componentes Livewire, ni la policy del código, ni el middleware sobre los
+     * grupos, ni el comando de purga. Lo que sí sigue igual son las tablas
+     * —`invitation_codes` y las dos columnas de `users`— y el permiso
+     * `invitations.manage` del catálogo: un toggle apaga rutas y comportamiento,
+     * nunca el esquema (`docs/architecture/toggles.md`).
+     *
+     * **El middleware va sobre los grupos `web` y `api`, no ruta por ruta.** Es
+     * la única forma de que una pantalla nueva nazca protegida sin que nadie
+     * tenga que acordarse; lo que se enumera —dentro de `EnsureAccountIsActive`—
+     * es lo contrario: la lista corta de rutas que una cuenta no activa sí puede
+     * usar. Se añade con `appendMiddlewareToGroup()` y no en `bootstrap/app.php`
+     * porque el toggle es del módulo y su lectura tiene que vivir con él.
+     */
+    private function registerInvitations(): void
+    {
+        if (! (bool) config('kore-app.auth.invitations')) {
+            return;
+        }
+
+        foreach (self::INVITATION_COMPONENTS as $alias => $class) {
+            Livewire::component($alias, $class);
+        }
+
+        Gate::policy(InvitationCode::class, InvitationCodePolicy::class);
+
+        $kernel = $this->app->make(HttpKernel::class);
+
+        Route::aliasMiddleware('account.active', EnsureAccountIsActive::class);
+        $kernel->appendMiddlewareToGroup('web', EnsureAccountIsActive::class);
+        $kernel->appendMiddlewareToGroup('api', EnsureAccountIsActive::class);
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                InvitationsPruneCommand::class,
             ]);
         }
     }

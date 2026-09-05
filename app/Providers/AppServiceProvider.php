@@ -220,6 +220,7 @@ final class AppServiceProvider extends ServiceProvider
             '2FA' => fn (): string => $state(config('kore-app.auth.two_factor')),
             'Passkeys' => fn (): string => $state(config('kore-app.auth.passkeys')),
             'Magic links' => fn (): string => $state(config('kore-app.auth.magic_links')),
+            'Invitations' => fn (): string => $state(config('kore-app.auth.invitations')),
             'Social login' => fn (): string => $state(config('kore-app.auth.social_login')),
             'Social Google' => fn (): string => $state(config('kore-app.socialite.google')),
             'Social GitHub' => fn (): string => $state(config('kore-app.socialite.github')),

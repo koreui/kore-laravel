@@ -211,6 +211,54 @@ export const RUTAS: RutaAcceso[] = [
     },
     {
         /*
+         * `permission:invitations.manage`, que `E2eSeeder` sólo le da al
+         * superadmin (por el `Gate::before`, no por un permiso directo). Las
+         * dos pantallas existen porque `.env.e2e` enciende `AUTH_INVITATIONS`.
+         */
+        path: '/invitations',
+        nombre: 'Invitaciones · listado',
+        heading: 'Invitaciones',
+        roles: {
+            invitado: 'login',
+            member: 403,
+            viewer: 403,
+            editor: 403,
+            superadmin: 200,
+        },
+    },
+    {
+        path: '/invitations/create',
+        nombre: 'Invitaciones · alta',
+        heading: 'Nueva invitación',
+        roles: {
+            invitado: 'login',
+            member: 403,
+            viewer: 403,
+            editor: 403,
+            superadmin: 200,
+        },
+    },
+    {
+        /*
+         * La pantalla de espera. Es 200 para cualquiera que haya entrado,
+         * también para quien ya está activo: es una página informativa, y darle
+         * un 403 a quien llega por un enlace viejo sería peor respuesta que
+         * enseñarle que su cuenta está bien. Es además una de las rutas libres
+         * de `EnsureAccountIsActive`; si no, se redirigiría a sí misma.
+         */
+        path: '/account/pending',
+        nombre: 'Cuenta en revisión',
+        heading: 'Tu cuenta está en revisión',
+        roles: {
+            invitado: 'login',
+            member: 200,
+            viewer: 200,
+            editor: 200,
+            superadmin: 200,
+        },
+    },
+    {
+        /*
          * Sin `heading`: para nadie autenticado es 200 directo. La ruta lleva
          * `password.confirm`, así que la primera visita de cada sesión rebota
          * a `/user/confirm-password`. Que la pantalla existe y lista vacío lo

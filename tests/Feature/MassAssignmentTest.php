@@ -18,6 +18,10 @@ it('refuses to mass assign an unlisted attribute on User', function (): void {
 });
 
 it('keeps the User fillable list minimal', function (): void {
+    // Las seis, y ninguna más. `account_status` y `activated_at` entraron con
+    // `AUTH_INVITATIONS`: quien las escribe es una Action —el canje de un código
+    // o el panel de Users—, nunca un `fill()` con input del request, y el
+    // formulario de usuarios no tiene ninguno de los dos campos.
     expect((new User)->getFillable())
-        ->toBe(['name', 'email', 'password', 'email_verified_at']);
+        ->toBe(['name', 'email', 'password', 'email_verified_at', 'account_status', 'activated_at']);
 });

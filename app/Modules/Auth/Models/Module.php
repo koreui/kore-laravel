@@ -86,6 +86,16 @@ final class Module extends Model
             'dashboard' => [
                 ['value' => 'dashboard.view', 'label' => 'Ver Dashboard'],
             ],
+            /*
+             * Un solo permiso para repartir y revocar códigos de invitación.
+             * No es CRUD: un código no se edita (ver `Auth\Forms\InvitationForm`)
+             * y revocarlo es la misma decisión que crearlo vista al revés, así
+             * que separarlas produciría el rol que abre la puerta y no puede
+             * cerrarla.
+             */
+            'invitations' => [
+                ['value' => 'invitations.manage', 'label' => 'Gestionar Invitaciones'],
+            ],
         ];
     }
 }

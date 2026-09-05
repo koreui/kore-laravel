@@ -51,6 +51,24 @@ final class ModulesSeeder extends Seeder
                 'roles' => [Role::ADMIN],
                 'active' => true,
             ],
+            /*
+             * Invitaciones. Se siembra SIEMPRE, también con
+             * `AUTH_INVITATIONS=false`, por lo mismo que las tablas de un módulo
+             * apagado se migran igual: el catálogo de permisos es forma, no
+             * capacidad (`docs/architecture/toggles.md`). Si dependiera del
+             * toggle, encenderlo en producción exigiría además acordarse de
+             * volver a sembrar los permisos para que alguien pudiera entrar a
+             * la pantalla — justo cuando ya hay tráfico.
+             *
+             * Su permiso, `invitations.manage`, lo declara
+             * `Module::specialPermissions()`.
+             */
+            [
+                'name' => 'Invitaciones',
+                'slug' => 'invitations',
+                'roles' => [Role::ADMIN],
+                'active' => true,
+            ],
         ];
 
         foreach ($modules as $module) {

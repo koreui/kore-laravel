@@ -89,6 +89,14 @@
         -->
         <env name="PDF_ENABLED" value="false" force="true"/>
         <env name="FILES_ENABLED" value="false" force="true"/>
+        <!--
+            El registro por invitación va apagado por defecto en la suite, por lo
+            mismo que los anteriores: si el desarrollador tuviera
+            AUTH_INVITATIONS=true en su .env, todos los tests de registro y del
+            middleware de estado fallarían sólo en su máquina. Los que lo
+            necesitan lo encienden con withEnvironment() (tests/Pest.php).
+        -->
+        <env name="AUTH_INVITATIONS" value="false" force="true"/>
         <env name="PULSE_ENABLED" value="false" force="true"/>
         <env name="TELESCOPE_ENABLED" value="false" force="true"/>
         <env name="NIGHTWATCH_ENABLED" value="false" force="true"/>

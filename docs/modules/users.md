@@ -14,6 +14,7 @@ app/Modules/Users/
 ├── Actions/                            # los casos de uso (escriben)
 │   ├── UserCreateAction.php
 │   ├── UserUpdateAction.php
+│   ├── UserAccountStatusChangeAction.php  # activar / suspender (toggle AUTH_INVITATIONS)
 │   └── UserDeleteAction.php
 ├── Data/UserData.php                   # DTO de entrada de las Actions
 ├── Events/                             # canal hacia otros módulos
@@ -26,6 +27,7 @@ app/Modules/Users/
 │   ├── Controllers/UsersController.php # index/create/edit (devuelven blades)
 │   └── Livewire/
 │       ├── FormComponent.php           # autoriza → valida → DTO → Action
+│       ├── AccountStatusPanel.php      # estado de la cuenta (toggle AUTH_INVITATIONS)
 │       └── TableUsers.php              # KoreDataTable
 ├── Policies/UserPolicy.php             # autorización (auto-registrada via Gate::policy)
 ├── Rules/                              # anti-escalada de privilegios
@@ -321,11 +323,53 @@ El seeder sincroniza los permisos del superadmin aunque tenga el `Gate::before`,
 para que los `@can` de las vistas sigan funcionando si algún día se quita ese
 bypass.
 
+## Panel de estado de la cuenta (`AUTH_INVITATIONS`)
+
+`Users\Http\Livewire\AccountStatusPanel`, montado en `/users/{id}/edit`
+**sólo** cuando `AUTH_INVITATIONS` está encendido: con el toggle apagado el
+estado de la cuenta no gobierna nada y un panel para moverlo sería una palanca
+desconectada. Ver [`auth.md`](auth.md#invitaciones-y-estado-de-cuenta) para el
+flujo completo.
+
+Qué hace: pinta el estado con `<x-kore::badge>` —etiqueta y color salen de
+`App\Core\Enums\AccountStatus`, la vista no decide nada (R30)— y ofrece
+**Activar** o **Suspender** según toque, vía `UserAccountStatusChangeAction`.
+
+Tres decisiones:
+
+- **Va fuera del `<form>` del formulario de edición**, en `users::pages.edit`.
+  No es estilo: anidar un componente con botones dentro de otro formulario haría
+  que un clic en «Activar» enviara el formulario del usuario.
+- **Nadie cambia su propio estado**, y esa guarda vive en la **Action**, no en la
+  Policy. Es la misma cicatriz que el auto-borrado de
+  `TableUsers::deleteAuthorized()`: el `Gate::before` del superadmin devuelve
+  `true` antes de consultar la policy, así que una regla escrita allí no
+  aplicaría justo al rol que más daño puede hacerse. Sin ella, un superadmin
+  puede suspenderse a sí mismo y quedarse fuera de la única pantalla desde la que
+  podría revertirlo. La Action lanza `ConflictException` y el componente la
+  convierte en un aviso, no en un 500.
+- **Sólo un superadmin toca a otro superadmin.** Eso sí lo pone la Policy
+  (`UserPolicy::update()`), que ya lo hacía para el formulario, y por eso en el
+  panel basta con `authorize('update', $user)`.
+
+`activated_at` se sella la **primera** vez que la cuenta se activa y no se toca
+después: reactivar a alguien tras una suspensión no borra la fecha en la que
+entró. Y `Auth\Events\AccountActivated` sólo se dispara cuando el estado
+**cambia** a activo, así que volver a pulsar «Activar» sobre una cuenta activa no
+vuelve a mandar el correo de bienvenida que escuche un derivado.
+
+> **R5** · Users dispara un evento de Auth. Está permitido y es el único cruce:
+> `{Otro}\Events\` es la frontera pública de un módulo. Lo que Users no importa
+> es ninguna otra clase de Auth — el estado viaja por `App\Core\Enums`, y el
+> toggle es una clave de configuración compartida, no una dependencia de código.
+
 ## Auditoría
 
 `App\Models\User` usa `Spatie\Activitylog\Models\Concerns\LogsActivity` y
-registra en `activity_log` los cambios de `name` y `email` (nunca el password),
-con el `causer` autenticado. Ver [`../ops/observability.md`](../ops/observability.md).
+registra en `activity_log` los cambios de `name`, `email` y `account_status`
+(nunca el password), con el `causer` autenticado. Que el cambio de estado quede
+registrado no es un extra: es la respuesta a «¿quién suspendió esta cuenta y
+cuándo?». Ver [`../ops/observability.md`](../ops/observability.md).
 
 ## Tests
 
@@ -386,7 +430,17 @@ la ability, y al revés):
 - `destroy`: 204 sin cuerpo, superadmin y auto-borrado bloqueados
 - Con `API_ENABLED=false` no existe ninguna ruta
 
-Total Users: **78 tests / 286 assertions**. (Cifra real de
+**`AccountStatusPanelTest.php`** — el panel de estado (`AUTH_INVITATIONS`):
+- Suspender y reactivar, conservando la primera `activated_at`
+- `activated_at` se sella la primera vez que se activa
+- `AccountActivated` sólo se dispara cuando el estado cambia de verdad
+- Nadie cambia su propio estado, superadmin incluido
+- El cambio queda en el audit log
+- R23 por `/livewire/update`: sin `users.edit`, 403; un no-superadmin no suspende
+  a un superadmin
+- El panel sólo aparece en `/users/{id}/edit` con el toggle encendido
+
+Total Users: **98 tests / 350 assertions**. (Cifra real de
 `./vendor/bin/pest app/Modules/Users --compact`; actualízala cuando cambie.)
 
 ## Cómo extender

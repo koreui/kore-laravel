@@ -2,6 +2,7 @@ import { expect, test } from '../../fixtures';
 import { ForgotPasswordPage } from '../../pages/ForgotPasswordPage';
 import { RegisterPage } from '../../pages/RegisterPage';
 import { STRONG_PASSWORD, uniqueEmail, uniqueName } from '../../support/data';
+import { SEEDED_INVITATION_CODE } from '../../support/users';
 
 test.describe('Recuperar contraseña', () => {
     test('pedir el enlace muestra el estado de confirmación', async ({ page }) => {
@@ -14,7 +15,15 @@ test.describe('Recuperar contraseña', () => {
         const register = new RegisterPage(page);
 
         await register.goto();
-        await register.register({ name: uniqueName('Reset'), email, password: STRONG_PASSWORD });
+        // El código es el que siembra `E2eSeeder`: con `AUTH_INVITATIONS=true`
+        // (`.env.e2e`) el registro lo pide, y aquí el alta es sólo el atrezzo
+        // para tener una cuenta con email único a la que pedirle el reset.
+        await register.register({
+            name: uniqueName('Reset'),
+            email,
+            password: STRONG_PASSWORD,
+            invitationCode: SEEDED_INVITATION_CODE,
+        });
         await expect(page).toHaveURL(/\/email\/verify$/);
 
         await page.context().clearCookies();

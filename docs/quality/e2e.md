@@ -79,10 +79,10 @@ tiene tres candados —flag, entorno y base de pruebas— que se explican en
 [`tests/e2e/fixtures/access-map.ts`](../../tests/e2e/fixtures/access-map.ts) es
 la **fuente única** de dos specs que nadie escribe a mano:
 
-- `specs/access/rbac.spec.ts` — cada ruta × cada perfil (**14 × 5 = 70
+- `specs/access/rbac.spec.ts` — cada ruta × cada perfil (**19 × 5 = 95
   comprobaciones**): el status, o la redirección, que el servidor tiene que
   devolver.
-- `specs/access/smoke.spec.ts` — cada pantalla que da 200 para alguien (**34**):
+- `specs/access/smoke.spec.ts` — cada pantalla que da 200 para alguien (**40**):
   que carga, que muestra su heading, que Livewire hidrata y que no revienta.
 
 Añadir una pantalla al mapa la cubre en los dos. Es la forma automática de
@@ -386,8 +386,8 @@ tests/e2e/
     ├── access/{rbac,smoke}.spec.ts      # generados desde access-map.ts
     ├── harness/harness.spec.ts          # se salta si no está app/Modules/E2E
     ├── smoke/landing.spec.ts
-    ├── auth/{login,register,forgot-password,magic-link,passkeys}.spec.ts
-    ├── users/{index,create,edit,delete,dashboard}.spec.ts
+    ├── auth/{login,register,forgot-password,magic-link,passkeys,invitations}.spec.ts
+    ├── users/{index,create,edit,delete,dashboard,account-status,avatar}.spec.ts
     └── docs/{smoke,navigation,authorization}.spec.ts
 ```
 

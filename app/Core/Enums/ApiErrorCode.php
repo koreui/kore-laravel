@@ -45,6 +45,17 @@ enum ApiErrorCode: string
      */
     case TwoFactorRequired = 'two_factor_required';
 
+    /**
+     * 403 · la cuenta está autenticada pero su estado de alta no la deja
+     * operar (`pending` o `suspended`). Es un `forbidden` con nombre propio, y
+     * por lo mismo que `two_factor_required`: el cliente que lo recibe no tiene
+     * que pedir otro permiso ni reintentar, sino enseñar la pantalla de espera
+     * —o cerrar la sesión—. La lanza
+     * `App\Exceptions\AccountNotActiveException`, y su mensaje sí viaja, porque
+     * «en revisión» y «suspendida» no se resuelven igual.
+     */
+    case AccountNotActive = 'account_not_active';
+
     /** 429 · rate limit. La respuesta lleva `Retry-After`. */
     case Throttled = 'throttled';
 
@@ -106,6 +117,7 @@ enum ApiErrorCode: string
             self::MethodNotAllowed => __('El método no está permitido en esta ruta.'),
             self::Conflict => __('El estado actual del recurso no permite esta operación.'),
             self::TwoFactorRequired => __('Esta cuenta tiene verificación en dos pasos: inicia sesión desde el navegador.'),
+            self::AccountNotActive => __('Tu cuenta todavía no está activa.'),
             self::Throttled => __('Demasiadas peticiones. Inténtalo de nuevo en unos momentos.'),
             self::BadRequest => __('La petición está mal formada.'),
             self::UpgradeRequired => __('Tu versión de la aplicación ya no está soportada. Actualízala para continuar.'),

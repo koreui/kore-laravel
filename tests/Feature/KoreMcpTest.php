@@ -97,12 +97,12 @@ test('kore-list-modules cuenta carpetas, Actions, Livewire, rutas y tests', func
 |--------------------------------------------------------------------------
 */
 
-test('kore-list-toggles devuelve las catorce claves de kore-app con su variable de .env y un lector', function (): void {
+test('kore-list-toggles devuelve las quince claves de kore-app con su variable de .env y un lector', function (): void {
     $payload = mcpToolPayload(ListTogglesTool::class);
 
     $toggles = collect(Arr::get($payload, 'toggles'))->keyBy('clave');
 
-    expect($toggles)->toHaveCount(14)
+    expect($toggles)->toHaveCount(15)
         ->and($toggles->keys()->all())->toBe([
             'kore-app.api.enabled',
             'kore-app.tenancy.enabled',
@@ -117,6 +117,7 @@ test('kore-list-toggles devuelve las catorce claves de kore-app con su variable 
             'kore-app.auth.magic_links',
             'kore-app.auth.social_login',
             'kore-app.auth.passkeys',
+            'kore-app.auth.invitations',
             'kore-app.e2e.harness',
         ]);
 
@@ -133,6 +134,7 @@ test('kore-list-toggles devuelve las catorce claves de kore-app con su variable 
         ->and($toggles->get('kore-app.auth.magic_links')['env'])->toBe('AUTH_MAGIC_LINKS')
         ->and($toggles->get('kore-app.auth.social_login')['env'])->toBe('AUTH_SOCIAL_LOGIN')
         ->and($toggles->get('kore-app.auth.passkeys')['env'])->toBe('AUTH_PASSKEYS')
+        ->and($toggles->get('kore-app.auth.invitations')['env'])->toBe('AUTH_INVITATIONS')
         ->and($toggles->get('kore-app.e2e.harness')['env'])->toBe('E2E_HARNESS');
 
     // R11: un toggle que no lee nadie es un toggle fantasma. Si esto falla, el

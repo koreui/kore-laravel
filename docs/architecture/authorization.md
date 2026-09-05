@@ -34,7 +34,8 @@ app/Modules/Users/
 {slug}.{accion}
 ```
 
-Ejemplos: `users.view`, `users.create`, `users.edit`, `users.delete`, `dashboard.view`.
+Ejemplos: `users.view`, `users.create`, `users.edit`, `users.delete`,
+`dashboard.view`, `invitations.manage`.
 
 Por default cada `Module` genera 4 permisos (view/create/edit/delete). Los módulos con permisos **no-CRUD** se declaran en `Module::specialPermissions()`:
 
@@ -45,10 +46,29 @@ private function specialPermissions(): array
         'dashboard' => [
             ['value' => 'dashboard.view', 'label' => 'Ver Dashboard'],
         ],
+        'invitations' => [
+            ['value' => 'invitations.manage', 'label' => 'Gestionar Invitaciones'],
+        ],
         // 'mi-modulo' => [...] — agrega aquí los que necesiten permisos custom
     ];
 }
 ```
+
+### `invitations.manage`
+
+Uno solo para repartir **y** revocar códigos de invitación, y es deliberado: son
+la misma decisión vista desde los dos lados, y separarlas produciría el rol que
+puede abrir la puerta y no cerrarla. Lo aplica
+`Auth\Policies\InvitationCodePolicy` (`viewAny`, `create`, `delete`) y el
+middleware `permission:invitations.manage` de `/invitations*`.
+
+El módulo `invitations` se siembra **siempre**, también con `AUTH_INVITATIONS`
+apagado: el catálogo de permisos es forma, no capacidad —el mismo criterio que
+las tablas de un módulo apagado—. Si dependiera del toggle, encenderlo en
+producción exigiría además acordarse de volver a sembrar permisos para que
+alguien pudiera entrar a la pantalla, justo cuando ya hay tráfico. Lo que el
+toggle apaga es la pantalla, no quién podría verla.
+Ver [`../modules/auth.md`](../modules/auth.md#invitaciones-y-estado-de-cuenta).
 
 ## Roles que vienen con el boilerplate
 

@@ -6,8 +6,14 @@
 
 ```
 app/Modules/Auth/
-├── Actions/                     # casos de uso propios (AuthUserRegisterAction, AuthPasskeyDeleteAction)
-├── Data/                        # DTOs: RegisterData, DashboardStatData, PasskeyData
+├── Actions/                     # casos de uso propios (AuthUserRegisterAction, AuthPasskeyDeleteAction,
+│                                  InvitationCreateAction, InvitationRedeemAction, InvitationRevokeAction)
+├── Console/Commands/            # kore:regenerate-permissions, invitations:prune (toggle)
+├── Data/                        # DTOs: RegisterData, DashboardStatData, PasskeyData, InvitationData
+├── Enums/                       # (el estado de alta vive en App\Core\Enums\AccountStatus, ver más abajo)
+├── Events/                      # frontera pública: ApiTokenIssued, ApiTokenRevoked, AccountActivated
+├── Forms/InvitationForm.php     # alta de un código (sólo alta: un código no se edita)
+├── Rules/ValidInvitationCode.php
 ├── Database/
 │   ├── Factories/               # ModuleFactory, RoleFactory
 │   ├── Migrations/
@@ -16,10 +22,11 @@ app/Modules/Auth/
 │                                  UpdateUserPassword, UpdateUserProfileInformation,
 │                                  PasswordValidationRules
 ├── Http/
-│   ├── Controllers/SocialiteController.php
-│   └── Livewire/                # Dashboard, MagicLink, Passkeys
-├── Models/                      # Role, Module (+ ModulesCollection)
-├── Policies/PasskeyPolicy.php   # sólo el dueño revoca su credencial
+│   ├── Controllers/             # SocialiteController, InvitationsController, AccountController
+│   ├── Livewire/                # Dashboard, MagicLink, Passkeys, Invitations/{TableInvitations, FormInvitation}
+│   └── Middleware/              # EnsureAccountIsActive (alias `account.active`, toggle)
+├── Models/                      # Role, Module (+ ModulesCollection), InvitationCode
+├── Policies/                    # PasskeyPolicy (sólo el dueño revoca su credencial), InvitationCodePolicy
 ├── Providers/
 │   ├── AuthModuleServiceProvider.php
 │   └── FortifyServiceProvider.php
@@ -28,11 +35,13 @@ app/Modules/Auth/
 │   └── Resources/Api/V1/UserMeResource.php       # { id, name, email, roles, permissions }
 ├── Resources/views/
 │   ├── layouts/auth.blade.php
-│   ├── livewire/                # dashboard, passkeys
+│   ├── livewire/                # dashboard, passkeys, invitations/form-invitation
 │   └── pages/                   # login, register, forgot/reset-password, verify-email,
-│                                  two-factor-challenge, confirm-password, magic-link
+│                                  two-factor-challenge, confirm-password, magic-link,
+│                                  account-pending, invitations/{index, create}
 ├── Routes/
-│   ├── web.php                  # magic-link, socialite, /dashboard, /user/passkeys
+│   ├── web.php                  # magic-link, socialite, /dashboard, /user/passkeys,
+│                                  /invitations, /account/pending (toggle)
 │   └── api.php                  # /api/v1/user (sólo si API_ENABLED)
 ├── Support/AuthorizationCatalog.php   # implementación del contrato de Core
 └── Tests/Feature/               # Login, Register, PasswordReset, ApiToken, Dashboard, ...
@@ -112,6 +121,9 @@ desde un comando o un job, y se testea sin tocar HTTP
 | GET   | `/auth/{provider}/callback`| `socialite.callback`   | `AUTH_SOCIAL_LOGIN=true` |
 | GET   | `/dashboard`               | `dashboard`            | requiere `auth + verified` |
 | GET   | `/user/passkeys`           | `passkeys.index`       | `AUTH_PASSKEYS=true` (+ `auth + verified + password.confirm`) |
+| GET   | `/invitations`             | `invitations.index`    | `AUTH_INVITATIONS=true` (+ `auth + verified + permission:invitations.manage`) |
+| GET   | `/invitations/create`      | `invitations.create`   | `AUTH_INVITATIONS=true` (+ lo mismo) |
+| GET   | `/account/pending`         | `account.pending`      | `AUTH_INVITATIONS=true` (+ `auth`, sin `verified`) |
 | GET   | `/api/v1/user`             | `api.v1.user.me`       | `API_ENABLED=true` (+ `auth:sanctum`) |
 
 ### `/dashboard`
@@ -167,6 +179,153 @@ Ver tabla completa en [`../architecture/toggles.md`](../architecture/toggles.md)
   [Passkeys](#passkeys-webauthn).
 - **`AUTH_MAGIC_LINKS`** (default `true`): registra `/magic-link` (Livewire). El componente envía OTP de 6 dígitos via `User::sendOneTimePassword()` y autentica con `attemptLoginUsingOneTimePassword`. Ver [Magic links](#magic-links-otp) para el detalle de anti-enumeración y throttle.
 - **`AUTH_SOCIAL_LOGIN`** (default `false`): registra rutas socialite. Cada proveedor se controla por separado (`SOCIAL_GOOGLE`, `SOCIAL_GITHUB`); el controller `abort(404)` si el proveedor consultado no está habilitado en `config('kore-app.socialite.{provider}')`.
+- **`AUTH_INVITATIONS`** (default `false`): registro por invitación + estado de
+  alta de la cuenta. Ver [Invitaciones y estado de cuenta](#invitaciones-y-estado-de-cuenta).
+
+## Invitaciones y estado de cuenta
+
+**TL;DR**: con `AUTH_INVITATIONS=true`, `/register` exige un código, la cuenta
+nace con el rol que dice ese código, y el middleware `account.active` deja fuera
+a quien esté `pending` o `suspended`. Con el toggle apagado el registro es
+abierto y toda cuenta nace activa, como siempre.
+
+### Qué enciende el toggle
+
+| Pieza | Dónde |
+|-------|-------|
+| Campo `invitation_code` en `/register` y su validación | `Auth/Resources/views/pages/register.blade.php` + `Auth/Fortify/CreateNewUser` |
+| Pantallas `/invitations` y `/invitations/create` (permiso `invitations.manage`) | `Auth/Routes/web.php` → `InvitationsController` + los dos Livewire de `Http/Livewire/Invitations/` |
+| Pantalla de espera `/account/pending` | `AccountController@pending` |
+| Middleware `account.active` sobre los grupos `web` y `api` | `AuthModuleServiceProvider::registerInvitations()` |
+| Panel de estado en `/users/{id}/edit` | `Users\Http\Livewire\AccountStatusPanel` (ver [`users.md`](users.md)) |
+| Enlace «Invitaciones» del menú | `resources/views/components/layouts/app.blade.php` |
+| Comando `invitations:prune` y su tarea nocturna | `Auth/Console/Commands/InvitationsPruneCommand` + `routes/console.php` |
+
+Y lo que **no** depende del toggle, a propósito:
+
+- **El esquema.** La tabla `invitation_codes` y las columnas `account_status` /
+  `activated_at` de `users` se migran siempre. Es la misma regla que la tabla
+  `devices` o la `media`: un toggle apaga rutas y comportamiento, nunca la forma
+  de la base ([`../architecture/toggles.md`](../architecture/toggles.md)).
+- **El permiso `invitations.manage`.** Lo siembra `ModulesSeeder` con el módulo
+  `invitations`, encendido o apagado. Si dependiera del toggle, encenderlo en
+  producción exigiría acordarse además de volver a sembrar permisos para que
+  alguien pudiera entrar a la pantalla, justo cuando ya hay tráfico.
+
+### El código
+
+`App\Modules\Auth\Models\InvitationCode`. Tres decisiones que no son detalles:
+
+- **Se normaliza siempre** (`InvitationCode::normalize()`): mayúsculas y sin
+  espacios, ni siquiera los de en medio. Se guarda así y se busca así, porque
+  quien lo teclea desde un móvil no debe fallar por un cambio de caja ni por lo
+  que se pega al copiarlo de un chat. `«kore 2026»` y `«KORE2026»` son el mismo
+  código.
+- **No hay booleano `activo`.** Revocar es adelantar `expires_at` a ahora
+  (`InvitationRevokeAction`). Un estado menos que mantener, una fecha más que
+  auditar, y una sola pregunta —`isUsable()`— en vez de dos que pueden
+  contradecirse.
+- **`uses` vive en la fila**, no se cuenta con un `hasMany` sobre `users`: así el
+  alta puede incrementarlo dentro de su propia transacción, con la fila
+  bloqueada, y dos registros simultáneos no se cuelan por encima de `max_uses`.
+
+Un código **no se edita**: `Auth\Forms\InvitationForm` sólo da de alta. Cambiarle
+el rol o el cupo después de repartirlo cambiaría el trato con quien ya lo tiene
+en la mano; la alternativa —revocar y crear otro— deja el rastro de las dos
+decisiones.
+
+### El alta, paso a paso
+
+1. `Auth\Fortify\CreateNewUser` valida `invitation_code` con
+   `Auth\Rules\ValidInvitationCode`, que dice **por qué** no sirve (caducado,
+   agotado, inexistente).
+2. `InvitationRedeemAction` abre una transacción, relee el código con
+   `lockForUpdate()` y vuelve a comprobarlo. La validación responde por lo que se
+   veía al enviar el formulario; esto responde por lo que hay en el instante de
+   escribir, y entre las dos cosas cabe otro registro que agote el cupo.
+3. Crea el usuario **activo** (`activated_at` con la fecha), le asigna el rol del
+   código, suma un uso y dispara `Auth\Events\AccountActivated`.
+4. Si el código ya no sirve lanza `ConflictException` —de dominio, no de Http— y
+   el adaptador de Fortify la convierte en un error del campo, no en un 500.
+
+Presentar un código válido **es** la activación: dejar la cuenta en `pending`
+obligaría a aprobar a mano a quien ya fue invitado. Lo que sí nace `pending` es
+lo que entra por una puerta que no pide código: el **login social**
+(`SocialiteController::statusForNewAccount()`), que con el toggle encendido es
+justo el hueco que quedaría abierto.
+
+### Estados de la cuenta
+
+`App\Core\Enums\AccountStatus` — y vive en `Core`, no en Auth, porque quien lo
+castea es `App\Models\User`, que es global y no importa una sola clase de
+`App\Modules\*` (R5). Es la misma razón por la que `SystemRole` está ahí.
+
+| Estado | Qué significa | Qué puede hacer |
+|--------|---------------|-----------------|
+| `pending` | Registrada por una puerta que no la activa | Sólo sesión, perfil y la pantalla de espera |
+| `active` | Puede operar. **Es el default de la columna** | Todo |
+| `suspended` | Se le cerró el acceso a mano | Nada: pierde la sesión en la siguiente petición |
+
+Es ortogonal a `email_verified_at`: ese responde «¿este correo es suyo?» y esto
+responde «¿la casa le abrió la puerta?».
+
+### El middleware
+
+`Auth\Http\Middleware\EnsureAccountIsActive`, alias `account.active`. Va montado
+sobre los **grupos** `web` y `api`, no ruta por ruta: así una pantalla nueva nace
+protegida y nadie tiene que acordarse de blindarla. Lo que se enumera dentro es
+lo contrario —la lista corta de lo que una cuenta no activa **sí** puede tocar—:
+sesión (`login`, `logout`, `register`, `password.*`, `two-factor.*`,
+`verification.*`, `magic-link.*`, `socialite.*`, `api.v1.auth.*`), la pantalla de
+espera (`account.pending`) y `livewire.*`, que la propia pantalla de espera
+necesita y donde cada componente autoriza por su cuenta (R23). Una ruta **sin
+nombre** se trata como protegida: no se puede clasificar, y ante la duda cierra.
+
+Qué hace al bloquear:
+
+- **`pending` en el navegador** → redirección a `/account/pending`. La sesión se
+  conserva: todavía tiene cosas que hacer —verificar el correo, esperar— y
+  echarla al login no adelantaría ninguna.
+- **`suspended` en el navegador** → cierra la sesión y devuelve al login con el
+  motivo. Mantenerla abierta dejaría a alguien a quien se le cerró el acceso
+  navegando por una aplicación que le contesta que no a todo.
+- **Cualquiera de los dos en `api/*`** → lanza
+  `App\Exceptions\AccountNotActiveException`, que `ApiExceptionRenderer` rinde
+  como **403** con `error.code = account_not_active` (R54). Tiene código propio
+  —y no `forbidden`— porque el remedio es distinto: ahí se pide otro permiso;
+  aquí se espera a que activen la cuenta, o se deja de intentar. El mensaje sí
+  viaja, porque «en revisión» y «suspendida» no se resuelven igual.
+
+### Administración
+
+- Permiso **`invitations.manage`**, uno solo para repartir y revocar: son la
+  misma decisión vista desde los dos lados, y separarlas produciría el rol que
+  puede abrir la puerta y no cerrarla. Lo declara
+  `Auth\Models\Module::specialPermissions()` y lo aplica
+  `Auth\Policies\InvitationCodePolicy`.
+- `GET /invitations` (`TableInvitations`) lista los códigos con sus registros y
+  su estado, y revoca desde la fila.
+- `GET /invitations/create` (`FormInvitation`) da de alta uno y **no redirige**:
+  el código sólo se puede leer ahí, así que la pantalla se queda y lo enseña con
+  `<x-kore::clipboard>`. Mandar al listado obligaría a buscarlo entre las filas
+  justo cuando hace falta copiarlo.
+- El rol que puede llevar un código sale de
+  `AuthorizationCatalog::assignableRoleNames()`, que excluye superadmin: un
+  código es una credencial que se reparte por mensajería, y el rol con bypass
+  total del `Gate::before` no viaja así (R26).
+
+### Mantenimiento
+
+```bash
+php artisan invitations:prune --days=90 --dry-run   # el ensayo
+php artisan invitations:prune --days=90             # de verdad
+```
+
+Borra **sólo** los códigos con `expires_at` anterior al corte. Uno sin caducidad
+no se toca aunque esté agotado: agotado no es lo mismo que cerrado —subirle el
+cupo lo reabre— y la fila es el rastro de cuánta gente entró por él. Quien ya se
+registró conserva su cuenta: aquí no hay cascada hacia `users`. El scheduler lo
+corre a las 04:45, detrás del backup de las 02:00.
 
 ## Magic links (OTP)
 
@@ -503,8 +662,14 @@ echaría a toda la plantilla de sus móviles cada vez que se añade un módulo.
 | `PasskeysToggleTest` | el toggle `AUTH_PASSKEYS` añade/quita la feature, sus rutas y su limiter | 9 |
 | `PasskeysScreenTest` | acceso a `/user/passkeys`, listado por dueño y revocación | 10 |
 | `DevAccountSwitcherTest` | el switcher `/dev/switch-account` sólo existe en `local` y sólo entra en cuentas de dominios reservados | 16 |
+| `InvitationsToggleTest` | `AUTH_INVITATIONS`: rutas, middleware sobre los grupos, comando, scheduler y campo del registro; y que el esquema se migra igual con el toggle apagado | 10 |
+| `InvitationRegistrationTest` | registro con código válido, normalizado, ausente, desconocido, caducado, agotado y con el cupo lleno | 7 |
+| `InvitationActionsTest` | las tres Actions (crear, revocar, canjear) y la normalización del código | 6 |
+| `AccountStatusMiddlewareTest` | `EnsureAccountIsActive`: activo pasa, pendiente redirige, suspendido pierde la sesión, API 403 con `account_not_active`, y nada con el toggle apagado | 6 |
+| `InvitationsScreenTest` | las dos pantallas: acceso por permiso, alta, rol no asignable, revocación y R23 vía `/livewire/update` | 7 |
+| `InvitationsPruneCommandTest` | qué borra `invitations:prune` y que `--dry-run` no borra nada | 2 |
 
-Total Auth: **113 tests / 365 assertions**. (Cifra real de
+Total Auth: **151 tests / 488 assertions**. (Cifra real de
 `./vendor/bin/pest app/Modules/Auth --compact`; actualízala cuando cambie.)
 
 ## Cómo extender
