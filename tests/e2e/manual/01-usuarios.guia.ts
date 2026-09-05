@@ -259,7 +259,7 @@ recorrido(
                 const fila = await usuarios.focusOnRow(correo);
                 await expect(fila).toContainText(nombreCorregido);
             },
-            { recortar: page.locator('table').first() },
+            { recortar: usuarios.table },
         );
 
         /* ── La foto ────────────────────────────────────────────────────── */
@@ -320,7 +320,7 @@ recorrido(
                 await usuarios.goto();
                 await usuarios.focusOnRow(correo);
             },
-            { recortar: page.locator('table').first() },
+            { recortar: usuarios.table },
         );
     },
 );

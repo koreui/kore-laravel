@@ -25,6 +25,16 @@ export class UsersIndexPage {
 
     readonly rows: Locator;
 
+    /**
+     * La tabla entera.
+     *
+     * No la usa ninguna aserción —las filas se comprueban una a una— sino el
+     * manual de usuario, que recorta ahí sus capturas del listado. Vive en el
+     * page object y no en el recorrido para que el día que el DataTable deje
+     * de pintar un `<table>` haya un solo sitio que arreglar.
+     */
+    readonly table: Locator;
+
     readonly successToast: Locator;
 
     /** Diálogo de confirmación de koreUi (overlay manager). */
@@ -41,6 +51,7 @@ export class UsersIndexPage {
         this.search = page.getByPlaceholder('Buscar...');
         this.newUserButton = page.getByRole('link', { name: 'Nuevo usuario' });
         this.rows = page.locator('tbody tr');
+        this.table = page.locator('table').first();
         this.successToast = page.getByText('¡Listo!');
         this.confirmDialog = page.getByRole('dialog');
         this.confirmButton = page.getByRole('button', { name: 'Confirmar' });
