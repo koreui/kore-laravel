@@ -42,9 +42,9 @@ it('installs from scratch with migrate:fresh --seed', function (): void {
 
     forgetPermissionCache();
 
-    // Lo que siembra ModulesSeeder: los cuatro módulos —dashboard, users,
-    // roles e invitations—, sus permisos y los tres roles del sistema.
-    expect(Module::count())->toBe(4)
+    // Lo que siembra ModulesSeeder: los cinco módulos —dashboard, users,
+    // roles, invitations y settings—, sus permisos y los tres roles del sistema.
+    expect(Module::count())->toBe(5)
         ->and(SpatieRole::count())->toBe(3)
         ->and(Permission::count())->toBeGreaterThan(0);
 
@@ -67,7 +67,7 @@ it('is idempotent when seeding twice', function (): void {
 
     // Ni duplica el admin ni multiplica módulos, roles o permisos.
     expect(User::query()->where('email', 'admin@example.com')->count())->toBe(1)
-        ->and(Module::count())->toBe(4)
+        ->and(Module::count())->toBe(5)
         ->and(SpatieRole::count())->toBe(3);
 
     $admin = User::query()->where('email', 'admin@example.com')->firstOrFail();

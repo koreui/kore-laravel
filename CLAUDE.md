@@ -27,6 +27,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - [`docs/modules/pdf.md`](docs/modules/pdf.md) — generación de PDF con spatie/laravel-pdf y Gotenberg (toggle `PDF_ENABLED`)
 - [`docs/modules/files.md`](docs/modules/files.md) — archivos con versionado por slot y URL firmada (toggle `FILES_ENABLED`)
 - [`docs/modules/notifications.md`](docs/modules/notifications.md) — bandeja in-app, campana, preferencias por categoría y API (toggle `NOTIFICATIONS_ENABLED`)
+- [`docs/modules/platform.md`](docs/modules/platform.md) — ajustes en BD, series de folio y features por instalación (sin toggle: siempre encendido)
 - [`docs/patterns/README.md`](docs/patterns/README.md) — la **regla de tres**: cuándo una solución sube al boilerplate, y el camino de vuelta de un proyecto hijo al padre
 - [`docs/guides/api.md`](docs/guides/api.md) — contrato de la API REST: envelope, errores, paginación, middleware, limiters y Scramble
 - [`docs/guides/exports.md`](docs/guides/exports.md) — la carpeta `Exports/`: CSV sin dependencias, Excel en el derivado y PDF delegando en el módulo Pdf
@@ -49,6 +50,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - PDF: módulo opcional **Pdf** (`PDF_ENABLED`) sobre spatie/laravel-pdf con driver **Gotenberg** (servicio aparte); contrato `App\Core\Contracts\PdfRenderer`, tema base con vista previa y las imágenes de la hoja embebidas como `data:` URI
 - Archivos: módulo opcional **Files** (`FILES_ENABLED`) sobre spatie/laravel-medialibrary — contrato `App\Core\Contracts\FileStore`, versionado por slot (reemplazar **archiva**, no borra), URL firmada con el `v=` dentro de la firma, y compresión + subida a S3/R2 opcionales en cola
 - Notificaciones: módulo opcional **Notifications** (`NOTIFICATIONS_ENABLED`) — contrato `App\Core\Contracts\Notifier`, bandeja in-app + campana, preferencias por categoría × canal, API `api/v1/me/notifications*` y poda; el canal de push **sólo loguea** y sus tokens llegan desde Devices por `App\Core\Contracts\PushTokenDirectory`
+- Plataforma: módulo **Platform**, siempre encendido y sin toggle — `App\Core\Contracts\Settings` (ajustes en BD con fallback a `config/kore-settings.php` y pantalla `/settings`), `NumberSeries` (folios correlativos con `lockForUpdate` + snapshot del emisor, `config/kore-numbering.php`) e `InstallationFeatures` (`config/features.php`, middleware `feature:` y directiva `@feature`: «tu licencia no incluye esto», que no es un toggle ni un permiso ni Pennant)
 - DTOs: spatie/laravel-data
 - Feature flags: Laravel Pennant
 - Tests: Pest 5 (con arch tests en `tests/Arch/ArchitectureTest.php`)
@@ -66,6 +68,7 @@ app/
 │   ├── Concerns/               # traits compartidos de Livewire y Eloquent
 │   │   ├── HandlesDeleteConfirmation.php  # confirmar → borrar, id #[Locked]
 │   │   ├── HandlesSlotUploads.php         # subir/archivar el archivo de un slot
+│   │   ├── HasIssuedNumber.php # folio de una serie en un modelo (opt-in)
 │   │   ├── HasPublicUuid.php   # identidad pública opt-in, PK entera
 │   │   └── RedirectsWithToast.php         # toast en sesión + redirect
 │   ├── Console/                # comandos transversales (kore:arch:check) y hooks de git
@@ -73,9 +76,11 @@ app/
 │   ├── Contracts/              # interfaces compartidas (fronteras entre módulos)
 │   │                           #   AuthorizationCatalog · FileStore · PdfRenderer
 │   │                           #   Notifier · PushTokenDirectory
+│   │                           #   Settings · NumberSeries · InstallationFeatures
 │   ├── Data/Data.php           # base DTO (extiende spatie/laravel-data)
 │   │                           # + FileSlotData · StoredFileData · NotificationData
 │   │                           # + PdfBrandData · PdfOptionsData · PdfDocumentData
+│   │                           # + OrganizationData · IssuedNumberData
 │   ├── Enums/                  # valores compartidos (SystemRole, AccountStatus, ApiErrorCode,
 │   │                           #   PdfPaperFormat, NotificationCategory)
 │   ├── Http/Api/               # contrato de la API REST (R54)
@@ -214,8 +219,20 @@ Sentry se activa con `SENTRY_LARAVEL_DSN` y Pulse con `PULSE_ENABLED`
 `config/kore-api.php` es un archivo aparte y **no** duplica `API_ENABLED`: guarda
 los parámetros del contrato de la API (`version`, `pagination`, `docs.enabled`
 vía `API_DOCS`, `limiters`). El check R11 sólo vigila `kore-app`, porque
-`kore-api` declara cifras y no capacidades. `config/devices.php` y
-`config/files.php` siguen el mismo reparto respecto de sus toggles.
+`kore-api` declara cifras y no capacidades. `config/devices.php`,
+`config/files.php`, `config/kore-settings.php` y `config/kore-numbering.php`
+siguen el mismo reparto respecto de sus toggles (Platform, además, no tiene
+ninguno: está siempre encendido).
+
+**`config/features.php` es otra capa, no otro toggle.** `kore-app` dice qué
+capacidades **trae** el boilerplate; `features` dice qué incluye la **licencia**
+de esta instalación; Pennant dice a quién le toca **todavía** no; y un permiso
+dice qué puede hacer **este usuario**. Cuatro «no» distintos, y mezclarlos hace
+imposible saber por qué el cliente no ve una pantalla. Se consume con el
+middleware `feature:{clave}`, la directiva `@feature('clave')` o el contrato
+`App\Core\Contracts\InstallationFeatures`. Ver
+[`docs/architecture/toggles.md`](docs/architecture/toggles.md) §«Tres capas» y
+[`docs/modules/platform.md`](docs/modules/platform.md).
 
 Cuando un toggle está OFF, su `ServiceProvider` debe hacer `return` temprano y no registrar nada: ni rutas, ni middleware, ni comandos de dominio, ni traducciones. Tres excepciones, y sólo tres (R10): el comando que enciende el toggle; el namespace de vistas (`loadViewsFrom`), que sin rutas no expone nada y que Larastan necesita para validar `view('docs::x')`; y ese mismo `loadViewsFrom` cuando el espacio contiene componentes Blade anónimos (`<x-files::slot-upload>`), porque Blade resuelve la etiqueta al **compilar** la plantilla y con el registro dentro del toggle la pantalla de usuarios devolvía un 500 con `FILES_ENABLED=false`.
 

@@ -238,6 +238,19 @@ final class AppServiceProvider extends ServiceProvider
             'Backup' => fn (): string => config('kore-app.backup.enabled')
                 ? 'enabled'.(config('backup.backup.password') ? ' (zip cifrado)' : ' (zip SIN cifrar)')
                 : 'disabled',
+            /*
+             * Features por instalación (config/features.php), en resumen y no
+             * uno a uno: `php artisan about` es una foto del entorno y la lista
+             * completa crece con cada derivado. Quién es cada uno lo dice
+             * `php artisan features:list`.
+             */
+            'Features' => static function (): string {
+                /** @var array<string, mixed> $features */
+                $features = (array) config('features', []);
+                $on = count(array_filter($features, static fn (mixed $value): bool => (bool) $value));
+
+                return $on.' de '.count($features).' (features:list)';
+            },
             'Pulse' => fn (): string => $state(config('pulse.enabled')),
             'Sentry' => fn (): string => config('sentry.dsn') ? 'DSN configurado' : 'sin DSN',
         ]);

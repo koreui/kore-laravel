@@ -22,6 +22,10 @@ parameters:
         # archivo aquí el trait se analiza en el contexto de ambos. Se añade
         # este archivo y no `tests/` entero: el resto son closures de Pest.
         - tests/Feature/HasPublicUuidTest.php
+        # `App\Core\Concerns\HasIssuedNumber` es el mismo caso: opt-in, sin
+        # ningún modelo del boilerplate que lo estrene, y por tanto invisible
+        # para PHPStan hasta que su test declara el modelo que lo usa.
+        - tests/Feature/HasIssuedNumberTest.php
     excludePaths:
         analyseAndScan:
             - app/Modules/*/Database/Migrations/*

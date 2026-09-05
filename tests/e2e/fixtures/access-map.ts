@@ -180,6 +180,25 @@ export const RUTAS: RutaAcceso[] = [
         },
     },
     {
+        /*
+         * `permission:settings.manage` (módulo Platform). Ninguna de las tres
+         * cuentas con rol `Usuario` lo tiene: los ajustes de la instalación son
+         * cosa del superadmin y del rol Administrador, que `E2eSeeder` no
+         * siembra. Platform NO tiene toggle, así que —a diferencia de
+         * `/pdf/preview`— esta pantalla existe siempre.
+         */
+        path: '/settings',
+        nombre: 'Platform · ajustes de la instalación',
+        heading: 'Ajustes',
+        roles: {
+            invitado: 'login',
+            member: 403,
+            viewer: 403,
+            editor: 403,
+            superadmin: 200,
+        },
+    },
+    {
         // `permission:users.view` — el `member` del seeder no lo tiene.
         path: '/users',
         nombre: 'Users · listado',

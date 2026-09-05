@@ -96,6 +96,19 @@ final class Module extends Model
             'invitations' => [
                 ['value' => 'invitations.manage', 'label' => 'Gestionar Invitaciones'],
             ],
+
+            /*
+             * Ajustes de la instalación (módulo Platform). Un solo permiso y no
+             * el CRUD de cuatro: no hay nada que crear ni que borrar —una clave
+             * sin fila ya existe, vale su defecto—, así que `settings.create` y
+             * `settings.delete` serían dos permisos que nadie podría comprobar
+             * contra nada. Y ver los ajustes es administrarlos: incluyen datos
+             * fiscales y de contacto, así que «mirar sin tocar» no es un nivel
+             * de acceso que aporte nada.
+             */
+            'settings' => [
+                ['value' => 'settings.manage', 'label' => 'Administrar Ajustes'],
+            ],
         ];
     }
 }

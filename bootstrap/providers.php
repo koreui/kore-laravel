@@ -15,5 +15,6 @@ return [
     App\Modules\Pdf\Providers\PdfModuleServiceProvider::class,
     App\Modules\Files\Providers\FilesModuleServiceProvider::class,
     App\Modules\Notifications\Providers\NotificationsModuleServiceProvider::class,
+    App\Modules\Platform\Providers\PlatformModuleServiceProvider::class,
     App\Modules\E2E\Providers\E2EModuleServiceProvider::class,
 ];
