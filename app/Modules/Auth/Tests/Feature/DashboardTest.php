@@ -14,6 +14,8 @@ beforeEach(function (): void {
 });
 
 it('renders the dashboard with the three real counters', function (): void {
+    // La cifra de abajo (4) es la de los módulos que siembra ModulesSeeder:
+    // dashboard, users, roles y settings. Sube cuando entra un módulo nuevo.
     $user = User::factory()->create();
 
     // Un módulo inactivo NO cuenta: la cifra es de módulos activos.
@@ -37,7 +39,7 @@ it('renders the dashboard with the three real counters', function (): void {
         $response->assertSee('>'.$count.'</div>', escape: false);
     }
 
-    expect($expected[2])->toBe(3);
+    expect($expected[2])->toBe(4);
 });
 
 it('exposes the counters as DTOs, not Eloquent', function (): void {

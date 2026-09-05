@@ -51,6 +51,14 @@ final class ModulesSeeder extends Seeder
                 'roles' => [Role::ADMIN],
                 'active' => true,
             ],
+            // Ajustes de la instalación (módulo Platform). Su único permiso,
+            // `settings.manage`, se declara en Module::specialPermissions().
+            [
+                'name' => 'Ajustes',
+                'slug' => 'settings',
+                'roles' => [Role::ADMIN],
+                'active' => true,
+            ],
         ];
 
         foreach ($modules as $module) {

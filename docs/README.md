@@ -22,6 +22,7 @@ Hub central de documentación. Las reglas vivas y resúmenes operativos están e
 - [`modules/files.md`](modules/files.md) — archivos con versionado por slot y URL firmada, detrás de `FILES_ENABLED`
 - [`modules/e2e.md`](modules/e2e.md) — harness de la suite E2E (`/__e2e__/*`) detrás de `E2E_HARNESS`
 - [`modules/pdf.md`](modules/pdf.md) — generación de PDF con spatie/laravel-pdf y Gotenberg, detrás de `PDF_ENABLED`
+- [`modules/platform.md`](modules/platform.md) — ajustes en base de datos, series de folio y features por instalación. **Sin toggle: siempre encendido**
 
 ### Guías
 

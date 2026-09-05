@@ -45,6 +45,8 @@ uno, se cae solo. Ver [`rules.md`](rules.md) → R11.
 | Modo de tenancy (`single-db` / `multi-db`) | Se decide al ejecutar `php artisan kore:tenancy:enable`, en `config/tenancy.php` (bootstrappers de stancl). Nunca fue una variable de entorno funcional. |
 | Documentación OpenAPI (`API_DOCS`) | **Sí es un toggle, pero no vive aquí**: es un parámetro del contrato de la API, así que está en `config/kore-api.php` (`kore-api.docs.enabled`) junto a la versión, la paginación y los limiters. Lo lee `ApiDocsServiceProvider`, apaga las rutas de Scramble en su `register()` y por defecto es `false`. Ver [`../guides/api.md`](../guides/api.md). |
 | Versión, paginación y limiters de la API | `config/kore-api.php`. No son booleanos: son las cifras del contrato. |
+| Módulo Platform (ajustes, folios, features) | **No tiene toggle y no lo va a tener.** Ajustes y series de folio los necesita toda instalación, y un contrato que a veces no está bindeado obligaría a cada consumidor a preguntar antes de resolverlo. Sus parámetros viven en `config/kore-settings.php` y `config/kore-numbering.php`. Ver [`../modules/platform.md`](../modules/platform.md). |
+| Features por instalación (`config/features.php`) | Es una capa **distinta** de `kore-app`: no dice qué trae el boilerplate sino qué incluye la licencia del cliente. Ver §«Tres capas» más abajo. |
 | Sentry | `SENTRY_LARAVEL_DSN`. Sin DSN el SDK es no-op; no hay booleano aparte. |
 | Pulse | `PULSE_ENABLED`, que lee `config/pulse.php` (del paquete), no `kore-app`. |
 | Health | Siempre activo. Rutas en `HealthServiceProvider`; `/health/json` pide `HEALTH_SECRET_TOKEN`. El `BackupsCheck` es la excepción: sólo se registra con `BACKUP_ENABLED=true`. |
@@ -109,6 +111,39 @@ que la aplicación hace. Ver [`../guides/api.md`](../guides/api.md).
   ruta pinta no expone nada; no hacerlo devolvía un 500 en la pantalla de
   usuarios con `FILES_ENABLED=false`.
 - ⚠️ **Un config no puede leer otro config.** Laravel carga `config/*.php` en orden alfabético, así que `config/fortify.php` NO puede hacer `config('kore-app.auth.two_factor')`: cuando se evalúa, `kore-app` todavía no existe. La salida es mutar la config del paquete desde el `register()` del provider del módulo, que corre después de cargar toda la config y antes del `boot()` que registra las rutas. Es exactamente lo que hace `FortifyServiceProvider::configureTwoFactorFeature()`.
+
+## Tres capas: `kore-app` · `features` · Pennant
+
+Un «no» no es un «no». El boilerplate tiene cuatro capas que pueden negar el
+acceso a lo mismo, y cada una responde una pregunta distinta:
+
+| Capa | La frase que dice | Quién la cambia | Dónde vive |
+|---|---|---|---|
+| `config/kore-app.php` | «este boilerplate **trae** esta capacidad» | quien despliega, en el `.env` | la tabla de arriba |
+| `config/features.php` | «tu **licencia** no incluye esto» | quien vende o instala, en el `.env` | módulo Platform |
+| Laravel Pennant | «**todavía** no te toca» | el producto, por usuario o por porcentaje | `AppServiceProvider` |
+| spatie/laravel-permission | «no **tienes permiso**» | el administrador del cliente | Policies y roles |
+
+- Un **toggle de `kore-app`** apaga código: sin él no hay rutas, ni bindings, ni
+  comandos. Es binario para toda la instalación y lo decide quien despliega.
+- Un **feature de `features.php`** no apaga código: el módulo está compilado y
+  funcionando, simplemente esta instalación no lo tiene contratado. Se consume
+  con el middleware `feature:{clave}`, con la directiva `@feature('clave')` o con
+  el contrato `App\Core\Contracts\InstallationFeatures`, y devuelve **403** —«no
+  disponible en esta instalación»— y no 404: el cliente tiene que poder
+  distinguir lo que no compró de un enlace roto.
+- **Pennant** es por usuario y con porcentaje: un rollout, no una licencia.
+- Un **permiso** es del administrador del cliente sobre sus propios usuarios.
+
+Mezclarlas duele en el mismo sitio siempre: en Notarium se apagaba un módulo no
+licenciado quitándole el permiso a todos los roles, y a partir de ahí nadie sabía
+si el cliente no veía Escrituras porque no lo había comprado o porque alguien le
+había tocado los permisos. Son dos preguntas y necesitan dos respuestas.
+
+R11 no vigila `config/features.php`, a propósito: el check de toggles fantasma
+sólo mira `kore-app`, porque un feature sin lector en el boilerplate lo va a
+tener en el derivado — es justo lo que un derivado añade. Ver
+[`../modules/platform.md`](../modules/platform.md).
 
 ## Pennant para rollouts graduales
 

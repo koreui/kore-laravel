@@ -5,7 +5,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ $title ? $title.' · '.config('app.name') : config('app.name') }}</title>
+    {{-- El nombre de la organización lo inyecta el View Composer de
+         `PlatformModuleServiceProvider` como `App\Core\Data\OrganizationData`
+         (R30: lo que llega a la Blade es un dato). Sale de los ajustes de la
+         instalación y no de `config('app.name')`: el cliente lo cambia desde
+         /settings sin tocar el `.env`. Ver docs/modules/platform.md. --}}
+    @php
+        $appName = $organization?->name ?? config('app.name');
+    @endphp
+    <title>{{ $title ? $title.' · '.$appName : $appName }}</title>
 
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800|jetbrains-mono:400,500" rel="stylesheet" />
@@ -39,8 +47,8 @@
                 <x-slot:header>
                     <a href="{{ route('dashboard') }}"
                        class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-kore-primary text-sm font-bold text-white"
-                       aria-label="{{ config('app.name') }}">K</a>
-                    <span class="kore-sidebar-label truncate text-lg font-bold tracking-tight">{{ config('app.name') }}</span>
+                       aria-label="{{ $appName }}">{{ mb_strtoupper(mb_substr($appName, 0, 1)) }}</a>
+                    <span class="kore-sidebar-label truncate text-lg font-bold tracking-tight">{{ $appName }}</span>
                 </x-slot:header>
 
                 <x-kore::sidebar.group label="{{ __('Workspace') }}" separator="none">
@@ -51,15 +59,28 @@
                         match="dashboard" />
                 </x-kore::sidebar.group>
 
-                @can('users.view')
+                @if ($user->can('users.view') || $user->can('settings.manage'))
                     <x-kore::sidebar.group label="{{ __('Gestión') }}">
-                        <x-kore::sidebar.item
-                            label="{{ __('Usuarios') }}"
-                            icon="users"
-                            route="users.index"
-                            match="users.*" />
+                        @can('users.view')
+                            <x-kore::sidebar.item
+                                label="{{ __('Usuarios') }}"
+                                icon="users"
+                                route="users.index"
+                                match="users.*" />
+                        @endcan
+
+                        {{-- Ajustes de la instalación (módulo Platform). Un
+                             solo permiso, `settings.manage`: aquí no hay nada
+                             que crear ni que borrar. --}}
+                        @can('settings.manage')
+                            <x-kore::sidebar.item
+                                label="{{ __('Ajustes') }}"
+                                icon="settings"
+                                route="settings.edit"
+                                match="settings.*" />
+                        @endcan
                     </x-kore::sidebar.group>
-                @endcan
+                @endif
 
                 {{-- La ruta sólo existe con AUTH_PASSKEYS=true (R10), así que el
                      enlace se pregunta por ella y no por el toggle. --}}

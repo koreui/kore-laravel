@@ -7,6 +7,7 @@ namespace Database\Seeders;
 use App\Models\User;
 use App\Modules\Auth\Database\Seeders\ModulesSeeder;
 use App\Modules\Auth\Models\Role;
+use App\Modules\Platform\Database\Seeders\PlatformSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
@@ -18,6 +19,10 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(ModulesSeeder::class);
+
+        // Después del catálogo de módulos: repone `settings.manage` si un
+        // derivado recortó `ModulesSeeder`. Ver PlatformSeeder.
+        $this->call(PlatformSeeder::class);
 
         // Idempotente a propósito: `db:seed` se corre a mano en producción y a
         // veces dos veces (un deploy repetido, un `--seed` sobre una base ya

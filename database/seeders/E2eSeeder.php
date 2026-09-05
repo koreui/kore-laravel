@@ -7,6 +7,7 @@ namespace Database\Seeders;
 use App\Models\User;
 use App\Modules\Auth\Database\Seeders\ModulesSeeder;
 use App\Modules\Auth\Models\Role;
+use App\Modules\Platform\Database\Seeders\PlatformSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -38,6 +39,7 @@ final class E2eSeeder extends Seeder
     public function run(): void
     {
         $this->call(ModulesSeeder::class);
+        $this->call(PlatformSeeder::class);
 
         // superadmin: el rol dispara el Gate::before de
         // AuthModuleServiceProvider, así que pasa cualquier @can/authorize().
