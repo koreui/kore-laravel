@@ -723,8 +723,9 @@ Un `Storage::temporaryUrl()` escrito en una Blade no cumple ninguna de las dos, 
 lo peor es que funciona: la imagen se ve, el bug es que también la ve quien no
 debería.
 
-**Cómo se verifica.** Por texto, sobre los `.php` de `app/` menos los del propio
-módulo Files. Dos límites que conviene conocer antes de fiarse: una línea con
+**Cómo se verifica.** Por texto, sobre los `.php` de `app/` y de
+`resources/views/` —también las Blade, que es donde Notarium lo hacía— menos los
+del propio módulo Files. Dos límites que conviene conocer antes de fiarse: una línea con
 `public_path(` queda exenta —un logo del proyecto no es un archivo de usuario— y
 `getUrl()` sólo cuenta en un archivo que mencione «media» en alguna parte,
 porque es también el nombre del accesor de un nodo de CommonMark
@@ -839,8 +840,10 @@ señal de que al padre le faltaba la regla; en la v2.1.0 subió, con el skill
 ### R56 · Los archivos no se borran desde la interfaz: se archivan
 `App\Core\Contracts\FileStore::archive()` es lo que hace la papelera de una
 pantalla: marca la versión como reemplazada y la deja donde está.
-`FileStore::delete()` destruye el archivo, y sólo lo llaman dos sitios: el
-listener que limpia cuando se borra el dueño de la fila, y `files:cleanup`.
+`FileStore::delete()` destruye el archivo. Hoy **nadie** lo llama en el
+boilerplate: `files:cleanup` usa `FileDeleteAction` directamente y el borrado en
+cascada al eliminar al dueño lo hace el observer de media-library. El `allowIn`
+de `Console/` y `Listeners/` es para el derivado que sí lo necesite.
 > Enforcement: disallowed-calls (`kore.r56`) · `composer analyse` · **Error** · + Pest arch (ningún componente Livewire que consuma `FileStore` llama a `delete()`) · `./vendor/bin/pest tests/Arch` · **Error**
 > Escape: `arch-accepted`
 
@@ -1402,7 +1405,7 @@ con `--no-verify`, y entonces no verifica nada.
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + GitHub Release (R42) |
 
 Medido en un MacBook (Apple Silicon, PHP 8.4) sobre el repositorio a fecha de
-la v2.3.0, con 831 tests Pest y una suite E2E de 176 tests en 19 archivos
+la v2.3.0, con 832 tests Pest y una suite E2E de 176 tests en 19 archivos
 (31 s aparte). Las cuatro primeras capas caben holgadamente en su
 presupuesto: el margen es para que un proyecto derivado pueda crecer sin tener
 que rediseñar el pipeline.

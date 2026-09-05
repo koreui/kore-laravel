@@ -81,13 +81,13 @@ final class UserExportCsvAction extends Action
         // reporte de bug más repetido de cualquier exportación a CSV.
         fwrite($handle, "\u{FEFF}");
 
-        fputcsv($handle, $this->export->headings());
+        fputcsv($handle, $this->export->headings(), ',', '"', '');
 
         User::query()
             ->tap($filters->apply(...))
             ->chunkById(500, function ($users) use ($handle): void {
                 foreach ($users as $user) {
-                    fputcsv($handle, $this->export->map(UserData::from($user)));
+                    fputcsv($handle, $this->export->map(UserData::from($user)), ',', '"', '');
                 }
             });
 

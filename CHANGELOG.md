@@ -23,7 +23,7 @@ como dos contratos en `Core` —`FileStore` y `PdfRenderer`— y dos módulos co
 toggle que los implementan, de forma que un módulo cliente no conoce ni
 media-library ni Gotenberg.
 
-La suite Pest pasa de 693 a **831** tests (2342 assertions) y la E2E de 163 a
+La suite Pest pasa de 693 a **832** tests (2344 assertions) y la E2E de 163 a
 **176** en 19 archivos, `config/kore-app.php` llega a **catorce** claves con
 `PDF_ENABLED` y `FILES_ENABLED`, y el catálogo a `R1..R57` con **50** reglas con
 verificador automático y **7** manuales.
@@ -95,10 +95,10 @@ verificador automático y **7** manuales.
   `kore-api.php` respecto de `API_ENABLED`.
 - **La tabla `media` se migra siempre**, también con el toggle apagado: un toggle
   apaga rutas y comportamiento, nunca el esquema.
-- **71 tests Pest** en `app/Modules/Files/Tests/`: `FilesToggleTest` (14),
+- **72 tests Pest** en `app/Modules/Files/Tests/`: `FilesToggleTest` (14),
   `FileStoreActionTest` (8), `FileSlotDataTest` (6), `FilesConfigTest` (6),
   `FileArchiveAndDeleteActionsTest` (5), `FileCompressActionTest` (5),
-  `FileListenersTest` (5), `FileServeTest` (5), `MediaFileStoreTest` (5),
+  `FileListenersTest` (5), `FileServeTest` (6), `MediaFileStoreTest` (5),
   `SlotPathGeneratorTest` (5), `FileSyncActionTest` (4) y
   `FilesCleanupCommandTest` (3).
 
@@ -200,11 +200,11 @@ verificador automático y **7** manuales.
   propósito: `mergeConfigFrom()` es un `array_merge` de primer nivel, así que las
   claves que no aparecen las sigue poniendo el paquete — con la contrapartida de
   que una clave nueva **dentro de** `gotenberg` no llegaría.
-- **`phpunit.xml` fuerza `PDF_ENABLED=false`**, por lo mismo que `DOCS_ENABLED`:
+- **`phpunit.xml` fuerza `PDF_ENABLED=false` y `FILES_ENABLED=false`**, por lo mismo que `DOCS_ENABLED`:
   si el desarrollador lo tuviera encendido en su `.env`, los tests del caso
   «toggle apagado» fallarían sólo en su máquina.
 - **El pipeline se remidió** (R41): `composer ci` pasa de 16 s a 31 s y el
-  pre-push de 5 s a 7 s, con la suite ya en 831 tests. Las cifras de
+  pre-push de 5 s a 7 s, con la suite ya en 832 tests. Las cifras de
   `docs/quality/pipeline.md`, `docs/quality/e2e.md`, `docs/architecture/rules.md`
   y `tests/e2e/FLUJOS.md` se recontaron.
 - **`docs/quality/pipeline.md` avisa de los hooks en un `git worktree`**: no sólo

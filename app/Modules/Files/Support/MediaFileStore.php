@@ -37,6 +37,12 @@ final class MediaFileStore implements FileStore
      * `id del archivo => marca de tiempo de su fichero`, de lo visto en esta
      * petición. Ver {@see self::url()}.
      *
+     * «Esta petición» vale bajo PHP-FPM, donde el singleton muere con ella.
+     * Bajo Octane o en un worker de cola que resolviera el contrato, el mapa
+     * sobrevive entre peticiones: no es un problema de seguridad (la firma se
+     * calcula sobre los parámetros reales), pero sí caché sucia y memoria. Si
+     * un derivado instala Octane, vacíelo en `RequestReceived`.
+     *
      * @var array<int, int>
      */
     private array $versionTokens = [];

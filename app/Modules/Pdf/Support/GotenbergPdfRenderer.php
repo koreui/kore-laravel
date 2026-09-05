@@ -34,10 +34,17 @@ final class GotenbergPdfRenderer implements PdfRenderer
     public function fromView(string $view, array $data, PdfOptionsData $options): PdfDocumentData
     {
         $margins = $options->margins ?? $this->configuredMargins();
+        $format = $options->format ?? $this->configuredFormat();
 
-        $builder = Pdf::view($view, $data)
+        /*
+         * `pageFormat` viaja a la hoja para que el `@page { size }` del CSS y
+         * el papel que se le pide a Gotenberg sean el mismo: si el documento
+         * pide Letter y la hoja sigue diciendo A4, salen dos tamaños en el
+         * mismo PDF. Lo que traiga `$data` manda, por si una hoja lo fija.
+         */
+        $builder = Pdf::view($view, ['pageFormat' => $format->cssSize(), ...$data])
             ->name($options->filename)
-            ->format(($options->format ?? $this->configuredFormat())->value)
+            ->format($format->value)
             ->margins(
                 top: $margins['top'],
                 right: $margins['right'],

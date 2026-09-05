@@ -153,12 +153,12 @@ vacío: el archivo que había ya no sería el vigente y el nuevo no existiría.
 | | Qué hace | Quién la llama |
 |---|---|---|
 | `archive()` | `is_current = false` + `replaced_at`. El fichero se queda. | La interfaz: `deleteUpload()` del trait, la papelera de `<x-kore::upload deletable>` |
-| `delete()` | Borra la fila y el fichero. Sin vuelta atrás. | El dueño que se borra a sí mismo y `files:cleanup` |
+| `delete()` | Borra la fila y el fichero. Sin vuelta atrás. | Nadie, hoy: `files:cleanup` usa `FileDeleteAction` y el borrado en cascada lo hace el observer de media-library. `Console/` y `Listeners/` están permitidos para el derivado que lo necesite |
 
 Ningún botón del boilerplate llama a `delete()`, y desde la v2.3.0 no es una
 convención sino **R56**: disallowed-calls prohíbe `FileStore::delete()` en todas
 partes menos en el propio módulo, en los `Console/` y en los `Listeners/` de
-cualquier módulo, y un arch test barre además los componentes Livewire que
+cualquier módulo, y un arch test barre además `app/Core/Concerns/` y los componentes Livewire que
 consumen el contrato. Ver [`../architecture/rules.md`](../architecture/rules.md).
 
 ## La URL firmada y el `v=`

@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\Route;
 |
 | R52 no la exige en `tests/e2e/fixtures/access-map.ts` porque el mapa es de
 | rutas literales sin parámetros, y ésta lleva `{file}`. Su cobertura está en
-| `FilesServeTest` (403 sin firma, 200 con ella, URL distinta al cambiar el
+| `FileServeTest` (403 sin firma, 200 con ella, URL distinta al cambiar el
 | fichero) y, de punta a punta, en `tests/e2e/specs/users/avatar.spec.ts`.
 |
 */

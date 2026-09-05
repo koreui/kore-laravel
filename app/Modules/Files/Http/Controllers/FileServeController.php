@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Storage;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -74,11 +75,16 @@ final class FileServeController
                 'Content-Length' => (string) $disk->size($path),
                 /*
                  * `inline` para que una imagen o un PDF se vean en el navegador
-                 * en vez de descargarse. El nombre va entre comillas y saneado
-                 * por el paquete al guardarlo, así que no puede inyectar
-                 * cabeceras.
+                 * en vez de descargarse. `makeDisposition` escapa las comillas
+                 * y añade `filename*` para los nombres no ASCII: el saneador
+                 * del paquete quita los caracteres de control, pero no `"`, y
+                 * un nombre con comillas rompería el entrecomillado a mano.
                  */
-                'Content-Disposition' => 'inline; filename="'.$file->file_name.'"',
+                'Content-Disposition' => HeaderUtils::makeDisposition(
+                    HeaderUtils::DISPOSITION_INLINE,
+                    $file->file_name,
+                    $this->asciiFallback($file->file_name),
+                ),
                 /*
                  * La URL ya lleva el `v` del fichero dentro de la firma, así que
                  * dos versiones distintas son dos URLs distintas y el navegador
@@ -89,5 +95,16 @@ final class FileServeController
                 'Cache-Control' => 'private, max-age='.(60 * (int) config('files.url_ttl_minutes', 30)),
             ],
         );
+    }
+
+    /**
+     * El nombre en ASCII para el `filename=` clásico. Con un nombre ya ASCII
+     * es el mismo y la cabecera sale con un solo parámetro; con acentos o
+     * emoji, `makeDisposition` añade el `filename*` en UTF-8 y los navegadores
+     * modernos usan ése. `%`, `/` y `\` no caben en el fallback por contrato.
+     */
+    private function asciiFallback(string $name): string
+    {
+        return (string) preg_replace('/[^\x20-\x7e]|[%\/\\\\]/', '_', $name);
     }
 }

@@ -98,6 +98,10 @@ trait HandlesSlotUploads
      */
     public function uploadSlot(): void
     {
+        if (! $this->slotUploadsEnabled()) {
+            return;
+        }
+
         $this->authorizeSlotUpload();
 
         $target = $this->slotUploadTarget();
@@ -142,6 +146,10 @@ trait HandlesSlotUploads
      */
     public function archiveSlot(): void
     {
+        if (! $this->slotUploadsEnabled()) {
+            return;
+        }
+
         $this->authorizeSlotUpload();
 
         $target = $this->slotUploadTarget();
@@ -155,6 +163,17 @@ trait HandlesSlotUploads
         $store->archive($current->id);
 
         $this->afterSlotChange($target['owner']);
+    }
+
+    /**
+     * Con `FILES_ENABLED=false` no hay binding de `FileStore` y resolverlo
+     * lanza. La vista ya no pinta el componente, pero `/livewire/update` acepta
+     * cualquier método público: sin este corte, un `deleteUpload` enviado a
+     * mano acabaría en un 500 en vez de en un no-op.
+     */
+    private function slotUploadsEnabled(): bool
+    {
+        return (bool) config('kore-app.files.enabled', false);
     }
 
     /**

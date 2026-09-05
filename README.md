@@ -54,7 +54,7 @@ Reglas vivas y resúmenes en `CLAUDE.md` / `AGENTS.md`. Detalles en [`docs/`](do
 
 - [`docs/architecture/rules.md`](docs/architecture/rules.md) — **las 57 reglas del boilerplate** (`R1..R57`), cada una con su verificador, su severidad y la cicatriz que la originó
 - [`docs/architecture/`](docs/architecture/) — overview, module-pattern, toggles, authorization
-- [`docs/modules/`](docs/modules/) — auth, tenancy, users, docs, e2e, devices
+- [`docs/modules/`](docs/modules/) — auth, tenancy, users, docs, e2e, devices, files, pdf
 - [`docs/ops/`](docs/ops/) — deployment, observability
 - [`docs/quality/`](docs/quality/) — pipeline (Pint, Larastan, PHPat, disallowed-calls, `kore:arch:check`, Rector, Pest, hooks, CI) y E2E
 - [`docs/ai/`](docs/ai/) — trabajar con la AI (Boost, MCP `kore`, skills)

@@ -1335,7 +1335,7 @@ final class ArchCheckCommand extends Command
      */
     private function checkFileUrlsComeFromStore(): void
     {
-        foreach ($this->findFiles(['app'], ['*.php']) as $path) {
+        foreach ($this->findFiles(['app', 'resources/views'], ['*.php']) as $path) {
             $relative = $this->relative($path);
 
             // El módulo Files es quien las emite: es exactamente su trabajo.

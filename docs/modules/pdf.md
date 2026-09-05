@@ -117,7 +117,7 @@ DTO no puede (R8, R19).
 Dos decisiones que conviene no deshacer sin querer:
 
 - **El código del documento lo pone quien lo genera, no la configuración.** Es
-  una propiedad del formato —«FO-500-REV1»—, no de la aplicación.
+  una propiedad del formato —«KORE-PDF-001»—, no de la aplicación.
 - **La marca de agua se pide.** Tenerla configurada no la pone: el mismo
   documento se descarga limpio para entregarlo y sellado para que circule
   internamente, y ninguna de las dos es «la buena». Por eso es un parámetro de
@@ -256,7 +256,7 @@ $this->actingAs($admin)->get('/pdf/preview/download')->assertOk();
 
 $fake->assertViewIs('pdf::examples.sample');
 $fake->assertViewHas('paged', false);
-$fake->assertSee('FO-500-REV1');   // mira el HTML que se habría convertido
+$fake->assertSee('KORE-PDF-001');   // mira el HTML que se habría convertido
 ```
 
 El módulo va apagado en la suite (`phpunit.xml` fuerza `PDF_ENABLED=false`, por

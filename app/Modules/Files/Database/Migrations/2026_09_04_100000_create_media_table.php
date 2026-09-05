@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Schema;
  * Publicada con `php artisan vendor:publish --tag=medialibrary-migrations` y
  * movida aquí: la migración es del módulo que la usa, como la de `devices`. Lo
  * único añadido al archivo del paquete es el `down()` que exige R29 —el
- * paquete no lo trae— y los dos índices de abajo.
+ * paquete no lo trae— y el índice de abajo.
  *
  * **Se carga siempre, también con `FILES_ENABLED=false`.** No es una válvula:
  * es la regla. Un toggle apaga rutas y comportamiento, nunca la forma de la

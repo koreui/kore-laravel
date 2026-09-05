@@ -26,9 +26,9 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
  *
  * @param Closure(FileStore, Media, User): void $callback
  */
-function withServedFile(Closure $callback): void
+function withServedFile(Closure $callback, string $name = 'perfil.png'): void
 {
-    withEnvironment(['FILES_ENABLED' => 'true'], function () use ($callback): void {
+    withEnvironment(['FILES_ENABLED' => 'true'], function () use ($callback, $name): void {
         Storage::fake('local');
 
         $owner = User::factory()->create();
@@ -36,7 +36,7 @@ function withServedFile(Closure $callback): void
 
         $archivo = $store->store(
             $owner,
-            UploadedFile::fake()->image('perfil.png'),
+            UploadedFile::fake()->image($name),
             new FileSlotData(collection: 'avatar'),
             $owner->id,
         );
@@ -66,7 +66,9 @@ it('sirve el fichero por stream con la URL firmada y sin sesión', function (): 
 
         $response->assertOk()
             ->assertHeader('Content-Type', $media->mime_type)
-            ->assertHeader('Content-Disposition', 'inline; filename="perfil.png"');
+            // Sin comillas: `HeaderUtils::makeDisposition` sólo las pone cuando
+            // el nombre las necesita (espacios, caracteres especiales).
+            ->assertHeader('Content-Disposition', 'inline; filename=perfil.png');
 
         expect($response->streamedContent())
             ->toBe(Storage::disk('local')->get($media->getPathRelativeToRoot()));
@@ -99,4 +101,19 @@ it('devuelve 404 si la fila existe y el fichero no', function (): void {
 
         $this->get($url)->assertNotFound();
     });
+});
+
+it('sanea las comillas del nombre en Content-Disposition', function (): void {
+    // El saneador de media-library quita caracteres de control, pero no `"`:
+    // un nombre con comillas rompería el entrecomillado hecho a mano y podría
+    // colar parámetros falsos en la cabecera. `makeDisposition` las escapa.
+    withServedFile(function (FileStore $store, Media $media): void {
+        $disposition = (string) $this->get($store->url((int) $media->getKey()))
+            ->assertOk()
+            ->headers->get('Content-Disposition');
+
+        // Un único valor entrecomillado, con toda comilla interna escapada:
+        // lo que iba a ser «; filename=otro.exe» sigue dentro de la cadena.
+        expect($disposition)->toMatch('/^inline; filename="(?:[^"\\\\]|\\\\.)*"$/');
+    }, 'foto".png"; filename=otro.exe; x=".png');
 });

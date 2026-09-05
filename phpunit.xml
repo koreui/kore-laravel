@@ -88,6 +88,7 @@
             la conversión la intercepta `Pdf::fake()`.
         -->
         <env name="PDF_ENABLED" value="false" force="true"/>
+        <env name="FILES_ENABLED" value="false" force="true"/>
         <env name="PULSE_ENABLED" value="false" force="true"/>
         <env name="TELESCOPE_ENABLED" value="false" force="true"/>
         <env name="NIGHTWATCH_ENABLED" value="false" force="true"/>

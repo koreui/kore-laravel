@@ -41,7 +41,7 @@ no verifica nada.
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + `softprops/action-gh-release` |
 
 Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v2.3.0 y
-831 tests Pest. La suite E2E —176 tests en 19 archivos— va aparte y tarda
+832 tests Pest. La suite E2E —176 tests en 19 archivos— va aparte y tarda
 31 s en local. Los 138 tests nuevos de la v2.3.0 son el módulo Files (71), el
 módulo Pdf (29), el avatar de Users (10 de sus 88) y, en `tests/`, los DTOs y el
 trait de subida de `Core` más los fixtures de los checks de R55 y R57.
@@ -425,13 +425,13 @@ $ composer ci
 ✓ Larastan nivel 8 + PHPat + disallowed-calls: 0 errors
 ✓ kore:arch:check: sin violaciones
 ✓ Rector: nothing to refactor
-✓ Pest: 831 passed (2342 assertions)
+✓ Pest: 832 passed (2344 assertions)
 ```
 
-Reparto de los 831 tests: 39 arch (`tests/Arch`: 28 en `ArchitectureTest` y 11
+Reparto de los 832 tests: 39 arch (`tests/Arch`: 28 en `ArchitectureTest` y 11
 en `PhpatArchitectureTest`), 113 del módulo Auth (incluida la API de tokens),
 88 del módulo Users (incluidas su API v1 y el avatar), 3 de Tenancy, 43 del
-módulo Docs, 29 del módulo E2E, 54 del módulo Devices, 71 del módulo Files, 29
+módulo Docs, 29 del módulo E2E, 54 del módulo Devices, 72 del módulo Files, 29
 del módulo Pdf, 351 en `tests/Feature` (plataforma, `kore:arch:check`, hooks,
 MCP, y el contrato de la API en `tests/Feature/Api`) y 11 en `tests/Unit`.
 Aparte, la suite E2E de Playwright (`npm run e2e`): 176 tests en 19 archivos,
