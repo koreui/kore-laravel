@@ -25,7 +25,7 @@
 | `SOCIAL_GOOGLE`        | `false`       | proveedor Google de Socialite                       | `SocialiteController`, `login.blade.php` |
 | `SOCIAL_GITHUB`        | `false`       | proveedor GitHub de Socialite                       | `SocialiteController`, `login.blade.php` |
 
-Estas catorce son **todas** las claves de `config/kore-app.php`. La columna
+Estas dieciocho son **todas** las claves de `config/kore-app.php`. La columna
 "quién lo lee" no es decorativa: es la regla. Un toggle que nadie lee es una
 mentira en la documentación, y por eso en la v1.0.0 se borraron
 `REVERB_ENABLED`, `OCTANE_ENABLED`/`OCTANE_SERVER`, `SCOUT_ENABLED`/`SCOUT_DRIVER`,

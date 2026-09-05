@@ -40,7 +40,7 @@ aquí son un contrato en `Core`, Actions, y un módulo que se puede apagar.
 |----------|---------|--------------|
 | `FILES_ENABLED` | `false` | Binding de `FileStore`, ruta `files.serve`, listeners de la tubería, comando `files:cleanup` y su tarea del scheduler |
 
-Es una de las catorce claves de `config/kore-app.php` y la leen
+Es una de las dieciocho claves de `config/kore-app.php` y la leen
 `FilesModuleServiceProvider`, `routes/console.php` (para el scheduler),
 `AppServiceProvider::configureAbout()` y las dos pantallas de Users que consumen
 el módulo.

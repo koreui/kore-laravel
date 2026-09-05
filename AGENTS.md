@@ -221,7 +221,7 @@ Configurados en `config/kore-app.php`, todos manejados por `.env`:
 | `SOCIAL_GOOGLE`         | `false`          | proveedor Google de Socialite       |
 | `SOCIAL_GITHUB`         | `false`          | proveedor GitHub de Socialite       |
 
-Esas catorce claves son **todas** las de `config/kore-app.php`. Regla: un toggle
+Esas dieciocho claves son **todas** las de `config/kore-app.php`. Regla: un toggle
 sólo existe si alguien lo lee. Reverb, Octane y Scout no son toggles sino
 módulos opcionales que se instalan bajo demanda; el modo `single-db`/`multi-db`
 de tenancy se elige en `config/tenancy.php` al correr `kore:tenancy:enable`.
