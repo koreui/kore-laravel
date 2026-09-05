@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Auth\Actions;
 
 use App\Core\Actions\Action;
+use App\Core\Contracts\AuthorizationCatalog;
 use App\Core\Enums\AccountStatus;
 use App\Exceptions\ConflictException;
 use App\Models\User;
@@ -37,9 +38,23 @@ use Illuminate\Support\Facades\Hash;
  * dejarla en `pending` obligaría a que alguien aprobara a mano a quien ya fue
  * invitado. Lo que nace `pending` es lo que entra por una puerta que no pide
  * código (el login social), y esa decisión vive en su controlador.
+ *
+ * ## El rol se vuelve a comprobar aquí
+ *
+ * `InvitationForm` ya sólo deja crear códigos con un rol asignable, pero entre
+ * que se reparte un código y alguien lo canjea pasan semanas, y en ese hueco el
+ * catálogo puede haber cambiado: un rol renombrado, uno retirado, o uno que
+ * dejó de ser asignable. La fila `invitation_codes.role` es texto plano y no
+ * tiene clave foránea contra `roles`, así que nada la actualiza sola. Sin esta
+ * comprobación, `syncRoles()` con un rol desconocido lanzaría una excepción de
+ * Spatie a mitad de un registro —y con uno que ya no debería repartirse,
+ * peor: entraría—. Defensa en profundidad, con el mismo `AuthorizationCatalog`
+ * que usó el formulario.
  */
 final class InvitationRedeemAction extends Action
 {
+    public function __construct(private readonly AuthorizationCatalog $catalog) {}
+
     public function handle(RegisterData $data, string $code): User
     {
         return DB::transaction(function () use ($data, $code): User {
@@ -56,6 +71,10 @@ final class InvitationRedeemAction extends Action
 
             if (! $invitation->isUsable()) {
                 throw new ConflictException($invitation->unavailableReason() ?? __('El código de invitación no es válido.'));
+            }
+
+            if (! in_array($invitation->role, $this->catalog->assignableRoleNames(), true)) {
+                throw new ConflictException(__('El rol de este código de invitación ya no existe. Pide uno nuevo.'));
             }
 
             $user = User::create([

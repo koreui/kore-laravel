@@ -133,5 +133,6 @@
     "¿Olvidaste tu contraseña?": "Forgot your password?",
     "¿Revocar este código? Quien ya se registró con él conserva su cuenta.": "Revoke this code? Anyone already signed up with it keeps their account.",
     "¿Ya tienes cuenta?": "Already have an account?",
-    "Último uso el :date": "Last used on :date"
+    "Último uso el :date": "Last used on :date",
+    "El rol de este código de invitación ya no existe. Pide uno nuevo.": "The role of this invitation code no longer exists. Ask for a new one."
 }

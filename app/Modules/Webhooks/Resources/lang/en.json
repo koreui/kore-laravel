@@ -55,5 +55,8 @@
     "Pendiente": "Pending",
     "Reintentando": "Retrying",
     "Entregado": "Delivered",
-    "Agotado": "Exhausted"
+    "Agotado": "Exhausted",
+    "La URL del endpoint no tiene un host válido.": "The endpoint URL has no valid host.",
+    "El host «:host» no resuelve a ninguna dirección.": "The host “:host” does not resolve to any address.",
+    "La URL del endpoint apunta a una dirección de red interna (:address), y desde ahí un webhook puede leer servicios que no están expuestos.": "The endpoint URL points to an internal network address (:address), and from there a webhook can read services that are not exposed."
 }

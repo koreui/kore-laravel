@@ -41,7 +41,7 @@ no verifica nada.
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + `softprops/action-gh-release` |
 
 Medido en un MacBook (Apple Silicon, PHP 8.4) con el repositorio de la v2.4.0 y
-1245 tests Pest. La suite E2E —256 tests en 27 archivos— va aparte. Los 413
+1275 tests Pest. La suite E2E —256 tests en 27 archivos— va aparte. Los 413
 tests nuevos de la v2.4.0 son los cuatro módulos que entraron (Webhooks 86, Mx
 93, Notifications 81, Platform 62), las invitaciones y el estado de cuenta en
 Auth y Users, `PushTokenDirectory` en Devices, y en `tests/` los DTOs y los
@@ -432,15 +432,15 @@ $ composer ci
 ✓ Larastan nivel 8 + PHPat + disallowed-calls: 0 errors
 ✓ kore:arch:check: sin violaciones
 ✓ Rector: nothing to refactor
-✓ Pest: 1245 passed (3469 assertions)
+✓ Pest: 1275 passed (3515 assertions)
 ```
 
-Reparto de los 1245 tests: 39 arch (`tests/Arch`: 28 en `ArchitectureTest` y 11
-en `PhpatArchitectureTest`), 151 del módulo Auth (incluidas la API de tokens y
+Reparto de los 1275 tests: 39 arch (`tests/Arch`: 28 en `ArchitectureTest` y 11
+en `PhpatArchitectureTest`), 156 del módulo Auth (incluidas la API de tokens y
 las invitaciones), 98 del módulo Users (incluidas su API v1, el avatar y el
 estado de cuenta), 3 de Tenancy, 43 del módulo Docs, 32 del módulo E2E, 60 del
-módulo Devices, 72 del módulo Files, 29 del módulo Pdf, 62 del módulo Platform,
-81 del módulo Notifications, 93 del módulo Mx, 86 del módulo Webhooks, 355 en
+módulo Devices, 72 del módulo Files, 29 del módulo Pdf, 65 del módulo Platform,
+81 del módulo Notifications, 93 del módulo Mx, 108 del módulo Webhooks, 355 en
 `tests/Feature` (plataforma, `kore:arch:check`, hooks, MCP, y el contrato de la
 API en `tests/Feature/Api`) y 21 en `tests/Unit`. Aparte, la suite E2E de
 Playwright (`npm run e2e`): 256 tests en 27 archivos, 171 de ellos generados

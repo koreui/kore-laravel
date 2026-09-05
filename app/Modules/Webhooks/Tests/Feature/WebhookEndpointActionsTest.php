@@ -14,6 +14,7 @@ use App\Modules\Webhooks\Enums\DeliveryStatus;
 use App\Modules\Webhooks\Events\WebhookDeliveryQueued;
 use App\Modules\Webhooks\Models\WebhookDelivery;
 use App\Modules\Webhooks\Models\WebhookEndpoint;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 
@@ -22,6 +23,14 @@ use Illuminate\Support\Facades\Event;
 | Las Actions del módulo
 |--------------------------------------------------------------------------
 */
+
+beforeEach(function (): void {
+    // `*.example.test` es un TLD reservado que no resuelve, así que la
+    // comprobación de red pública de las Actions lo rechazaría y estos tests
+    // dejarían de probar lo suyo. Los tests del final la vuelven a
+    // encender para comprobar que está y que muerde.
+    Config::set('kore-webhooks.allow_private_networks', true);
+});
 
 it('crea el endpoint con un secreto generado y cifrado en reposo', function (): void {
     $actor = User::factory()->create();
@@ -146,4 +155,58 @@ it('la purga en simulacro cuenta lo mismo y no borra', function (): void {
 
     expect(resolve(WebhookDeliveryPruneAction::class)->handle(30, dryRun: true))->toBe(2)
         ->and(WebhookDelivery::query()->count())->toBe(2);
+});
+
+/*
+|--------------------------------------------------------------------------
+| SSRF: las Actions repiten la comprobación de la URL
+|--------------------------------------------------------------------------
+|
+| El formulario ya la hace, pero una Action tiene que servir igual desde un
+| comando o un seeder, y ahí no hay validador. Es la misma razón por la que
+| `Platform\Actions\SettingUpdateAction` repite la validación de sus claves.
+|
+*/
+
+it('el alta rechaza una URL que apunta a la red interna', function (): void {
+    Config::set('kore-webhooks.allow_private_networks', false);
+
+    expect(fn (): mixed => resolve(WebhookEndpointCreateAction::class)->handle(
+        new WebhookEndpointData(
+            name: 'Metadatos',
+            url: 'https://169.254.169.254/latest/meta-data/',
+            events: ['*'],
+        ),
+    ))->toThrow(InvalidArgumentException::class);
+
+    expect(WebhookEndpoint::query()->count())->toBe(0);
+});
+
+it('la edición tampoco deja reapuntar un endpoint a la red interna', function (): void {
+    $endpoint = WebhookEndpoint::factory()->create();
+
+    Config::set('kore-webhooks.allow_private_networks', false);
+
+    expect(fn (): mixed => resolve(WebhookEndpointUpdateAction::class)->handle(
+        $endpoint,
+        new WebhookEndpointData(
+            name: $endpoint->name,
+            url: 'https://127.0.0.1:9200/_search',
+            events: ['*'],
+        ),
+    ))->toThrow(InvalidArgumentException::class);
+
+    expect($endpoint->refresh()->url)->not->toBe('https://127.0.0.1:9200/_search');
+});
+
+it('el alta rechaza una URL sin https cuando el entorno lo exige', function (): void {
+    // Sin `allow_private_networks` de por medio: lo que falla es la otra mitad
+    // de `EndpointUrl::guard()`, y falla antes de resolver nada.
+    expect(fn (): mixed => resolve(WebhookEndpointCreateAction::class)->handle(
+        new WebhookEndpointData(
+            name: 'Sin TLS',
+            url: 'http://hub.example.test/hooks',
+            events: ['*'],
+        ),
+    ))->toThrow(InvalidArgumentException::class);
 });

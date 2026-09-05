@@ -6,10 +6,10 @@ namespace App\Modules\Users\Http\Requests\Api\V1;
 
 use App\Core\Contracts\AuthorizationCatalog;
 use App\Core\Http\Api\Requests\BaseApiRequest;
+use App\Core\Rules\GrantableRole;
 use App\Models\User;
 use App\Modules\Users\Data\UserData;
 use App\Modules\Users\Rules\GrantablePermission;
-use App\Modules\Users\Rules\GrantableRole;
 use Illuminate\Validation\Rule;
 
 /**

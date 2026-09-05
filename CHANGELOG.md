@@ -34,7 +34,7 @@ el resto. Y un manual que se saca de la suite: los recorridos de
 escriben el Markdown, así que arreglar una pantalla arregla también su
 documentación.
 
-La suite Pest pasa de 832 a **1245** tests (3469 assertions) y la E2E de 176 a
+La suite Pest pasa de 832 a **1275** tests (3515 assertions) y la E2E de 176 a
 **256** en 27 archivos, `config/kore-app.php` llega a **dieciocho** claves con
 `NOTIFICATIONS_ENABLED`, `WEBHOOKS_ENABLED`, `MX_ENABLED` y `AUTH_INVITATIONS`,
 `ModulesSeeder` pasa de tres a **seis** módulos sembrados, y el catálogo a
@@ -285,6 +285,12 @@ La suite Pest pasa de 832 a **1245** tests (3469 assertions) y la E2E de 176 a
 
 ### Cambiado
 
+- **`GrantableRole` se muda de `App\Modules\Users\Rules` a `App\Core\Rules`.**
+  Ahora hay **dos** formularios que reparten un rol —el de usuarios y el de
+  códigos de invitación—, y Auth no puede importar de Users ni al revés (R5),
+  así que la única casa compartida es el kernel. La regla no cambia de
+  comportamiento y sólo dependía de cosas de Core. `GrantablePermission` se
+  queda en Users, que es el único que reparte permisos sueltos.
 - **`config/kore-app.php` pasa de catorce a dieciocho claves** con
   `notifications.enabled`, `mx.enabled`, `webhooks.enabled` y
   `auth.invitations`, y con ellas `KoreMcpTest` (`kore-list-toggles`), la tabla
@@ -317,7 +323,7 @@ La suite Pest pasa de 832 a **1245** tests (3469 assertions) y la E2E de 176 a
   `DEVICES_ENABLED`. Es lo que hace que Notifications pueda mandar push sin saber
   que Devices existe.
 - **Se remidió el pipeline** (R41): `composer ci` pasa de 31 s a 43 s y el
-  pre-push de 7 s a 10 s, con la suite ya en 1245 tests. Las cifras de
+  pre-push de 7 s a 10 s, con la suite ya en 1275 tests. Las cifras de
   `docs/quality/pipeline.md`, `docs/quality/e2e.md`,
   `docs/architecture/rules.md` y `tests/e2e/FLUJOS.md` se recontaron, y
   `FLUJOS.md` estrena las secciones J (Notificaciones), K (Ajustes) y L
@@ -327,6 +333,43 @@ La suite Pest pasa de 832 a **1245** tests (3469 assertions) y la E2E de 176 a
 
 ### Corregido
 
+- **SSRF en el alta de webhooks.** El formulario aceptaba
+  `https://169.254.169.254/…` y `https://127.0.0.1:9200/…`, así que cualquiera
+  con `webhooks.manage` convertía el emisor en un lector de los servicios que
+  sólo alcanza el servidor —empezando por los metadatos de la instancia, que
+  llevan credenciales—. Lo cierra `Webhooks\Rules\PublicHttpUrl`, que resuelve
+  el host y mira **las direcciones** (bloquear la cadena `localhost` no sirve
+  cuando un registro A apunta a `10.0.0.5`), y va montado en las dos puertas: el
+  Form Object y las Actions de alta y edición, con la derivación en
+  `Webhooks\Support\EndpointUrl`. La válvula es
+  `WEBHOOKS_ALLOW_PRIVATE_NETWORKS`, apagada por defecto también en `local` y
+  `testing`.
+- **El formulario de invitaciones no comprobaba la anti-escalada.** Quien tenía
+  `invitations.manage` podía repartir códigos de Administrador y entrar después
+  con uno: la escalada de privilegios de siempre, dada de alta a plazos.
+  `InvitationForm` añade ahora `GrantableRole`, la misma regla que ya cerraba
+  `UserForm`.
+- **El canje de una invitación no volvía a mirar el rol.** Entre repartir un
+  código y canjearlo pasan semanas, y `invitation_codes.role` es texto plano sin
+  clave foránea: si el rol se renombra o se retira, `syncRoles()` reventaba a
+  mitad del registro. `InvitationRedeemAction` lo comprueba contra
+  `AuthorizationCatalog::assignableRoleNames()` y lanza `ConflictException`.
+- **`EnsureAccountIsActive` no dejaba pasar el endpoint de Livewire.** El patrón
+  `'livewire.*'` de `FREE_ROUTES` no casaba nunca, porque en Livewire 4 la ruta
+  se llama `default-livewire.update` —el prefijo es el nombre del bundle—. El
+  efecto: alguien `pending` con sesión abierta veía la pantalla del magic link y
+  no podía usarla, porque cada `wire:` se lo llevaba a `/account/pending`. Se
+  añade `'*livewire.update'`, y el docblock deja de decir que la pantalla de
+  espera monta Livewire, que no lo hace: usa el layout de auth.
+- **`SettingUpdateAction` comprobaba las claves y no los valores.** Rechazaba
+  una clave no declarada, pero `Settings::set('organization.email', 'x')` desde
+  un comando o un seeder guardaba `x` y el error salía meses después, en el pie
+  de un PDF. Ahora valida con las mismas reglas que deriva `SettingsForm` —las
+  dos salen de `EditableSettings`— y lanza `ValidationException`.
+- **`PushChannel` escribía el cuerpo del aviso en el log.** El título es una
+  etiqueta de la plantilla; el cuerpo es donde van el nombre, el importe o el
+  número de expediente. Los logs se rotan y se mandan a un agregador, así que
+  ahora queda qué se mandó y a cuántos aparatos, no lo que decía.
 - **`UserFactory` escribe `account_status` y `activated_at` aunque coincidan con
   el default de la columna.** `create()` no relee la fila, y con
   `Model::shouldBeStrict()` leer un atributo no cargado **lanza**: sin esto,
@@ -396,11 +439,21 @@ La suite Pest pasa de 832 a **1245** tests (3469 assertions) y la E2E de 176 a
    WEBHOOKS_ENABLED=false
    ```
 
-   `.env.example` trae además, comentadas, las que afinan cada módulo:
-   `SETTINGS_CACHE_TTL`, `FEATURE_REPORTS`, `FEATURE_EXPORTS`,
+   `.env.example` trae además, comentadas, las **doce** que afinan cada
+   módulo: `SETTINGS_CACHE_TTL`, `FEATURE_REPORTS`, `FEATURE_EXPORTS`,
    `FEATURE_API_WEBHOOKS`, `MX_CACHE_TTL`, `WEBHOOKS_INBOUND_SECRET`,
-   `WEBHOOKS_TIMEOUT`, `WEBHOOKS_MAX_ATTEMPTS`, `WEBHOOKS_TOLERANCE` y
-   `WEBHOOKS_REQUIRE_HTTPS`.
+   `WEBHOOKS_TIMEOUT`, `WEBHOOKS_MAX_ATTEMPTS`, `WEBHOOKS_TOLERANCE`,
+   `WEBHOOKS_REQUIRE_HTTPS`, `WEBHOOKS_PRUNE_DAYS` y
+   `WEBHOOKS_ALLOW_PRIVATE_NETWORKS`.
+
+   > **`WEBHOOKS_ALLOW_PRIVATE_NETWORKS` merece una línea aparte.** Va en
+   > `false`, y con eso la URL de un endpoint tiene que resolver a una dirección
+   > **pública**: se rechazan loopback, link-local (la `169.254.169.254` de los
+   > metadatos de la nube), las privadas y `0.0.0.0`. Si tu derivado ya tiene
+   > endpoints apuntando a la red interna, la pantalla dejará de dejarte
+   > guardarlos hasta que la enciendas. No se relaja sola en `local` ni en
+   > `testing`: si lo hiciera, el único sitio donde la regla se probaría de
+   > verdad sería producción.
 
 5. **Seis archivos nuevos en `config/`**: `kore-settings.php`,
    `kore-numbering.php`, `features.php`, `kore-notifications.php`,
@@ -435,6 +488,18 @@ La suite Pest pasa de 832 a **1245** tests (3469 assertions) y la E2E de 176 a
      encontrará el catálogo que tengas commiteado (a Notarium le encontró
      `database/data/sepomex.csv`, catorce megas) y R62, los localizadores
      escritos dentro de una guía del manual.
+
+8. **Un import que cambia**: `App\Modules\Users\Rules\GrantableRole` pasa a
+   `App\Core\Rules\GrantableRole`. Si tu derivado la usa en un formulario o en
+   un FormRequest propio, es un `use` y nada más:
+
+   ```bash
+   grep -rl 'Users\\Rules\\GrantableRole' app/ | xargs sed -i '' \
+       's/App\\Modules\\Users\\Rules\\GrantableRole/App\\Core\\Rules\\GrantableRole/'
+   ```
+
+   Sus dos mensajes de validación se mudan con ella de
+   `app/Modules/Users/Resources/lang/en.json` a `lang/en.json`.
 
 ## [2.3.0] - 2026-09-04
 

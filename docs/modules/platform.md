@@ -227,6 +227,56 @@ candados, y los tres hacen falta:
    reintento la fila ya está. Una sola vez, no en bucle: si el segundo intento
    también choca, lo que falla no es la carrera.
 
+### El hueco: la PRIMERA emisión de una serie con `scope` y `period` nulos
+
+Los tres candados de arriba protegen todas las emisiones menos una, y conviene
+saber cuál.
+
+El reintento del punto 3 depende de que el segundo insert **choque** con el
+índice único, y en SQL un `NULL` no es igual a otro `NULL`: en MySQL, en SQLite
+y en PostgreSQL, dos filas con `scope` y `period` nulos **no** violan la única
+`(series, scope, period)`. Así que en una serie sin scope ni periodo —el
+contador global, `numbering.series.recibo` sin más— la red del punto 3 no
+existe. Queda lo que haga el motor con un `SELECT … FOR UPDATE` que no encuentra
+ninguna fila:
+
+- **MySQL 8 / InnoDB** en `REPEATABLE READ` toma un *gap lock* sobre el rango
+  vacío del índice, así que el segundo `INSERT` espera al primero y la carrera
+  se serializa sola. En la práctica, tapado.
+- **PostgreSQL** no bloquea nada: `FOR UPDATE` sin filas no tiene qué bloquear,
+  las dos transacciones insertan su fila y las dos emiten el mismo primer folio.
+- **SQLite** serializa las escrituras, pero las dos lecturas ya pasaron: mismo
+  resultado que PostgreSQL. (Es la base de los tests, no la de producción.)
+
+O sea: **en PostgreSQL, dos emisiones simultáneas que estrenan una serie global
+pueden repetir folio.** A partir de la segunda ya no, porque la fila existe y el
+`lockForUpdate()` hace su trabajo.
+
+Dos formas de cerrarlo, y las dos son de despliegue, no de código:
+
+1. **Sembrar la fila al desplegar**, que es la recomendada porque vale para
+   cualquier motor:
+
+   ```php
+   NumberSequence::firstOrCreate(
+       ['series' => 'recibo', 'scope' => null, 'period' => null],
+       ['last_number' => 0],   // start - 1
+   );
+   ```
+
+   Con la fila puesta, la primera emisión de verdad ya encuentra qué bloquear.
+
+2. **Usar un `scope` no nulo** (el id del tenant, el de la sucursal, `'global'`
+   si no hay nada mejor). Con `scope` no nulo la única sí muerde y el reintento
+   del punto 3 vuelve a ser la red.
+
+No se hace desde `NumberIssueAction` a propósito: adelantar el `firstOrCreate`
+fuera de la transacción no arregla nada —con los nulos, los dos `INSERT`
+concurrentes también pasarían, y encima dejarían dos filas contadoras para la
+misma serie— y cambiar el esquema para que los nulos choquen (una columna
+centinela en vez de `NULL`) es una migración que un derivado con datos ya
+emitidos tendría que pagar por un caso que se cierra con una línea de seeder.
+
 ### Consumirlo
 
 ```php
@@ -395,26 +445,31 @@ organización.
 emitido deja la fila en 7, y una fila recién creada vale `start - 1`, con lo que
 la primera emisión devuelve `start` sin ningún caso especial.
 
-**En MySQL y en SQLite dos filas con NULL no chocan en un índice único**, así que
-la clave única no protege por sí sola al contador global (scope y periodo nulos):
-a ése lo protegen el `lockForUpdate()` y el reintento. El índice es la red del
-caso con scope o con periodo, que es el que más filas produce.
+**Dos filas con NULL no chocan en un índice único** —ni en MySQL, ni en SQLite,
+ni en PostgreSQL—, así que la clave única no protege por sí sola al contador
+global (scope y periodo nulos). El índice es la red del caso con scope o con
+periodo, que es el que más filas produce; para el global, y **sólo en su primera
+emisión**, ver «El hueco» más arriba: se cierra sembrando la fila al desplegar.
 
 ## Tests
 
 ```bash
-./vendor/bin/pest app/Modules/Platform
+./vendor/bin/pest app/Modules/Platform tests/Feature/HasIssuedNumberTest.php
 ```
 
-| Archivo | Qué cubre |
-|---|---|
-| `SettingsTest` | la cascada, que leer no escriba, tipos, y que la caché se invalide |
-| `SettingsScreenTest` | ruta, permiso, componente, validación, `restore` y el layout |
-| `SettingsShowCommandTest` | las tres columnas de `settings:show` |
-| `NumberingTest` | 50 emisiones, reinicio anual, scope, formato, `peek`, la carrera |
-| `HasIssuedNumberTest` | el trait sobre una tabla que el propio test crea |
-| `FeaturesTest` | middleware 403/200, la directiva y `features:list` |
-| `PlatformConfigTest` | la forma de los tres archivos de configuración y los bindings |
+Los dos argumentos, y no sólo el primero: `HasIssuedNumberTest` es el único que
+**no** vive dentro del módulo, porque prueba un trait de `App\Core\Concerns` —el
+que consume la numeración desde fuera— y su sitio es `tests/Feature/`.
+
+| Archivo | Dónde | Qué cubre |
+|---|---|---|
+| `SettingsTest` | módulo | la cascada, que leer no escriba, tipos, validación del valor y que la caché se invalide |
+| `SettingsScreenTest` | módulo | ruta, permiso, componente, validación, `restore` y el layout |
+| `SettingsShowCommandTest` | módulo | las tres columnas de `settings:show` |
+| `NumberingTest` | módulo | 50 emisiones, reinicio anual, scope, formato, `peek`, la carrera |
+| `FeaturesTest` | módulo | middleware 403/200, la directiva y `features:list` |
+| `PlatformConfigTest` | módulo | la forma de los tres archivos de configuración y los bindings |
+| `HasIssuedNumberTest` | `tests/Feature/` | el trait de Core sobre una tabla que el propio test crea |
 
 E2E: `tests/e2e/specs/platform/settings.spec.ts` con
 `tests/e2e/pages/SettingsPage.ts`, más la fila de `/settings` en

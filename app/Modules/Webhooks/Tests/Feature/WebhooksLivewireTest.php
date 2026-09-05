@@ -45,6 +45,14 @@ function withWebhooksAdmin(Closure $callback): void
         Http::preventStrayRequests();
         Http::fake();
 
+        // Las URLs de este archivo son `*.example.test`, un TLD reservado que
+        // no resuelve: `Rules\PublicHttpUrl` las rechazaría por eso y estos
+        // tests dejarían de probar lo suyo. La regla tiene su propio archivo
+        // (`Tests/Unit/PublicHttpUrlTest`), donde se prueba con IPs literales y
+        // con `localhost`; aquí se le abre la mano para que el camino feliz de
+        // las pantallas no dependa del DNS.
+        Config::set('kore-webhooks.allow_private_networks', true);
+
         $callback($user);
     });
 }

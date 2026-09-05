@@ -93,6 +93,43 @@ it('refuses a role that is not assignable', function (): void {
     });
 });
 
+it('refuses a role that grants permissions the actor does not have (R26)', function (): void {
+    /*
+     * La escalada de siempre, dada de alta a plazos: un código de invitación es
+     * una cuenta futura con un rol dentro, así que quien sólo tiene
+     * `invitations.manage` no puede repartir códigos de Administrador y entrar
+     * después con uno. Es la misma regla —`App\Core\Rules\GrantableRole`— que
+     * cierra `Users\Forms\UserForm`, y por eso vive en Core: la comparten los
+     * dos formularios que reparten un rol.
+     */
+    $manager = invitationManager();
+
+    withEnvironment(['AUTH_INVITATIONS' => 'true'], function () use ($manager): void {
+        $component = Livewire::actingAs($manager)
+            ->test(FormInvitation::class)
+            ->set('form.role', SystemRole::Admin->value)
+            ->call('save')
+            ->assertHasErrors('form.role');
+
+        expect($component->errors()->first('form.role'))->toContain(SystemRole::Admin->value);
+        expect(InvitationCode::query()->count())->toBe(0);
+    });
+});
+
+it('lets the actor hand out a role it does hold', function (): void {
+    $manager = invitationManager();
+
+    withEnvironment(['AUTH_INVITATIONS' => 'true'], function () use ($manager): void {
+        Livewire::actingAs($manager)
+            ->test(FormInvitation::class)
+            ->set('form.role', SystemRole::User->value)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        expect(InvitationCode::query()->count())->toBe(1);
+    });
+});
+
 it('stops the form for someone without the permission, also through livewire', function (): void {
     $stranger = User::factory()->create();
     $stranger->syncRoles([SystemRole::User->value]);

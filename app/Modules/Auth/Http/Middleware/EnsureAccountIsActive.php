@@ -30,10 +30,19 @@ use Symfony\Component\HttpFoundation\Response;
  *   podría verificar su correo — que es justo lo que puede desbloquearle.
  * - **`account.pending`**: la pantalla de espera. Bloquearla sería un bucle de
  *   redirecciones contra sí misma.
- * - **`livewire.*`**: la propia pantalla de espera y el layout llevan
- *   componentes Livewire, y sus llamadas viajan por `/livewire/update`. Cada
+ * - **El endpoint de Livewire** (`*livewire.update`, `livewire.*`): las
+ *   pantallas libres de arriba —el magic link, la confirmación de contraseña,
+ *   el registro— llevan componentes Livewire, y sus llamadas no viajan por la
+ *   ruta de la pantalla sino por `/livewire/update`. Sin esta entrada, alguien
+ *   `pending` con sesión abierta vería la pantalla y no podría usarla. Cada
  *   componente autoriza por su cuenta (R23), así que abrir el endpoint no abre
- *   nada.
+ *   nada. La pantalla de espera, en cambio, **no** monta Livewire: usa el
+ *   layout de auth y es HTML plano con un `<form>` de logout.
+ *
+ *   Van los **dos** patrones porque en Livewire 4 la ruta de la actualización
+ *   se llama `default-livewire.update` —el prefijo es el nombre del «bundle»—
+ *   y `livewire.*` no la casa; `livewire.*` sigue cubriendo las que no
+ *   cambiaron de nombre (`livewire.upload-file`, `livewire.preview-file`).
  *
  * Una ruta **sin nombre** se trata como protegida: no se puede clasificar, y
  * ante la duda el middleware cierra.
@@ -60,6 +69,7 @@ final class EnsureAccountIsActive
         'magic-link.*',
         'socialite.*',
         'account.pending',
+        '*livewire.update',
         'livewire.*',
         'api.v1.auth.*',
     ];

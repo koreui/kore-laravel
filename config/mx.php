@@ -36,7 +36,7 @@ return [
      * `chunk_size` es cuántas filas van en cada `upsert`. Mil es el equilibrio
      * habitual: por debajo se pagan demasiados viajes a la base y por encima
      * algunos drivers se quejan del número de placeholders de la sentencia
-     * (el CSV completo son ~145 000 filas y siete columnas por fila).
+     * (el CSV completo son ~145 000 filas y seis columnas por fila).
      */
     'import' => [
         'chunk_size' => 1000,

@@ -87,7 +87,13 @@ final readonly class PushChannel
             'tokens' => count($tokens),
             'category' => $notification->payload->category,
             'title' => $notification->payload->title,
-            'body' => $notification->payload->body,
+            // El `body` NO se registra, y el `title` sí. El título es una
+            // etiqueta de la plantilla («Factura vencida»); el cuerpo es donde
+            // van el nombre, el importe o el número de expediente, es decir,
+            // datos personales del destinatario. Los logs se rotan, se envían a
+            // un agregador y se leen con mucha más manga ancha que la bandeja
+            // de avisos, así que aquí queda qué se mandó y a cuántos aparatos,
+            // no lo que decía.
             'url' => $notification->payload->url,
         ]);
     }

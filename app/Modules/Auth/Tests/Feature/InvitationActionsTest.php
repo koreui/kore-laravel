@@ -104,6 +104,26 @@ it('refuses to redeem an unknown code', function (): void {
     ))->toThrow(ConflictException::class);
 });
 
+it('refuses to redeem a code whose role is no longer assignable', function (): void {
+    /*
+     * Defensa en profundidad. `InvitationForm` sólo deja crear códigos con un
+     * rol asignable, pero entre repartir un código y canjearlo pasan semanas, y
+     * `invitation_codes.role` es texto plano sin clave foránea contra `roles`:
+     * si el rol se renombra o se retira, nada actualiza la fila. Sin esta
+     * comprobación, `syncRoles()` reventaría a mitad del registro con una
+     * excepción de Spatie — o peor, repartiría un rol que ya no debería.
+     */
+    $invitation = InvitationCode::factory()->create(['role' => 'rol-que-ya-no-existe']);
+
+    expect(fn (): User => resolve(InvitationRedeemAction::class)->handle(
+        new RegisterData(name: 'Grace', email: 'grace@example.com', password: 'StrongPassword123!'),
+        $invitation->code,
+    ))->toThrow(ConflictException::class);
+
+    expect(User::where('email', '=', 'grace@example.com')->exists())->toBeFalse()
+        ->and($invitation->fresh()?->uses)->toBe(0);
+});
+
 it('normalises the code both when looking it up and when generating it', function (): void {
     expect(InvitationCode::normalize('  kore 2026 '))->toBe('KORE2026')
         ->and(InvitationCode::normalize('   '))->toBe('');

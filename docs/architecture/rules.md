@@ -1651,7 +1651,7 @@ con `--no-verify`, y entonces no verifica nada.
 | **Release (GitHub)** | — | — | sólo al empujar un tag `v*`: `kore:changelog:section` + GitHub Release (R42) |
 
 Medido en un MacBook (Apple Silicon, PHP 8.4) sobre el repositorio a fecha de
-la v2.4.0, con 1245 tests Pest. La suite E2E —256 tests en 27 archivos— va
+la v2.4.0, con 1275 tests Pest. La suite E2E —256 tests en 27 archivos— va
 aparte y no entra en ninguna de estas capas. Las cuatro primeras caben
 holgadamente en su presupuesto: el margen es para que un proyecto derivado pueda
 crecer sin tener que rediseñar el pipeline.

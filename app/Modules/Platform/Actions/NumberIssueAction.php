@@ -34,6 +34,17 @@ use Illuminate\Support\Facades\DB;
  *    reintento la fila ya está y el bloqueo hace su trabajo. Una sola vez, no en
  *    bucle: si el segundo intento también choca, lo que falla no es la carrera.
  *
+ * **El hueco que queda**: el reintento depende de que el segundo `INSERT`
+ * choque, y en SQL un `NULL` no es igual a otro `NULL`, así que la única
+ * `(series, scope, period)` no muerde en una serie con scope y periodo nulos.
+ * Ahí, en MySQL 8 el gap lock de InnoDB serializa la primera emisión, pero en
+ * PostgreSQL un `FOR UPDATE` sin filas no bloquea nada y dos estrenos
+ * simultáneos pueden repetir folio. Se cierra sembrando la fila al desplegar
+ * (`NumberSequence::firstOrCreate`) o usando un scope no nulo; adelantar aquí
+ * el `firstOrCreate` no lo arreglaría —los dos inserts pasarían igual y
+ * dejarían dos contadores para la misma serie—. Ver docs/modules/platform.md,
+ * «El hueco: la PRIMERA emisión de una serie con scope y period nulos».
+ *
  * El número no se «reserva»: sale de aquí ya gastado. Si el documento no se
  * llega a guardar, la transacción exterior revierte el contador con él.
  */

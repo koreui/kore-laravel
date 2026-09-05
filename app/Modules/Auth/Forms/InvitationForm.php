@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Auth\Forms;
 
 use App\Core\Contracts\AuthorizationCatalog;
+use App\Core\Rules\GrantableRole;
+use App\Models\User;
 use App\Modules\Auth\Data\InvitationData;
 use Illuminate\Validation\Rule;
 use Livewire\Form;
@@ -21,6 +23,12 @@ use Livewire\Form;
  * El rol sale de `AuthorizationCatalog::assignableRoleNames()`, que excluye
  * superadmin: un código es una credencial que se reparte por WhatsApp, y el rol
  * con bypass total del `Gate::before` no viaja así (R26).
+ *
+ * Y encima de esa lista va `App\Core\Rules\GrantableRole`, la misma regla que
+ * usa el formulario de usuarios: un código de invitación es una cuenta futura
+ * con un rol dentro, así que repartir códigos de `admin` teniendo sólo
+ * `invitations.manage` sería la escalada de privilegios de siempre dada de alta
+ * a plazos (R26). El actor se toma igual que en `Users\Forms\UserForm`.
  */
 final class InvitationForm extends Form
 {
@@ -35,8 +43,16 @@ final class InvitationForm extends Form
     /** @return array<string, array<int, mixed>> */
     public function rules(): array
     {
+        $catalog = resolve(AuthorizationCatalog::class);
+        $actor = auth()->user();
+
         return [
-            'role' => ['required', 'string', Rule::in(resolve(AuthorizationCatalog::class)->assignableRoleNames())],
+            'role' => [
+                'required',
+                'string',
+                Rule::in($catalog->assignableRoleNames()),
+                new GrantableRole($actor instanceof User ? $actor : null, $catalog),
+            ],
             'max_uses' => ['nullable', 'integer', 'min:1', 'max:10000'],
             'expires_at' => ['nullable', 'date', 'after:now'],
             'note' => ['nullable', 'string', 'max:255'],

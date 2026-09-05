@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Users\Rules;
+namespace App\Core\Rules;
 
 use App\Core\Contracts\AuthorizationCatalog;
 use App\Core\Enums\SystemRole;
@@ -21,6 +21,16 @@ use Spatie\Permission\Exceptions\PermissionDoesNotExist;
  *
  * El superadmin la salta. El actor se pasa por constructor: nada de `auth()`
  * dentro de la regla.
+ *
+ * ## Por qué vive en Core y no en Users
+ *
+ * Porque hay **dos** formularios que reparten un rol: el de usuarios
+ * (`Users\Forms\UserForm` y su gemelo de la API) y el de códigos de invitación
+ * (`Auth\Forms\InvitationForm`), donde el rol viaja dentro del código y se
+ * aplica al canjearlo. Auth no puede importar de Users ni Users de Auth (R5),
+ * así que la única casa compartida es el kernel — y la regla ya sólo depende de
+ * cosas de Core: el contrato `AuthorizationCatalog`, el enum `SystemRole` y el
+ * `User` global.
  */
 final readonly class GrantableRole implements ValidationRule
 {

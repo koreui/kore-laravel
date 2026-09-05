@@ -6,10 +6,10 @@ namespace App\Modules\Users\Forms;
 
 use App\Core\Contracts\AuthorizationCatalog;
 use App\Core\Enums\SystemRole;
+use App\Core\Rules\GrantableRole;
 use App\Models\User;
 use App\Modules\Users\Data\UserData;
 use App\Modules\Users\Rules\GrantablePermission;
-use App\Modules\Users\Rules\GrantableRole;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Locked;
 use Livewire\Form;

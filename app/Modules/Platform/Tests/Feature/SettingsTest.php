@@ -5,9 +5,12 @@ declare(strict_types=1);
 use App\Core\Contracts\Settings;
 use App\Core\Data\OrganizationData;
 use App\Models\User;
+use App\Modules\Platform\Actions\SettingUpdateAction;
+use App\Modules\Platform\Data\SettingsFormData;
 use App\Modules\Platform\Models\Setting;
 use App\Modules\Platform\Support\SettingsCache;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Validation\ValidationException;
 
 /*
 |--------------------------------------------------------------------------
@@ -83,6 +86,44 @@ it('rechaza una clave que no está declarada como editable', function (): void {
     // fantasma que no lee nadie y que nunca se nota.
     expect(fn (): mixed => $this->settings->set('organization.inventada', 'x', $this->actor->id))
         ->toThrow(InvalidArgumentException::class);
+});
+
+it('rechaza un valor que no pasa las reglas de su tipo', function (): void {
+    // La pantalla ya valida, pero `Settings::set()` sirve igual desde un
+    // comando o un seeder, y ahí no hay formulario: sin esta comprobación un
+    // correo mal escrito se guardaría y el error saldría meses después, en el
+    // pie de un PDF. Las reglas son las MISMAS que deriva `SettingsForm`,
+    // porque las dos salen de `EditableSettings`.
+    expect(fn (): mixed => $this->settings->set('organization.email', 'no-es-un-correo', $this->actor->id))
+        ->toThrow(ValidationException::class);
+
+    expect(Setting::query()->where('key', '=', 'organization.email')->exists())->toBeFalse();
+});
+
+it('rechaza un requerido en blanco y no guarda nada del lote', function (): void {
+    expect(fn (): mixed => resolve(SettingUpdateAction::class)->handle(
+        new SettingsFormData([
+            'organization.name' => null,
+            'organization.tax_id' => 'XAXX010101000',
+        ]),
+        $this->actor->id,
+    ))->toThrow(ValidationException::class);
+
+    // Ni la clave buena: media configuración aplicada es peor que ninguna.
+    expect(Setting::query()->count())->toBe(0);
+});
+
+it('nombra el ajuste en español en el mensaje de error', function (): void {
+    try {
+        $this->settings->set('organization.email', 'no-es-un-correo', $this->actor->id);
+    } catch (ValidationException $exception) {
+        expect($exception->validator->errors()->first('organization_email'))
+            ->toContain('correo de contacto');
+
+        return;
+    }
+
+    throw new RuntimeException('Se esperaba una ValidationException.');
 });
 
 it('la escritura invalida la caché', function (): void {

@@ -114,6 +114,28 @@ return [
     'require_https' => (bool) env('WEBHOOKS_REQUIRE_HTTPS', true),
 
     /*
+     * ¿Se admite un endpoint que apunte a la red interna?
+     *
+     * En `false` —el defecto— la URL de un endpoint tiene que resolver a una
+     * dirección pública: se rechazan loopback, link-local (la `169.254.169.254`
+     * de los metadatos de la nube), las privadas y `0.0.0.0`. Sin eso,
+     * cualquiera con `webhooks.manage` convierte el emisor en un lector de los
+     * servicios que esta máquina sí alcanza y nadie más
+     * (`App\Modules\Webhooks\Rules\PublicHttpUrl`).
+     *
+     * En `true` se admite cualquier dirección. Es para la instalación donde el
+     * receptor está legítimamente dentro —servicios de un clúster privado que
+     * se mandan webhooks entre sí— y ahí la comprobación estorba en vez de
+     * proteger.
+     *
+     * **No se apaga sola en `local` ni en `testing`**, a diferencia de
+     * `require_https`: si se relajara en desarrollo, el único sitio donde la
+     * regla se probaría de verdad sería producción. Los tests que necesitan una
+     * URL interna encienden la clave a mano.
+     */
+    'allow_private_networks' => (bool) env('WEBHOOKS_ALLOW_PRIVATE_NETWORKS', false),
+
+    /*
      * `User-Agent` de las peticiones salientes. Es lo que el receptor ve en su
      * log cuando quiere saber quién le está llamando, así que no se traduce ni
      * se personaliza por instalación.

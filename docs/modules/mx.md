@@ -158,8 +158,10 @@ La cabecera que espera es la del archivo oficial:
 d_codigo|d_asenta|d_tipo_asenta|D_mnpio|d_estado|d_ciudad|d_CP|c_estado|c_oficina|c_CP|c_tipo_asenta|c_mnpio|id_asenta_cpcons|d_zona|c_cve_ciudad
 ```
 
-De ahí sólo se guardan siete columnas: las que un formulario de dirección
-necesita. El resto son claves internas de SEPOMEX que nadie de fuera consulta.
+De ahí sólo se guardan seis columnas —`postal_code`, `settlement`,
+`settlement_type`, `municipality`, `city` y `state_code`—: las que un formulario
+de dirección necesita. El resto son claves internas de SEPOMEX que nadie de
+fuera consulta.
 
 ## `MontoEnLetras`
 

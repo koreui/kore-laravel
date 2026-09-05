@@ -78,5 +78,7 @@
     "koreUi por dentro": "koreUi up close",
     "listo para construir": "ready to build on",
     "stancl/tenancy v3 detrás de un toggle. Un comando lo activa: kore:tenancy:enable.": "stancl/tenancy v3 behind a toggle. One command turns it on: kore:tenancy:enable.",
-    "¿Listo para empezar?": "Ready to get started?"
+    "¿Listo para empezar?": "Ready to get started?",
+    "No hay un usuario autenticado que pueda asignar roles.": "There is no authenticated user who can assign roles.",
+    "No puedes asignar el rol «:role»: concede permisos que tú no tienes (:missing).": "You cannot assign the role “:role”: it grants permissions you do not have (:missing)."
 }

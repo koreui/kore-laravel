@@ -526,9 +526,10 @@ php artisan kore:regenerate-permissions
 
 Esto genera los 4 permisos `{slug}.{view|create|edit|delete}` y los sincroniza a los administradores. Ver [`../architecture/authorization.md`](../architecture/authorization.md).
 
-Si el formulario deja asignar roles o permisos, reutiliza
-`Users\Rules\GrantableRole` y `Users\Rules\GrantablePermission` como modelo:
-nadie debe poder conceder lo que él mismo no tiene.
+Si el formulario deja asignar roles, usa `App\Core\Rules\GrantableRole` tal
+cual —está en el kernel justamente para que la compartan Users y Auth—; si
+reparte permisos sueltos, `Users\Rules\GrantablePermission` es el modelo a
+copiar. Nadie debe poder conceder lo que él mismo no tiene.
 
 ---
 

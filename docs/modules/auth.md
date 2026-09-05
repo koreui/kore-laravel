@@ -277,9 +277,15 @@ protegida y nadie tiene que acordarse de blindarla. Lo que se enumera dentro es
 lo contrario —la lista corta de lo que una cuenta no activa **sí** puede tocar—:
 sesión (`login`, `logout`, `register`, `password.*`, `two-factor.*`,
 `verification.*`, `magic-link.*`, `socialite.*`, `api.v1.auth.*`), la pantalla de
-espera (`account.pending`) y `livewire.*`, que la propia pantalla de espera
-necesita y donde cada componente autoriza por su cuenta (R23). Una ruta **sin
-nombre** se trata como protegida: no se puede clasificar, y ante la duda cierra.
+espera (`account.pending`) y el endpoint de Livewire (`*livewire.update` y
+`livewire.*`), que necesitan las pantallas libres de arriba —el magic link, la
+confirmación de contraseña, el registro— porque sus llamadas no viajan por la
+ruta de la pantalla sino por `/livewire/update`, y donde cada componente
+autoriza por su cuenta (R23). La pantalla de espera **no** monta Livewire: usa
+el layout de auth y es HTML plano. Van los dos patrones porque en Livewire 4 la
+ruta se llama `default-livewire.update` y `livewire.*` no la casa. Una ruta
+**sin nombre** se trata como protegida: no se puede clasificar, y ante la duda
+cierra.
 
 Qué hace al bloquear:
 

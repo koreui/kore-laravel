@@ -177,7 +177,13 @@ decisión que puso `MediaFileStore` en `Files/Support`.
 `Support\PushChannel` no manda nada a ningún servicio: deja una línea
 `notifications.push` en el log con el usuario, **cuántos** tokens había (nunca
 cuáles: un token de push es la credencial con la que se le manda una notificación
-a ese teléfono) y el contenido del aviso.
+a ese teléfono), la categoría, el título y la URL.
+
+**El `body` no se registra**, y el título sí: el título es una etiqueta de la
+plantilla («Factura vencida»), mientras que el cuerpo es donde van el nombre, el
+importe o el número de expediente. Los logs se rotan, se mandan a un agregador y
+se leen con mucha más manga ancha que la bandeja de avisos, así que ahí queda
+qué se mandó y a cuántos aparatos, no lo que decía.
 
 No es un descuido. El boilerplate no puede elegir por un derivado entre FCM, APNs
 o Expo, y fingir una entrega que no ocurre es peor que no tenerla — un aviso que
@@ -265,7 +271,7 @@ de otro. Se carga con los **dos** toggles encendidos (`NOTIFICATIONS_ENABLED` y
 |---|---|---|
 | `GET` | `/api/v1/me/notifications` | `api.v1.me.notifications.index` |
 | `POST` | `/api/v1/me/notifications/read-all` | `api.v1.me.notifications.read-all` |
-| `POST` | `/api/v1/me/notifications/{id}/read` | `api.v1.me.notifications.read` |
+| `POST` | `/api/v1/me/notifications/{notification}/read` | `api.v1.me.notifications.read` |
 | `GET` | `/api/v1/me/notification-preferences` | `api.v1.me.notification-preferences.index` |
 | `PUT` | `/api/v1/me/notification-preferences` | `api.v1.me.notification-preferences.update` |
 

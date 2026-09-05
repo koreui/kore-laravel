@@ -24,8 +24,11 @@ app/Modules/Auth/
 └── Console/Commands/
     └── RegeneratePermissionsCommand.php  # `php artisan kore:regenerate-permissions`
 
+app/Core/Rules/
+└── GrantableRole.php                    # anti-escalada: la comparten Users y Auth
+
 app/Modules/Users/
-└── Rules/{GrantableRole, GrantablePermission}.php   # anti-escalada de privilegios
+└── Rules/GrantablePermission.php        # anti-escalada, sólo Users reparte permisos
 ```
 
 ## Formato de permisos
@@ -48,6 +51,9 @@ private function specialPermissions(): array
         ],
         'invitations' => [
             ['value' => 'invitations.manage', 'label' => 'Gestionar Invitaciones'],
+        ],
+        'settings' => [
+            ['value' => 'settings.manage', 'label' => 'Administrar Ajustes'],
         ],
         'webhooks' => [
             ['value' => 'webhooks.manage', 'label' => 'Gestionar webhooks'],
@@ -177,12 +183,19 @@ Tener `users.create` + `users.edit` no puede convertirse en «tener todo»: sin
 más reglas, cualquier editor podía crear una cuenta con permisos que él no
 tiene (o con rol `Administrador`) y entrar con ella.
 
-`UserForm::rules()` añade dos reglas propias, en `app/Modules/Users/Rules/`:
+`UserForm::rules()` añade dos reglas propias:
 
-| Regla                 | Qué exige                                                                 |
-|-----------------------|---------------------------------------------------------------------------|
-| `GrantablePermission` | El actor sólo concede permisos que él mismo tiene.                        |
-| `GrantableRole`       | El actor sólo asigna un rol si posee **todos** los permisos de ese rol.   |
+| Regla                 | Dónde vive                       | Qué exige                                                               |
+|-----------------------|----------------------------------|-------------------------------------------------------------------------|
+| `GrantablePermission` | `app/Modules/Users/Rules/`       | El actor sólo concede permisos que él mismo tiene.                      |
+| `GrantableRole`       | `app/Core/Rules/`                | El actor sólo asigna un rol si posee **todos** los permisos de ese rol. |
+
+`GrantableRole` está en Core y no en Users porque hay **dos** formularios que
+reparten un rol: el de usuarios y el de códigos de invitación
+(`Auth\Forms\InvitationForm`, donde el rol viaja dentro del código y se aplica
+al canjearlo). Auth no puede importar de Users ni al revés (R5), así que la
+única casa compartida es el kernel. `GrantablePermission` sigue en Users porque
+sólo Users reparte permisos sueltos.
 
 Detalles de diseño:
 

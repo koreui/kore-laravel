@@ -9,7 +9,6 @@ import {
 } from '@playwright/test';
 
 import { LoginPage } from '../pages/LoginPage';
-import { baseURL } from '../support/env';
 import { SEEDED_USERS, storageStateFor, type Role } from '../support/users';
 import { ErrorGuard } from './error-guard';
 import { Harness } from './harness';
@@ -104,9 +103,34 @@ type Fixtures = RolePages & {
 };
 
 type WorkerAuth = {
-    /** Devuelve (creándola si hace falta) la sesión de ese rol para este worker. */
-    sessionFor: (role: Role) => Promise<string>;
+    /**
+     * Devuelve (creándola si hace falta) la sesión de ese rol para este worker.
+     *
+     * `contextOptions` llega por parámetro y no de una importación porque la
+     * fixture es de worker y las opciones del proyecto son de test: sin ellas,
+     * el login se haría siempre contra el `APP_URL` de `.env.e2e` (8010) y el
+     * manual —que corre su propio servidor en el 8110 con
+     * `playwright.manual.config.ts`— iniciaría sesión en la aplicación
+     * equivocada, o en ninguna.
+     */
+    sessionFor: (role: Role, contextOptions: BrowserContextOptions) => Promise<string>;
 };
+
+/**
+ * Las opciones de contexto del proyecto, con su `baseURL` dentro.
+ *
+ * `contextOptions` NO trae el `baseURL`: Playwright lo expone como fixture
+ * aparte y sólo lo mezcla al construir el `context` de la fixture `page`. Un
+ * `browser.newContext(contextOptions)` a secas se queda sin él, y ahí cualquier
+ * `page.goto('/webhooks')` revienta con «Invalid URL». Por eso todo contexto
+ * hecho a mano en este archivo pasa por aquí.
+ */
+function opcionesDeContexto(
+    contextOptions: BrowserContextOptions,
+    baseURL: string | undefined,
+): BrowserContextOptions {
+    return baseURL === undefined ? contextOptions : { ...contextOptions, baseURL };
+}
 
 async function withRolePage(
     browser: Browser,
@@ -115,8 +139,9 @@ async function withRolePage(
     errores: ErrorGuard,
     use: (page: Page) => Promise<void>,
 ): Promise<void> {
-    // `contextOptions` trae baseURL, viewport y demás del proyecto: sin
-    // esparcirlo, un `page.goto('/users')` no sabría contra qué host resolver.
+    // `contextOptions` ya viene mezclado con el `baseURL` del proyecto
+    // (ver `opcionesDeContexto`): sin él, un `page.goto('/users')` no sabría
+    // contra qué host resolver.
     const context = await browser.newContext({ ...contextOptions, storageState });
 
     try {
@@ -137,8 +162,12 @@ export const test = base.extend<Opciones & Fixtures, WorkerAuth>({
     role: [null, { option: true }],
     tolerarErrores: [[], { option: true }],
 
-    storageState: async ({ role, sessionFor }, use) => {
-        await use(role === null ? undefined : await sessionFor(role));
+    storageState: async ({ role, sessionFor, contextOptions, baseURL }, use) => {
+        await use(
+            role === null
+                ? undefined
+                : await sessionFor(role, opcionesDeContexto(contextOptions, baseURL)),
+        );
     },
 
     /**
@@ -183,7 +212,10 @@ export const test = base.extend<Opciones & Fixtures, WorkerAuth>({
         async ({ browser }, use, workerInfo) => {
             const created = new Map<Role, string>();
 
-            const sessionFor = async (role: Role): Promise<string> => {
+            const sessionFor = async (
+                role: Role,
+                contextOptions: BrowserContextOptions,
+            ): Promise<string> => {
                 const cached = created.get(role);
 
                 if (cached !== undefined) {
@@ -197,7 +229,7 @@ export const test = base.extend<Opciones & Fixtures, WorkerAuth>({
                 // piden, y la reutilizan durante toda la vida del worker.
                 if (!existsSync(file)) {
                     const user = SEEDED_USERS[role];
-                    const context = await browser.newContext({ baseURL });
+                    const context = await browser.newContext(contextOptions);
                     const page = await context.newPage();
                     const login = new LoginPage(page);
 
@@ -219,17 +251,25 @@ export const test = base.extend<Opciones & Fixtures, WorkerAuth>({
         { scope: 'worker' },
     ],
 
-    asSuperadmin: async ({ browser, contextOptions, sessionFor, errores }, use) => {
-        await withRolePage(browser, contextOptions, await sessionFor('superadmin'), errores, use);
+    asSuperadmin: async ({ browser, contextOptions, baseURL, sessionFor, errores }, use) => {
+        const opciones = opcionesDeContexto(contextOptions, baseURL);
+
+        await withRolePage(browser, opciones, await sessionFor('superadmin', opciones), errores, use);
     },
-    asEditor: async ({ browser, contextOptions, sessionFor, errores }, use) => {
-        await withRolePage(browser, contextOptions, await sessionFor('editor'), errores, use);
+    asEditor: async ({ browser, contextOptions, baseURL, sessionFor, errores }, use) => {
+        const opciones = opcionesDeContexto(contextOptions, baseURL);
+
+        await withRolePage(browser, opciones, await sessionFor('editor', opciones), errores, use);
     },
-    asViewer: async ({ browser, contextOptions, sessionFor, errores }, use) => {
-        await withRolePage(browser, contextOptions, await sessionFor('viewer'), errores, use);
+    asViewer: async ({ browser, contextOptions, baseURL, sessionFor, errores }, use) => {
+        const opciones = opcionesDeContexto(contextOptions, baseURL);
+
+        await withRolePage(browser, opciones, await sessionFor('viewer', opciones), errores, use);
     },
-    asMember: async ({ browser, contextOptions, sessionFor, errores }, use) => {
-        await withRolePage(browser, contextOptions, await sessionFor('member'), errores, use);
+    asMember: async ({ browser, contextOptions, baseURL, sessionFor, errores }, use) => {
+        const opciones = opcionesDeContexto(contextOptions, baseURL);
+
+        await withRolePage(browser, opciones, await sessionFor('member', opciones), errores, use);
     },
 });
 

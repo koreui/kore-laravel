@@ -6,6 +6,7 @@ namespace App\Modules\Webhooks\Forms;
 
 use App\Modules\Webhooks\Data\WebhookEndpointData;
 use App\Modules\Webhooks\Models\WebhookEndpoint;
+use App\Modules\Webhooks\Support\EndpointUrl;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Locked;
 use Livewire\Form;
@@ -25,6 +26,12 @@ use Livewire\Form;
  * **El secreto no está aquí.** Lo genera la Action y sólo se enseña una vez; un
  * formulario que lo aceptara sería un formulario que acepta la entropía que al
  * suscriptor le apetezca.
+ *
+ * **Las condiciones de la URL tampoco.** Viven en
+ * {@see EndpointUrl}, porque las Actions tienen
+ * que exigir lo mismo cuando el alta viene de un comando y aquí no hay
+ * validador. Son dos: `https` salvo en `local`, y una dirección de red pública
+ * (ver `Rules\PublicHttpUrl`).
  */
 final class WebhookEndpointForm extends Form
 {
@@ -45,7 +52,7 @@ final class WebhookEndpointForm extends Form
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'url' => ['required', $this->urlRule(), 'max:2048'],
+            'url' => ['required', ...EndpointUrl::rules()],
             'events' => ['required', 'array', 'min:1'],
             'events.*' => ['string', Rule::in($this->selectableEvents())],
             'active' => ['boolean'],
@@ -63,24 +70,6 @@ final class WebhookEndpointForm extends Form
         $catalog = (array) config('kore-webhooks.events', []);
 
         return [WebhookEndpoint::ALL_EVENTS, ...array_keys($catalog)];
-    }
-
-    /**
-     * `https` obligatorio salvo en `local`.
-     *
-     * La firma protege la integridad del mensaje, no su confidencialidad: por
-     * `http` el payload viaja legible para cualquiera en el camino, y lo que
-     * viaja son datos del dominio. La excepción de `local` existe porque el
-     * receptor de al lado suele ser un `php artisan serve` sin certificado, y
-     * obligar a montar TLS para probar una integración sólo consigue que se
-     * pruebe en producción.
-     */
-    private function urlRule(): string
-    {
-        $requireHttps = (bool) config('kore-webhooks.require_https', true)
-            && ! app()->environment('local');
-
-        return $requireHttps ? 'url:https' : 'url:http,https';
     }
 
     /**

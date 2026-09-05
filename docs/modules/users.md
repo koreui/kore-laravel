@@ -30,9 +30,8 @@ app/Modules/Users/
 │       ├── AccountStatusPanel.php      # estado de la cuenta (toggle AUTH_INVITATIONS)
 │       └── TableUsers.php              # KoreDataTable
 ├── Policies/UserPolicy.php             # autorización (auto-registrada via Gate::policy)
-├── Rules/                              # anti-escalada de privilegios
-│   ├── GrantablePermission.php
-│   └── GrantableRole.php
+├── Rules/GrantablePermission.php        # anti-escalada: nadie concede un permiso que no tiene
+│                                        # (GrantableRole vive en app/Core/Rules: también lo usa Auth)
 ├── Providers/UsersModuleServiceProvider.php
 ├── Resources/
 │   ├── lang/en.json                    # traducción al inglés (español es la fuente, R33)

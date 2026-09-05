@@ -62,6 +62,13 @@ it('exige https por defecto', function (): void {
     expect(config('kore-webhooks.require_https'))->toBeTrue();
 });
 
+it('no admite redes internas por defecto, tampoco en testing', function (): void {
+    // A diferencia de `require_https`, esta clave NO se relaja fuera de
+    // producción: si se apagara sola en `local` o en `testing`, el único sitio
+    // donde `Rules\PublicHttpUrl` se probaría de verdad sería producción.
+    expect(config('kore-webhooks.allow_private_networks'))->toBeFalse();
+});
+
 it('el catálogo de eventos no está vacío y usa el convenio de nombres', function (): void {
     /** @var array<string, string> $events */
     $events = (array) config('kore-webhooks.events');

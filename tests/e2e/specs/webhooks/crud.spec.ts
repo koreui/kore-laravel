@@ -10,27 +10,31 @@ import { uniqueName } from '../../support/data';
  * secreto siguiera saliendo en la segunda visita, la promesa sería mentira y
  * nadie se enteraría.
  *
- * ## Por qué el archivo va en serie
+ * ## Por qué las URLs son `https://example.com/...`
+ *
+ * Porque `Webhooks\Rules\PublicHttpUrl` resuelve el host y rechaza lo que
+ * apunte a la red interna o no resuelva a nada. `localhost` y los `.test` no
+ * pasan; `example.com` es un dominio reservado por la IANA que sí resuelve a
+ * una IP pública, así que es la URL ficticia que el formulario acepta.
+ *
+ * ## Por qué el archivo NO va en serie
  *
  * El 403 se comprueba sobre `/webhooks/{uuid}`, que lleva parámetro y por eso
  * no cabe en `fixtures/access-map.ts` (un mapa de literales). Hace falta un
  * endpoint real, y crearlo pide el rol superadmin mientras que comprobarlo pide
- * el rol viewer: dos sesiones.
+ * el rol viewer: dos sesiones en el mismo test. Eso lo resuelven las fixtures
+ * `asSuperadmin` / `asViewer`, que abren su propio contexto con la sesión de su
+ * rol, y así cada test es independiente: no hay variable de módulo, ni orden
+ * obligatorio, ni un segundo test que se salte solo porque el primero falló.
  *
- * En vez de las fixtures `asViewer` / `asSuperadmin` —que abren un contexto a
- * mano y, cuando al worker no le tocó la sesión que dejó el proyecto `setup`,
- * la rehacen por la UI— el archivo va en serie y cada describe declara su rol
- * con `test.use`. Es determinista y no depende de qué worker recoja el spec; el
- * precio es que la ruta del detalle viaja en una variable de módulo, y por eso
- * el segundo test se salta solo si el primero no llegó a crearlo.
- *
- * R39: el endpoint lo crea el propio test con un nombre único, porque la base
+ * R39: cada test crea sus propios datos con un nombre único, porque la base
  * sólo se resetea en `globalSetup` y otros specs corren en paralelo.
  */
-test.describe.configure({ mode: 'serial' });
 
-/** Ruta del detalle del endpoint que crea el primer test, para el segundo. */
-let rutaDetalle: string | null = null;
+/** URL ficticia pero resoluble, distinta por endpoint para no confundir filas. */
+function urlFicticia(nombre: string): string {
+    return `https://example.com/hooks/${encodeURIComponent(nombre)}`;
+}
 
 test.describe('Webhooks · CRUD', () => {
     test.use({ role: 'superadmin' });
@@ -40,11 +44,10 @@ test.describe('Webhooks · CRUD', () => {
         const name = uniqueName('Hook');
 
         await webhooks.gotoCreate();
-        await webhooks.createEndpoint(name, 'https://example.test/hooks/kore');
+        await webhooks.createEndpoint(name, urlFicticia(name));
 
         // Redirige al detalle, cuyo path lleva el uuid del endpoint.
         await expect(page).toHaveURL(/\/webhooks\/[0-9a-f-]{36}$/);
-        rutaDetalle = new URL(page.url()).pathname;
 
         await expect(page.getByText('Cópialo ahora')).toBeVisible();
 
@@ -61,15 +64,25 @@ test.describe('Webhooks · CRUD', () => {
 });
 
 test.describe('Webhooks · acceso al detalle', () => {
-    test.use({ role: 'viewer' });
+    test('un perfil sin webhooks.manage se lleva un 403 en el detalle', async ({
+        asSuperadmin,
+        asViewer,
+    }) => {
+        // El endpoint lo crea este mismo test, con su superadmin y su nombre
+        // único: nada que heredar de otro test ni que saltarse si aquél falló.
+        const webhooks = new WebhooksPage(asSuperadmin);
+        const name = uniqueName('Hook403');
 
-    test('un perfil sin webhooks.manage se lleva un 403 en el detalle', async ({ page }) => {
-        test.skip(rutaDetalle === null, 'el test que crea el endpoint no llegó a terminar');
+        await webhooks.gotoCreate();
+        await webhooks.createEndpoint(name, urlFicticia(name));
+        await expect(asSuperadmin).toHaveURL(/\/webhooks\/[0-9a-f-]{36}$/);
 
-        // `page.request` y no `goto`: lo que se comprueba es lo que devuelve el
+        const rutaDetalle = new URL(asSuperadmin.url()).pathname;
+
+        // `request` y no `goto`: lo que se comprueba es lo que devuelve el
         // servidor, y el guardia de errores cuenta como grave un 4xx cargado
         // con `goto` (ver access/rbac.spec.ts).
-        const respuesta = await page.request.get(rutaDetalle as string, {
+        const respuesta = await asViewer.request.get(rutaDetalle, {
             maxRedirects: 0,
             failOnStatusCode: false,
         });

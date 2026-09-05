@@ -68,7 +68,11 @@ it('loguea el aviso con los tokens del directorio', function (): void {
             && $context['user_id'] === $ada->getKey()
             && $context['tokens'] === 2
             && $context['category'] === 'account'
-            && $context['title'] === 'Nuevo inicio de sesión');
+            && $context['title'] === 'Nuevo inicio de sesión'
+            // El cuerpo NO: es donde van el nombre, el importe o el número de
+            // expediente, y el log se lee con mucha más manga ancha que la
+            // bandeja de avisos.
+            && ! array_key_exists('body', $context));
 });
 
 it('no escribe los tokens en el log', function (): void {

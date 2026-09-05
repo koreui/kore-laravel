@@ -199,6 +199,21 @@ la **ventana temporal** y una comparación en **tiempo constante**
 (`hash_equals` / `timingSafeEqual`). Un `===` sobre cadenas corta en el primer
 byte distinto, y ese tiempo es medible desde fuera.
 
+Y una cuarta que la firma no da: **deduplica por `X-Kore-Delivery`.** Una
+petición bien firmada puede llegarte más de una vez, y no hace falta que nadie
+la capture para reenviarla: si tu 2xx se pierde por el camino, el emisor
+reintenta con **el mismo uuid, el mismo cuerpo y una firma nueva y válida**.
+La ventana de cinco minutos acota cuánto vale una firma capturada, pero no
+convierte la entrega en única. Guarda el uuid de lo que ya procesaste y contesta
+2xx sin volver a aplicarlo:
+
+```php
+if ($yaProcesado($_SERVER['HTTP_X_KORE_DELIVERY'])) {
+    http_response_code(200);   // idempotente: ya está hecho
+    exit;
+}
+```
+
 ## Recibir webhooks: el middleware `webhook.signed`
 
 El boilerplate manda webhooks, no los recibe, así que **ninguna ruta suya lleva
@@ -309,6 +324,43 @@ clave vieja rechazará las firmas. No hay periodo de gracia con dos claves
 válidas, porque una rotación se hace justamente cuando la anterior se considera
 comprometida — dejarla viviendo una hora más sería no haber rotado.
 
+### La URL no puede apuntar hacia dentro (SSRF)
+
+Un emisor de webhooks es un cliente HTTP con la dirección elegida por el
+usuario, que es la definición del problema: sin más, cualquiera con
+`webhooks.manage` da de alta
+`https://169.254.169.254/latest/meta-data/iam/security-credentials/` y lee las
+credenciales del rol de la instancia en el cuerpo de un intento fallido, o
+apunta a `https://127.0.0.1:9200/` y se asoma al Elasticsearch que no está
+expuesto a Internet.
+
+Lo cierra `Webhooks\Rules\PublicHttpUrl`, que **resuelve el host y mira las
+direcciones**, no el nombre —bloquear la cadena `localhost` no sirve de nada
+cuando `interno.ejemplo.com` es un registro A que apunta a `10.0.0.5`—. Rechaza
+loopback (`127.0.0.0/8`, `::1`), link-local (`169.254.0.0/16`, `fe80::/10`),
+privadas (`10/8`, `172.16/12`, `192.168/16`, `fc00::/7`), `0.0.0.0` y los hosts
+que no resuelven a nada.
+
+La comprobación va en **las dos** puertas —el Form Object y
+`WebhookEndpointCreateAction` / `WebhookEndpointUpdateAction`—, con la
+derivación en `Support\EndpointUrl` para no tener dos copias: las Actions sirven
+igual desde un comando o un seeder, donde no hay validador que valga. Es el
+mismo reparto que `Platform\Support\EditableSettings`.
+
+**La válvula**: `WEBHOOKS_ALLOW_PRIVATE_NETWORKS=true`
+(`kore-webhooks.allow_private_networks`) la desactiva entera, para la
+instalación donde el receptor está legítimamente en la red interna. Va en
+`false` por defecto **también en `local` y en `testing`**, a diferencia de
+`WEBHOOKS_REQUIRE_HTTPS`: si se relajara sola en desarrollo, el único sitio
+donde la regla se probaría de verdad sería producción. Los tests que necesitan
+una URL interna encienden la clave a mano.
+
+Lo que **no** cierra: el *DNS rebinding*. Entre la resolución de la validación y
+la de la entrega, el dominio puede cambiar de respuesta. Cerrarlo pide resolver
+y conectar contra la IP ya validada, que es cosa del cliente HTTP. Esto sube el
+listón de «cualquiera con acceso a la pantalla» a «alguien que controla un
+dominio y sabe lo que hace».
+
 ### Un aviso sobre las rutas
 
 `permission:webhooks.manage` va **dentro del mismo array** que `web`, `auth` y
@@ -340,7 +392,8 @@ habla de rutas.
 | `endpoint_id` | `cascadeOnDelete`: borrar el endpoint se lleva sus entregas en una sentencia |
 | `payload` | congelado al publicar, no una referencia: un reintento de mañana manda lo que pasó hoy |
 | `attempts`, `status`, `next_attempt_at` | el índice `(status, next_attempt_at)` es lo que hace barato el barrido |
-| `last_error`, `response_status` | truncado a `kore-webhooks.error_max_length` |
+| `last_error` | truncado a `kore-webhooks.error_max_length`: un stack trace entero no se lee y sí pesa |
+| `response_status` | el código HTTP tal cual, entero y sin truncar |
 
 ## Qué NO hace
 
