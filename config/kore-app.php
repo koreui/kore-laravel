@@ -53,6 +53,18 @@ return [
         'enabled' => (bool) env('DEVICES_ENABLED', false),
     ],
 
+    // Almacenamiento de archivos con versionado por slot (módulo Files, sobre
+    // spatie/laravel-medialibrary). Opt-in: un proyecto derivado que no sube
+    // ficheros no necesita el contrato ni la ruta firmada. Con el toggle
+    // apagado no hay binding de `App\Core\Contracts\FileStore` —resolverlo
+    // lanza, que es la respuesta correcta y no un fallo a medias—, ni ruta
+    // `files.serve`, ni listeners, ni comando. La TABLA `media` sí se migra
+    // siempre: un toggle apaga rutas y comportamiento, nunca el esquema (mismo
+    // criterio que devices y que las passkeys). Ver docs/modules/files.md.
+    'files' => [
+        'enabled' => (bool) env('FILES_ENABLED', false),
+    ],
+
     'socialite' => [
         'google' => (bool) env('SOCIAL_GOOGLE', false),
         'github' => (bool) env('SOCIAL_GITHUB', false),
