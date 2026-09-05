@@ -34,7 +34,7 @@ app/Modules/Users/
 {slug}.{accion}
 ```
 
-Ejemplos: `users.view`, `users.create`, `users.edit`, `users.delete`, `dashboard.view`.
+Ejemplos: `users.view`, `users.create`, `users.edit`, `users.delete`, `dashboard.view`, `webhooks.manage`.
 
 Por default cada `Module` genera 4 permisos (view/create/edit/delete). Los módulos con permisos **no-CRUD** se declaran en `Module::specialPermissions()`:
 
@@ -45,10 +45,23 @@ private function specialPermissions(): array
         'dashboard' => [
             ['value' => 'dashboard.view', 'label' => 'Ver Dashboard'],
         ],
+        'webhooks' => [
+            ['value' => 'webhooks.manage', 'label' => 'Gestionar webhooks'],
+        ],
         // 'mi-modulo' => [...] — agrega aquí los que necesiten permisos custom
     ];
 }
 ```
+
+**`webhooks.manage` es un permiso y no cuatro**, y conviene entender por qué
+antes de copiar el patrón: ver la lista de endpoints ya enseña a qué sistemas se
+les está contando lo que pasa dentro de la instalación, y quien la ve puede leer
+el payload de cada entrega. No hay un «sólo lectura» que sea menos sensible que
+el resto: o se administra la integración, o no se entra. Lo lleva el rol
+Administrador (y el superadmin por su `Gate::before`). El módulo se siembra
+siempre, también con `WEBHOOKS_ENABLED=false`: un toggle apaga rutas y
+comportamiento, no el catálogo de permisos. Ver
+[`../modules/webhooks.md`](../modules/webhooks.md).
 
 ## Roles que vienen con el boilerplate
 

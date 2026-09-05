@@ -61,6 +61,22 @@
                     </x-kore::sidebar.group>
                 @endcan
 
+                {{-- Dos condiciones, y las dos hacen falta: el toggle decide si el
+                     módulo existe (sin él no hay ruta `webhooks.index` que pintar)
+                     y el permiso, si esta persona entra. Un enlace a una pantalla
+                     que devuelve 403 es peor que no tener el enlace. --}}
+                @if ((bool) config('kore-app.webhooks.enabled'))
+                    @can('webhooks.manage')
+                        <x-kore::sidebar.group label="{{ __('Integraciones') }}">
+                            <x-kore::sidebar.item
+                                label="{{ __('Webhooks') }}"
+                                icon="webhook"
+                                route="webhooks.index"
+                                match="webhooks.*" />
+                        </x-kore::sidebar.group>
+                    @endcan
+                @endif
+
                 {{-- La ruta sólo existe con AUTH_PASSKEYS=true (R10), así que el
                      enlace se pregunta por ella y no por el toggle. --}}
                 @if (Route::has('passkeys.index'))

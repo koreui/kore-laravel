@@ -86,6 +86,9 @@ final class Module extends Model
             'dashboard' => [
                 ['value' => 'dashboard.view', 'label' => 'Ver Dashboard'],
             ],
+            'webhooks' => [
+                ['value' => 'webhooks.manage', 'label' => 'Gestionar webhooks'],
+            ],
         ];
     }
 }

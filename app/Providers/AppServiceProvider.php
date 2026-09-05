@@ -231,6 +231,9 @@ final class AppServiceProvider extends ServiceProvider
             'Files' => fn (): string => config('kore-app.files.enabled')
                 ? 'enabled (disco '.config('files.disk').')'
                 : 'disabled',
+            'Webhooks' => fn (): string => config('kore-app.webhooks.enabled')
+                ? 'enabled ('.count((array) config('kore-webhooks.events', [])).' eventos en el catálogo)'
+                : 'disabled',
             'Backup' => fn (): string => config('kore-app.backup.enabled')
                 ? 'enabled'.(config('backup.backup.password') ? ' (zip cifrado)' : ' (zip SIN cifrar)')
                 : 'disabled',

@@ -78,6 +78,20 @@ return [
         'enabled' => (bool) env('FILES_ENABLED', false),
     ],
 
+    // Webhooks salientes con firma HMAC y outbox con reintentos (módulo
+    // Webhooks). Opt-in: un proyecto derivado que no integra con nadie no
+    // necesita ni la pantalla ni el barrido del scheduler. Con el toggle
+    // apagado no hay binding de `App\Core\Contracts\WebhookPublisher`
+    // —resolverlo lanza, que es la respuesta correcta y no un envío
+    // silencioso—, ni rutas `/webhooks`, ni listeners, ni alias
+    // `webhook.signed`, ni los comandos `webhooks:*`. Las TABLAS
+    // `webhook_endpoints` y `webhook_deliveries` sí se migran siempre: un
+    // toggle apaga rutas y comportamiento, nunca el esquema (mismo criterio que
+    // devices, files y las passkeys). Ver docs/modules/webhooks.md.
+    'webhooks' => [
+        'enabled' => (bool) env('WEBHOOKS_ENABLED', false),
+    ],
+
     'socialite' => [
         'google' => (bool) env('SOCIAL_GOOGLE', false),
         'github' => (bool) env('SOCIAL_GITHUB', false),
