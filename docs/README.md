@@ -36,6 +36,16 @@ Hub central de documentación. Las reglas vivas y resúmenes operativos están e
 
 - [`quality/pipeline.md`](quality/pipeline.md) — Pint · Larastan · PHPat · disallowed-calls · `kore:arch:check` · Rector · Pest · hooks · CI
 - [`quality/e2e.md`](quality/e2e.md) — Playwright: suite E2E, entorno aislado y convenciones
+- [`quality/manual.md`](quality/manual.md) — el manual de usuario generado desde recorridos E2E (`npm run manual`) y su PDF con Gotenberg
+
+### Manual de usuario
+
+Se **genera**: lo escriben los recorridos de `tests/e2e/manual/*.guia.ts`. Sólo
+el índice se versiona; las guías y sus capturas son artefactos ignorados, y aun
+así entran en este índice porque R40 mira el disco. Guía nueva, línea nueva.
+
+- [`manual/README.md`](manual/README.md) — índice del manual, regenerado en cada corrida
+- [`manual/01-usuarios.md`](manual/01-usuarios.md) — guía de ejemplo: entrar, listar, crear, editar y buscar usuarios
 
 ### Patrones
 

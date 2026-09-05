@@ -307,7 +307,13 @@ npx playwright test tests/e2e/specs/users            # sólo un módulo
 npx playwright test -g 'buscador'                    # por nombre
 npx playwright test --repeat-each=2                  # caza de flakiness
 E2E_BUILD=1 npm run e2e                              # fuerza `npm run build`
+
+npm run manual          # el manual de usuario: recorridos + capturas + Markdown
+npm run manual:pdf      # el manual entero en un PDF (necesita Gotenberg)
 ```
+
+El manual corre **aparte de la suite**, con su propia config y su propio puerto
+(8110). Ver [`manual.md`](manual.md).
 
 ### `scripts/e2e.sh`, que es lo que corre `npm run e2e`
 
@@ -359,7 +365,9 @@ o lanza `bash scripts/e2e.sh --ui` en su lugar.
 
 ```
 playwright.config.ts            # proyectos, webServer, reporters
+playwright.manual.config.ts     # el manual de usuario (npm run manual)
 scripts/e2e.sh                  # lo que corre `npm run e2e`
+scripts/manual.sh               # lo que corre `npm run manual`
 tests/e2e/
 ├── global-setup.ts             # build + reset de la base + limpieza de .auth
 ├── auth.setup.ts               # proyecto `setup`: login por la UI de cada rol
@@ -383,6 +391,11 @@ tests/e2e/
 │   ├── actions.ts              # createUserViaUi()
 │   ├── mail-log.ts             # lee el código OTP de storage/logs/e2e-mail.log
 │   └── webauthn.ts             # autenticador WebAuthn virtual (CDP)
+├── manual/                     # el manual de usuario — ver quality/manual.md
+│   ├── setup.ts                # comprueba harness y base antes de fotografiar
+│   ├── teardown.ts             # rehace docs/manual/README.md
+│   ├── fixtures/{guia.ts,rutas.ts}
+│   └── 01-usuarios.guia.ts     # guía de ejemplo
 └── specs/
     ├── access/{rbac,smoke}.spec.ts      # generados desde access-map.ts
     ├── harness/harness.spec.ts          # se salta si no está app/Modules/E2E
@@ -591,6 +604,23 @@ Como mínimo:
 
 Usa el skill `kore-e2e-test` (`.agents/skills/kore-e2e-test/`) para el
 andamiaje.
+
+## El otro consumidor de la suite: el manual de usuario
+
+`tests/e2e/manual/` es un proyecto de Playwright aparte que **recorre la
+aplicación y la fotografía**, y deja `docs/manual/` escrito: una guía en
+Markdown por recorrido, con una captura por paso. No es una suite de tests: no
+comprueba reglas, enseña caminos.
+
+Lo que importa aquí es que **reutiliza esta suite**: el mismo `test` con su
+guardia de errores, el mismo harness, `esperarLivewire()` y —sobre todo— los
+mismos page objects. Cuando una pantalla cambia y hay que tocar
+`UsersIndexPage`, el manual se regenera con la pantalla nueva sin que nadie lo
+reescriba; y si el botón que un recorrido busca ya no existe, la generación
+falla en vez de dejar una captura que miente.
+
+`npm run manual`. El detalle —cómo se escribe una guía, qué se versiona y cómo
+sale el PDF— está en [`manual.md`](manual.md).
 
 ## Depurar un fallo
 

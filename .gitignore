@@ -32,3 +32,12 @@ Thumbs.db
 /playwright-report
 /test-results
 release-body.md
+
+# Manual de usuario (docs/manual). Se genera con `npm run manual`: las guías,
+# sus capturas y el PDF son artefactos. El único archivo que se versiona es
+# docs/manual/README.md, como ejemplo y como punto de entrada.
+/docs/manual/*.md
+!/docs/manual/README.md
+/docs/manual/imagenes
+/docs/manual/manual.pdf
+/tests/e2e/results-manual

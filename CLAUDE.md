@@ -36,6 +36,7 @@ Este archivo contiene las **reglas vivas y resúmenes**. Para detalles, consulta
 - [`docs/ops/observability.md`](docs/ops/observability.md) — Sentry · Pulse · Health · ActivityLog
 - [`docs/ops/upgrading-from-boilerplate.md`](docs/ops/upgrading-from-boilerplate.md) — actualizar un proyecto derivado desde el upstream
 - [`docs/quality/pipeline.md`](docs/quality/pipeline.md) — Pint · Larastan · PHPat · disallowed-calls · `kore:arch:check` · Rector · Pest · hooks · CI
+- [`docs/quality/manual.md`](docs/quality/manual.md) — manual de usuario generado desde recorridos E2E (`npm run manual`) y su PDF con Gotenberg
 - [`docs/ai/working-with-ai.md`](docs/ai/working-with-ai.md) — Boost · MCP propio `kore` · CLAUDE/AGENTS · skills
 - [`docs/README.md`](docs/README.md) — índice maestro
 
@@ -275,6 +276,12 @@ y `configurePasskeysFeature()`, que son el mismo patrón dos veces).
 - **R39** · Cada test crea sus propios datos con `uniqueEmail()` / `uniqueName()`. La base sólo se resetea en `globalSetup`.
 - **R36** · Todo módulo nuevo con UI aporta como mínimo: un smoke, un happy path y un spec de autorización por rol.
 - Skill: `.agents/skills/kore-e2e-test/` (con su symlink en `.claude/skills/`, R49).
+- **Manual de usuario**: `npm run manual` recorre la app con Playwright, fotografía cada paso y escribe
+  `docs/manual/` (guía en Markdown + capturas); `npm run manual:pdf` lo junta en un PDF con Gotenberg.
+  Los recorridos viven en `tests/e2e/manual/*.guia.ts`, reutilizan los page objects de la suite y corren
+  en su propio puerto (8110) con `playwright.manual.config.ts`. Sólo se versiona `docs/manual/README.md`;
+  las guías y las capturas son artefactos —y aun así van al índice de `docs/README.md`, porque R40 mira
+  el disco. Ver [`docs/quality/manual.md`](docs/quality/manual.md).
 
 ## Comandos útiles
 
