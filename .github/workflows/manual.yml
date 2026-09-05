@@ -1,0 +1,91 @@
+# Manual de usuario
+#
+# Se lanza **a mano** desde la pestaña Actions, y a propósito: generar el manual
+# son minutos de navegador y veinte imágenes, y no da ningún veredicto sobre el
+# cambio que se está revisando. El workflow de E2E no lo incluye.
+#
+# Deja `docs/manual` (guías + capturas) como artifact descargable. No arma el
+# PDF: eso necesita un Gotenberg levantado, y el Markdown con sus capturas ya es
+# lo que hay que revisar.
+
+name: Manual
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: manual-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  manual:
+    name: Generar el manual de usuario
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: sqlite3, pdo_sqlite, mbstring, intl
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache composer
+        uses: actions/cache@v6
+        with:
+          path: vendor
+          key: composer-8.4-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-8.4-
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install node dependencies
+        run: npm ci
+
+      - name: Build assets
+        run: npm run build
+
+      # La versión de los navegadores va atada a la de @playwright/test, que
+      # está pineada en package.json.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # `.env.e2e` está commiteado y APP_ENV=e2e hace que Laravel lo cargue, así
+      # que no hay nada que copiar ni ninguna clave que generar. El script
+      # siembra la base y Playwright levanta y baja el servidor del manual.
+      - name: Generate manual
+        run: npm run manual
+        env:
+          CI: 'true'
+
+      - name: Upload manual
+        uses: actions/upload-artifact@v7
+        with:
+          name: manual
+          path: docs/manual
+          retention-days: 30
+
+      - name: Upload traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: manual-results
+          path: tests/e2e/results-manual
+          retention-days: 7
