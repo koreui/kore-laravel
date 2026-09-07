@@ -410,8 +410,32 @@ nada más. Tres pasos:
 2. `php artisan kore:changelog:section "$GITHUB_REF_NAME"` → `release-body.md`.
    Si el tag no tiene su sección en `CHANGELOG.md`, el comando devuelve 1 y el
    job falla: **el release no se publica** (R42).
-3. `softprops/action-gh-release@v2` con `name: vX.Y.Z` y `body_path:
+3. `softprops/action-gh-release` con `name: vX.Y.Z` y `body_path:
    release-body.md`.
+
+### Las actions van pineadas por SHA
+
+Ninguna action se referencia por tag flotante (`@v7`, `@v2`): las cuatro
+workflows usan el SHA del commit exacto, con la versión legible en un comentario
+al lado.
+
+```yaml
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+```
+
+Un tag de Git es movible. Quien comprometa el repositorio de una action puede
+reapuntar `v7` a su propio commit, y el workflow de release —que corre con
+`contents: write`— ejecutaría ese código con permiso de escritura sobre este
+repositorio. El SHA no se puede reapuntar, así que la cadena de suministro de CI
+queda fijada a lo que se revisó.
+
+Dependabot sigue actualizando las actions igual: reescribe el SHA y el
+comentario de versión en el mismo PR. Al revisar uno, lo que se comprueba es que
+el SHA nuevo pertenezca de verdad al tag que dice el comentario:
+
+```bash
+gh api repos/actions/checkout/commits/v7 --jq '.sha'
+```
 
 **Por qué no release-please.** Generaría el CHANGELOG en inglés desde los
 subjects de los commits y chocaría con el que hay: aquí está escrito a mano, en
